@@ -1,0 +1,470 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QA Visual</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #fff; --ink: #16181d; --dim: #6b7280; --line: #e3e6ea;
+    --accent: #1f6feb; --warn: #b45309; --warn-bg: #fef6e7; --bad: #b42318; --bad-bg: #fef3f2;
+    --ok: #067647; --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+  header { background: var(--card); border-bottom: 1px solid var(--line); padding: 14px 24px;
+    display: flex; align-items: baseline; gap: 12px; position: sticky; top: 0; z-index: 5; }
+  header h1 { font-size: 16px; margin: 0; font-weight: 650; letter-spacing: -.01em; }
+  header .meta { color: var(--dim); font-size: 12.5px; }
+  main { max-width: 1180px; margin: 0 auto; padding: 24px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 20px; margin-bottom: 18px; }
+  h2 { font-size: 14px; margin: 0 0 4px; font-weight: 650; }
+  .sub { color: var(--dim); font-size: 12.5px; margin-bottom: 16px; }
+  label { display: block; font-weight: 600; font-size: 12.5px; margin-bottom: 5px; }
+  input[type=url], input[type=text], input[type=number], select {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px;
+    font: inherit; background: #fff; color: inherit; }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
+  .field { margin-bottom: 14px; }
+  .row2 { display: grid; grid-template-columns: 1fr 130px; gap: 14px; }
+  button { font: inherit; font-weight: 600; border-radius: 7px; padding: 9px 16px; cursor: pointer;
+    border: 1px solid var(--line); background: #fff; color: var(--ink); }
+  button:hover:not(:disabled) { border-color: #c8cdd4; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover:not(:disabled) { background: #1a5fcc; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button.icon { padding: 5px 9px; font-weight: 400; color: var(--dim); }
+  button.icon:hover { color: var(--bad); border-color: #f0c2bd; }
+  .hint { color: var(--dim); font-size: 12px; margin-top: 6px; }
+  .spinner { display: inline-block; width: 13px; height: 13px; border: 2px solid #fff6;
+    border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: -2px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--dim); font-weight: 650; padding: 0 10px 8px; border-bottom: 1px solid var(--line); }
+  td { padding: 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  td.n { color: var(--dim); font-variant-numeric: tabular-nums; width: 26px; padding-top: 18px; }
+  td.thumb { width: 96px; }
+  td.act { width: 44px; text-align: right; }
+  .thumb img { width: 84px; height: 56px; object-fit: cover; object-position: top;
+    border: 1px solid var(--line); border-radius: 5px; background: #fafbfc; display: block; cursor: zoom-in; }
+  .thumb .none { width: 84px; height: 56px; border: 1px dashed var(--line); border-radius: 5px;
+    display: grid; place-items: center; color: var(--dim); font-size: 11px; }
+  .flag { font-size: 12px; margin-top: 6px; padding: 4px 8px; border-radius: 5px; }
+  .flag.warn { background: var(--warn-bg); color: var(--warn); }
+  .flag.bad { background: var(--bad-bg); color: var(--bad); }
+  .why { font-size: 12px; color: var(--dim); margin-top: 6px; }
+  .paste { margin-top: 7px; display: none; }
+  .paste.on { display: block; }
+  .toolbar { display: flex; align-items: center; gap: 10px; margin-top: 16px;
+    padding-top: 16px; border-top: 1px solid var(--line); }
+  .toolbar .grow { flex: 1; }
+  .err { background: var(--bad-bg); color: var(--bad); border: 1px solid #f6cfca;
+    padding: 10px 12px; border-radius: 7px; font-size: 13px; margin-bottom: 14px; }
+  pre.log { background: #0f1115; color: #cbd5e1; border-radius: 8px; padding: 14px;
+    font: 12px/1.65 ui-monospace, SFMono-Regular, Menlo, monospace;
+    max-height: 320px; overflow: auto; white-space: pre-wrap; margin: 0; }
+  .prog { margin: 4px 0 18px; }
+  .prog .bar { height: 8px; background: #e9edf2; border-radius: 99px; overflow: hidden; }
+  .prog .fill { height: 100%; width: 0; background: var(--accent); border-radius: 99px;
+    transition: width .35s ease; }
+  .prog .prow { display: flex; align-items: baseline; gap: 10px; margin-top: 7px;
+    font-size: 12.5px; color: var(--dim); }
+  .prog .prow .grow { flex: 1; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; }
+  #logbox summary { cursor: pointer; padding: 4px 0; }
+  #logbox[open] summary { margin-bottom: 8px; }
+  .done { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+  .done .big { font-size: 15px; font-weight: 650; }
+  [hidden] { display: none !important; }
+  dialog { border: 0; border-radius: 10px; padding: 0; max-width: 92vw; max-height: 92vh;
+    box-shadow: 0 20px 60px #0004; }
+  dialog img { display: block; max-width: 88vw; max-height: 84vh; }
+  dialog::backdrop { background: #0008; }
+  dialog .bar { padding: 8px 12px; font-size: 12.5px; color: var(--dim); display: flex;
+    justify-content: space-between; align-items: center; gap: 16px; border-bottom: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<header>
+  <h1>QA Visual</h1>
+  <span class="meta" id="meta"></span>
+</header>
+
+<main>
+  <!-- ============================ 1. input ============================ -->
+  <section class="card" id="s1">
+    <h2>Trang web và design</h2>
+    <p class="sub">Nhập URL trang chủ và link file Figma. Tool sẽ dò các trang của site rồi đoán frame tương ứng — bạn sửa lại ở bước sau.</p>
+    <div class="field">
+      <label for="site">URL trang chủ</label>
+      <input type="url" id="site" placeholder="https://example.com/" autocomplete="url">
+    </div>
+    <div class="field row2">
+      <div>
+        <label for="figma">Link Figma <span style="font-weight:400;color:var(--dim)">(hoặc đường dẫn folder PNG · để trống nếu chưa có design)</span></label>
+        <input type="text" id="figma" placeholder="https://www.figma.com/design/…">
+      </div>
+      <div>
+        <label for="max">Số trang tối đa</label>
+        <input type="number" id="max" value="8" min="1" max="30">
+      </div>
+    </div>
+    <div id="e1"></div>
+    <button class="primary" id="go1">Dò trang</button>
+    <p class="hint">Bước này mất 15–30 giây: mở browser, đọc sitemap (hoặc dò link trang chủ), đọc file Figma và render frame.</p>
+  </section>
+
+  <!-- ============================ 2. pairing =========================== -->
+  <section class="card" id="s2" hidden>
+    <h2>Bảng ghép URL ↔ frame Figma</h2>
+    <p class="sub" id="s2sub"></p>
+    <div id="e2"></div>
+    <table>
+      <thead><tr><th></th><th>Design</th><th>URL trang</th><th>Frame Figma</th><th></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="toolbar">
+      <button id="add">+ Thêm cặp</button>
+      <button id="back2">Đổi link</button>
+      <span class="grow"></span>
+      <span class="hint" id="count"></span>
+      <button class="primary" id="go2">Chạy QA</button>
+    </div>
+  </section>
+
+  <!-- ============================= 3. run ============================== -->
+  <section class="card" id="s3" hidden>
+    <h2 id="s3title">Đang chạy QA…</h2>
+    <p class="sub" id="s3sub">Chụp 3 kích thước màn hình cho từng trang, so với design, rồi gộp lỗi trùng.</p>
+    <div class="prog" id="prog" hidden>
+      <div class="bar"><div class="fill" id="fill"></div></div>
+      <div class="prow">
+        <span id="plabel">đang bắt đầu…</span>
+        <span class="grow"></span>
+        <span class="mono" id="pcount"></span>
+      </div>
+    </div>
+    <div class="done" id="doneBar" hidden></div>
+    <details id="logbox"><summary class="cap">Xem log chi tiết</summary><pre class="log" id="log"></pre></details>
+  </section>
+</main>
+
+<dialog id="zoom"><div class="bar"><span id="zoomName"></span><button onclick="zoom.close()">Đóng</button></div><img id="zoomImg" alt=""></dialog>
+
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+let FRAMES = [];   // [{id,name,width,height,thumb}]
+let ROWS = [];     // [{url, figmaNodeId, frameName, how}]
+
+/* ------------------------------- helpers -------------------------------- */
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+async function post(path, body) {
+  const res = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const data = await res.json().catch(() => ({ error: 'phản hồi không phải JSON' }));
+  if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+  return data;
+}
+function showErr(where, msg) {
+  $(where).innerHTML = msg ? '<div class="err">' + esc(msg) + '</div>' : '';
+}
+function busy(btn, on, label) {
+  btn.disabled = on;
+  btn.innerHTML = on ? '<span class="spinner"></span> ' + label : label;
+}
+const pathOf = (u) => { try { return new URL(u).pathname; } catch { return u; } };
+const hostOf = (u) => { try { return new URL(u).host.replace(/^www\./, ''); } catch { return ''; } };
+/** Same rule as slugOf() on the server: the baseline folder is named from the path alone. */
+const slugOf = (u) => {
+  try {
+    const p = (new URL(u).pathname.replace(/\/+$/, '') || 'home').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '');
+    return (p || 'home').slice(0, 60).toLowerCase();
+  } catch { return null; }
+};
+
+/* ------------------------------ 1. discover ------------------------------ */
+$('go1').onclick = async () => {
+  const siteUrl = $('site').value.trim();
+  const figmaLink = $('figma').value.trim();
+  showErr('e1', '');
+  if (!/^https?:\/\//i.test(siteUrl)) return showErr('e1', 'URL trang chủ phải bắt đầu bằng http:// hoặc https://');
+  if (figmaLink && !/figma\.com\//.test(figmaLink) && !figmaLink.startsWith('/')) return showErr('e1', 'phần design phải là link figma.com/… hoặc đường dẫn tuyệt đối tới folder PNG');
+  busy($('go1'), true, 'Đang dò trang…');
+  try {
+    const d = await post('/api/discover', { siteUrl, figmaLink, maxPages: Number($('max').value) || 8 });
+    FRAMES = d.frames || [];
+    ROWS = d.pages || [];
+    $('meta').textContent = [hostOf(siteUrl), d.aiModel ? 'AI: ' + d.aiModel : 'AI: tắt'].join(' · ');
+    const bits = [ROWS.length + ' trang (' + d.pagesFrom + ')', FRAMES.length + ' frame Figma'];
+    if (/figma\.com\//.test(figmaLink) && !d.hasFigmaToken) bits.push('⚠ chưa có FIGMA_TOKEN trong .env');
+    $('s2sub').textContent = bits.join(' · ') + '. Sửa URL, đổi frame, thêm hoặc xoá dòng — rồi bấm Chạy QA.';
+    render();
+    $('s1').hidden = true; $('s2').hidden = false;
+  } catch (e) {
+    showErr('e1', e.message);
+  } finally {
+    busy($('go1'), false, 'Dò trang');
+  }
+};
+$('back2').onclick = () => { $('s2').hidden = true; $('s1').hidden = false; };
+
+/* ------------------------------- 2. table -------------------------------- */
+/**
+ * Every problem worth blocking on, worked out from the rows as they stand.
+ *
+ * The slug clash is the one that matters most and reads as the most obscure: two different URLs
+ * whose paths agree share one approved-baseline folder on disk, so each run overwrites the other's
+ * reference and the diff silently compares the wrong pages.
+ */
+function validate() {
+  const home = hostOf(ROWS[0]?.url || '');
+  // First pass: what each row's identity is. Second pass: who collides with whom.
+  const id = ROWS.map((r) => {
+    const u = (r.url || '').trim();
+    const ok = /^https?:\/\/.+/i.test(u);
+    return ok ? { ok, u, key: hostOf(u) + (pathOf(u).replace(/\/+$/, '') || '/'), slug: slugOf(u) } : { ok: false };
+  });
+  const firstKey = new Map(), firstSlug = new Map();
+  id.forEach((x, i) => {
+    if (!x.ok) return;
+    if (!firstKey.has(x.key)) firstKey.set(x.key, i);
+    if (x.slug && !firstSlug.has(x.slug)) firstSlug.set(x.slug, i);
+  });
+
+  return ROWS.map((r, i) => {
+    const flags = [];
+    const x = id[i];
+    if (!x.ok) flags.push({ level: 'bad', text: 'URL không hợp lệ — phải là http:// hoặc https://' });
+    else {
+      if (firstKey.get(x.key) !== i) flags.push({ level: 'bad', text: 'trùng dòng ' + (firstKey.get(x.key) + 1) + ' — cùng một trang, sẽ bị QA hai lần' });
+      else if (x.slug && firstSlug.get(x.slug) !== i) {
+        flags.push({ level: 'bad', text: 'cùng tên thư mục "' + x.slug + '" với dòng ' + (firstSlug.get(x.slug) + 1) + ' — hai trang sẽ ghi đè bản duyệt của nhau, diff sẽ so sai. Bỏ một dòng.' });
+      }
+      if (home && hostOf(x.u) !== home) flags.push({ level: 'warn', text: 'khác tên miền với dòng 1 (' + home + ') — kiểm tra xem có gõ nhầm không' });
+    }
+    if (r.pendingLink) flags.push({ level: 'warn', text: 'link Figma chưa được nhận — bấm Lấy frame, hoặc chọn lại frame khác' });
+    return flags;
+  });
+}
+
+function frameOptions(sel) {
+  let h = '<option value="">— không so design</option>';
+  for (const f of FRAMES) h += '<option value="' + esc(f.id) + '"' + (f.id === sel ? ' selected' : '') + '>' + esc(f.name) + ' · ' + f.width + 'px</option>';
+  h += '<option value="__paste"' + (sel === '__paste' ? ' selected' : '') + '>+ dán link Figma…</option>';
+  return h;
+}
+
+function render() {
+  const flags = validate();
+  $('rows').innerHTML = ROWS.map((r, i) => {
+    const f = FRAMES.find((x) => x.id === r.figmaNodeId) || (r.frameName ? FRAMES.find((x) => x.name === r.frameName) : null);
+    const thumb = f && f.thumb
+      ? '<img src="/design/' + encodeURIComponent(f.thumb) + '" alt="' + esc(f.name) + '" data-zoom="' + esc(f.name) + '">'
+      : '<div class="none">' + (f ? 'chưa render' : '—') + '</div>';
+    const fl = flags[i].map((x) => '<div class="flag ' + x.level + '">' + esc(x.text) + '</div>').join('');
+    return '<tr data-i="' + i + '">'
+      + '<td class="n">' + (i + 1) + '</td>'
+      + '<td class="thumb">' + thumb + '</td>'
+      + '<td><input type="url" class="url" value="' + esc(r.url || '') + '" placeholder="https://…">'
+      + (r.how ? '<div class="why">' + esc(r.how) + '</div>' : '') + fl + '</td>'
+      + '<td><select class="frame">' + frameOptions(r.pendingLink ? '__paste' : (f ? f.id : '')) + '</select>'
+      + '<div class="paste' + (r.pendingLink !== undefined ? ' on' : '') + '">'
+      + '<input type="text" class="link" placeholder="dán link frame Figma rồi Enter" value="' + esc(r.pendingLink || '') + '">'
+      + '<button class="getframe" style="margin-top:6px">Lấy frame</button></div></td>'
+      + '<td class="act"><button class="icon del" title="xoá dòng">✕</button></td>'
+      + '</tr>';
+  }).join('');
+
+  const bad = flags.filter((f) => f.some((x) => x.level === 'bad')).length;
+  $('count').textContent = bad ? bad + ' dòng cần sửa trước khi chạy' : ROWS.length + ' trang · ' + ROWS.filter((r) => r.figmaNodeId || r.frameName).length + ' có design';
+  $('go2').disabled = bad > 0 || !ROWS.length;
+}
+
+$('rows').addEventListener('input', (e) => {
+  const tr = e.target.closest('tr'); if (!tr) return;
+  const i = +tr.dataset.i;
+  if (e.target.classList.contains('url')) {
+    ROWS[i].url = e.target.value;
+    ROWS[i].how = 'sửa tay';
+    // Re-validate without re-rendering, so the caret does not jump while typing.
+    const flags = validate();
+    const cell = tr.children[2];
+    cell.querySelectorAll('.flag, .why').forEach((n) => n.remove());
+    cell.insertAdjacentHTML('beforeend',
+      '<div class="why">' + esc(ROWS[i].how || '') + '</div>'
+      + flags[i].map((x) => '<div class="flag ' + x.level + '">' + esc(x.text) + '</div>').join(''));
+    const bad = flags.filter((f) => f.some((x) => x.level === 'bad')).length;
+    $('go2').disabled = bad > 0;
+    $('count').textContent = bad ? bad + ' dòng cần sửa trước khi chạy' : ROWS.length + ' trang';
+  }
+  if (e.target.classList.contains('link')) ROWS[i].pendingLink = e.target.value;
+});
+
+$('rows').addEventListener('change', (e) => {
+  if (!e.target.classList.contains('frame')) return;
+  const i = +e.target.closest('tr').dataset.i;
+  const v = e.target.value;
+  if (v === '__paste') { ROWS[i].pendingLink = ROWS[i].pendingLink || ''; render(); tryFocus(i); return; }
+  delete ROWS[i].pendingLink;
+  const f = FRAMES.find((x) => x.id === v);
+  ROWS[i].figmaNodeId = f ? f.id : undefined;
+  ROWS[i].frameName = f ? f.name : undefined;
+  ROWS[i].how = f ? 'chọn tay: "' + f.name + '"' : 'không so design';
+  render();
+});
+
+function tryFocus(i) {
+  const el = document.querySelector('tr[data-i="' + i + '"] .link');
+  if (el) el.focus();
+}
+
+$('rows').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target.classList.contains('link')) { e.preventDefault(); getFrame(+e.target.closest('tr').dataset.i); }
+});
+$('rows').addEventListener('click', async (e) => {
+  const tr = e.target.closest('tr'); if (!tr) return;
+  const i = +tr.dataset.i;
+  if (e.target.classList.contains('del')) { ROWS.splice(i, 1); render(); }
+  if (e.target.classList.contains('getframe')) getFrame(i);
+  if (e.target.dataset.zoom !== undefined) {
+    $('zoomImg').src = e.target.src; $('zoomName').textContent = e.target.dataset.zoom; $('zoom').showModal();
+  }
+});
+
+async function getFrame(i) {
+  const link = (ROWS[i].pendingLink || '').trim();
+  const btn = document.querySelector('tr[data-i="' + i + '"] .getframe');
+  showErr('e2', '');
+  if (!link) return showErr('e2', 'dòng ' + (i + 1) + ': chưa dán link nào');
+  if (btn) busy(btn, true, 'Đang lấy…');
+  try {
+    const f = await post('/api/frame', { link });
+    if (!FRAMES.some((x) => x.id === f.id)) FRAMES.push(f);
+    delete ROWS[i].pendingLink;
+    ROWS[i].figmaNodeId = f.id;
+    ROWS[i].frameName = f.name;
+    ROWS[i].how = 'dán link: "' + f.name + '"';
+    render();
+  } catch (e) {
+    showErr('e2', 'dòng ' + (i + 1) + ': ' + e.message);
+    if (btn) busy(btn, false, 'Lấy frame');
+  }
+}
+
+$('add').onclick = () => {
+  const base = ROWS[0]?.url || '';
+  let prefix = '';
+  try { prefix = new URL(base).origin + '/'; } catch {}
+  ROWS.push({ url: prefix, how: 'thêm tay' });
+  render();
+  const els = document.querySelectorAll('tr .url');
+  const last = els[els.length - 1];
+  if (last) { last.focus(); last.setSelectionRange(last.value.length, last.value.length); }
+};
+
+/* -------------------------------- 3. run --------------------------------- */
+$('go2').onclick = async () => {
+  showErr('e2', '');
+  const pages = ROWS.map((r) => ({ url: r.url.trim(), figmaNodeId: r.figmaNodeId, frameName: r.frameName, how: r.how }));
+  busy($('go2'), true, 'Đang chạy…');
+  try {
+    const { runId } = await post('/api/run', { pages });
+    $('s2').hidden = true; $('s3').hidden = false;
+    $('log').textContent = '';
+    $('doneBar').hidden = true;
+    $('prog').hidden = false;
+    $('fill').style.width = '0%';
+    $('plabel').textContent = 'đang bắt đầu…';
+    $('pcount').textContent = '';
+    $('s3title').textContent = 'Đang chạy QA…';
+    watch(runId);
+  } catch (e) {
+    showErr('e2', e.message);
+  } finally {
+    busy($('go2'), false, 'Chạy QA');
+  }
+};
+
+function watch(runId) {
+  const es = new EventSource('/api/stream/' + runId);
+  const log = $('log');
+  es.addEventListener('log', (ev) => {
+    log.textContent += JSON.parse(ev.data) + '\n';
+    log.scrollTop = log.scrollHeight;
+  });
+  const PHASE = { capture: 'Chụp ảnh', ai: 'AI đối chiếu', wrap: 'Tổng hợp' };
+  es.addEventListener('progress', (ev) => {
+    const p = JSON.parse(ev.data);
+    const pct = p.total ? Math.round((p.done / p.total) * 100) : 0;
+    $('fill').style.width = pct + '%';
+    $('plabel').textContent = (PHASE[p.phase] || '') + ' — ' + p.label;
+    $('pcount').textContent = pct + '% · ' + p.done + '/' + p.total;
+  });
+  es.addEventListener('done', (ev) => {
+    const d = JSON.parse(ev.data);
+    es.close();
+    $('fill').style.width = '100%';
+    $('prog').hidden = true;
+    $('s3title').textContent = 'Xong';
+    $('s3sub').textContent = d.durationMs ? 'Chạy xong trong ' + Math.round(d.durationMs / 1000) + ' giây.' : '';
+    $('doneBar').hidden = false;
+    const stamp = (d.reportUrl || '').split('/')[2] || '';
+    $('doneBar').innerHTML = '<span class="big">' + d.findings + ' lỗi</span>'
+      + '<button class="primary" id="open">Mở report</button>'
+      + '<button id="share">Xuất file chia sẻ</button>'
+      + '<button id="again">Chạy lại</button>'
+      + '<span class="hint" id="shareOut" style="margin:0"></span>';
+    $('open').onclick = () => window.open(d.reportUrl, '_blank');
+    $('again').onclick = () => { $('s3').hidden = true; $('s2').hidden = false; };
+    $('share').onclick = () => makeShare(stamp);
+    window.open(d.reportUrl, '_blank');
+  });
+  es.addEventListener('failed', (ev) => {
+    es.close();
+    $('prog').hidden = true;
+    $('s3title').textContent = 'Lỗi khi chạy';
+    $('s3sub').textContent = '';
+    $('doneBar').hidden = false;
+    $('doneBar').innerHTML = '<div class="err" style="margin:0">' + esc(JSON.parse(ev.data).error) + '</div>'
+      + '<button id="again2">Về bảng ghép</button>';
+    $('again2').onclick = () => { $('s3').hidden = true; $('s2').hidden = false; };
+  });
+  es.onerror = () => { if (es.readyState === 2) es.close(); };
+}
+
+/**
+ * One file with every picture inside it, for sending to somebody.
+ *
+ * The plain report.html is 28 KB of markup pointing at ~20 MB of PNGs next to it, so emailing that
+ * file alone gets the recipient broken images. This bakes them in.
+ */
+async function makeShare(stamp) {
+  const btn = $('share'), out = $('shareOut');
+  out.textContent = '';
+  busy(btn, true, 'Đang nén ảnh…');
+  try {
+    const r = await post('/api/share', { stamp });
+    const mb = (r.bytes / 1024 / 1024).toFixed(1);
+    out.innerHTML = r.images + ' ảnh · ' + mb + ' MB · <a href="' + r.url + '" download>tải file</a>'
+      + (r.skipped ? ' · ⚠ ' + r.skipped + ' ảnh thiếu' : '');
+    const a = document.createElement('a');
+    a.href = r.url; a.download = '';
+    document.body.appendChild(a); a.click(); a.remove();
+  } catch (e) {
+    out.innerHTML = '<span style="color:var(--bad)">' + esc(e.message) + '</span>';
+  } finally {
+    busy(btn, false, 'Xuất file chia sẻ');
+  }
+}
+
+$('site').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('go1').click(); });
+$('figma').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('go1').click(); });
+</script>
+</body>
+</html>

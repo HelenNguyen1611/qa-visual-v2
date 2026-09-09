@@ -1,7 +1,7 @@
 import { chromium, type Browser, type Page } from 'playwright';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { VIEWPORTS, type Config, type ViewportName, log } from './config.js';
+import { VIEWPORTS, type Config, type ViewportName, log, progressTick } from './config.js';
 import { FREEZE_CSS, triggerLazyLoad, collectMedia, collectTextIndex, type MediaRegion, type TextItem } from './browser.js';
 
 export interface Capture {
@@ -79,6 +79,7 @@ export async function captureAll(browser: Browser, cfg: Config, outDir: string):
       const nImg = media.filter((m) => m.kind === 'img').length;
       const nBg = media.filter((m) => m.kind === 'background').length;
       log(`captured ${vp.name} ${vp.width}px — trang cao ${pageHeight}px · ${nImg} ảnh, ${nBg} ảnh nền CSS, ${nAv} video/iframe/canvas`);
+      progressTick(`Chụp ${vp.name} · ${shortUrl(cfg.url)}`, 'capture');
     }
   } finally {
     await ctx.close().catch(() => {});
@@ -87,3 +88,12 @@ export async function captureAll(browser: Browser, cfg: Config, outDir: string):
 }
 
 const dedupe = (a: string[]) => Array.from(new Set(a));
+
+/** Just the path, for a progress label that has to fit on one line. */
+const shortUrl = (u: string) => {
+  try {
+    return new URL(u).pathname || '/';
+  } catch {
+    return u;
+  }
+};

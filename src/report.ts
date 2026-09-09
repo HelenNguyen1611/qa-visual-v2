@@ -65,6 +65,10 @@ export interface RunReport {
   sharedTextCount: number;
   aiModel?: string;
   rawFindingCount: number;
+  /** vision calls attempted and how many never answered — a partial run must not read as a clean one */
+  ai?: { calls: number; failures: number; lastError?: string; stopped?: string };
+  /** the run this one was compared against, and what it reported that this run did not */
+  drift?: { previousRun: string; gone: Array<{ title: string; severity: string; scope: string }> };
 }
 
 const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
@@ -98,14 +102,57 @@ export function renderReport(r: RunReport): string {
   const mispaired = r.pages.filter((p) => p.mispaired);
   const majors = r.findings.filter((f) => f.severity === 'major').length;
 
+/**
+ * Every finding as one row, with a column per screen size.
+ *
+ * The chip list ("mobile, tablet") answered the question one finding at a time; a developer
+ * planning the fix needs the other cut — which sizes are affected, and whether a bug is
+ * mobile-only or everywhere. That only reads off a grid.
+ *
+ * A blank cell means the model did not report it at that width, which is NOT proof the defect is
+ * absent there: it may simply not have been mentioned. The caption says so, because a grid invites
+ * being read as measurement.
+ */
+const VP_COLS = ['mobile', 'tablet', 'desktop'] as const;
+
+const findingTable = (list: GroupedFinding[], r: RunReport) => {
+  if (!list.length) return '';
+  const sev = { major: 'nặng', minor: 'vừa', note: 'nhẹ' } as Record<string, string>;
+  return `<div class="panel" style="padding:0;overflow-x:auto">
+  <table class="grid">
+    <thead><tr>
+      <th>#</th><th>Lỗi</th><th>Mức</th><th>Phạm vi</th>
+      ${VP_COLS.map((v) => `<th class="c">${v === 'mobile' ? 'Mobile<br><span class="cap">390</span>' : v === 'tablet' ? 'Tablet<br><span class="cap">768</span>' : 'Desktop<br><span class="cap">1440</span>'}</th>`).join('')}
+      <th class="c">Trang</th><th></th>
+    </tr></thead>
+    <tbody>${list
+      .map(
+        (f) => `<tr>
+        <td class="mono">${f.num}</td>
+        <td><a href="#f${f.num}">${esc(f.title)}</a></td>
+        <td><span class="chip ${f.severity}">${sev[f.severity]}</span></td>
+        <td>${f.scope === 'template' ? '<span class="chip tpl">dùng chung</span>' : '<span class="cap">riêng trang</span>'}</td>
+        ${VP_COLS.map((v) => `<td class="c ${f.viewports.includes(v) ? 'yes' : 'no'}">${f.viewports.includes(v) ? '●' : '·'}</td>`).join('')}
+        <td class="c mono">${f.pages.length}/${r.pages.length}</td>
+        <td class="c">${f.isNew === true ? '<span class="chip new">mới</span>' : ''}</td>
+      </tr>`,
+      )
+      .join('')}</tbody>
+  </table>
+  <div class="cap" style="padding:8px 12px">● = AI báo lỗi ở kích thước đó. Ô trống nghĩa là <b>không được báo</b> ở kích thước đó — chưa chắc là không có lỗi.</div>
+</div>`;
+};
+
+
   const findingBlock = (f: GroupedFinding, showScope: boolean) => `
-    <div class="find ${f.severity}">
+    <div class="find ${f.severity}" id="f${f.num}">
       <div class="fhead"><span class="num">${f.num}</span>
         <b>${esc(f.title)}</b>
         <span class="chip ${f.severity}">${f.severity === 'major' ? 'nặng' : f.severity === 'minor' ? 'nhẹ' : 'ghi chú'}</span>
         ${showScope && f.scope === 'template' ? `<span class="chip tpl">component dùng chung</span>` : ''}
         <span class="chip">${f.viewports.join(', ')}</span>
         ${f.merged > 1 ? `<span class="chip">gộp từ ${f.merged} nhận xét</span>` : ''}
+        ${f.isNew === true ? `<span class="chip new">mới</span>` : f.isNew === false ? `<span class="chip">vẫn còn từ lần trước</span>` : ''}
       </div>
       <p>${esc(f.detail)}</p>
       <div class="cap">
@@ -192,6 +239,19 @@ code{font:11px ui-monospace,Menlo,monospace;background:var(--bg);padding:1px 5px
 .col h4{margin:0 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute);font-weight:600}
 .shotbox{max-height:320px;overflow:auto;border:1px solid var(--line);border-radius:8px;background:#fff}.shotbox img{width:100%;display:block}
 .alert{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:8px;padding:10px 12px;font-size:13px;margin:8px 0}
+
+.chip.new{background:#ecfdf3;border-color:#abefc6;color:#067647}
+table.grid{width:100%;border-collapse:collapse;font-size:13px}
+table.grid th{text-align:left;padding:8px 10px;border-bottom:1px solid #e3e6ea;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#6b7280;vertical-align:bottom}
+table.grid td{padding:8px 10px;border-bottom:1px solid #eef0f3;vertical-align:middle}
+table.grid tr:last-child td{border-bottom:0}
+table.grid th.c,table.grid td.c{text-align:center}
+table.grid td.yes{color:#b42318;font-size:15px}
+table.grid td.no{color:#cbd2d9}
+table.grid td a{color:inherit;text-decoration:none;border-bottom:1px solid #d5dae0}
+table.grid td a:hover{border-bottom-color:#1f6feb;color:#1f6feb}
+.gone li{margin:3px 0}
+.fatal{background:#fef3f2;border:1px solid #f6cfca;color:#b42318;border-radius:8px;padding:12px 14px;font-size:13.5px;margin:8px 0}
 .panel{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:12px}
 table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}th{color:var(--mute);font-size:11px;text-transform:uppercase;letter-spacing:.04em}
 ul{margin:6px 0;padding-left:18px}li{margin:3px 0}
@@ -212,6 +272,19 @@ footer{color:var(--mute);font-size:12px;padding:16px 28px;border-top:1px solid v
   <div class="stat"><b class="${criticalReq.length ? 'bad' : 'ok'}">${criticalReq.length}</b><span>script/css/font lỗi</span></div>
 </div>
 
+${r.ai && r.ai.failures
+  ? `<div class="panel fatal"><b>⚠ Báo cáo KHÔNG đầy đủ.</b> ${r.ai.failures}/${r.ai.calls} lời gọi AI thất bại (đã thử lại 3 lần), nên những vùng đó <b>chưa được kiểm</b> — danh sách lỗi dưới đây thiếu, không phải site sạch.<br><span class="cap">${r.ai.stopped ? esc(r.ai.stopped) : 'Lỗi đầu tiên: ' + esc(r.ai.lastError ?? '')}</span></div>`
+  : ''}
+${r.drift
+  ? `<div class="panel"><h3 style="margin:0 0 6px;font-size:13px">Đối chiếu với lần chạy trước (${esc(r.drift.previousRun)})</h3>` +
+    `<div class="cap">${r.findings.filter((f) => f.isNew).length} lỗi mới · ${r.findings.filter((f) => f.isNew === false).length} vẫn còn · ${r.drift.gone.length} lần trước có mà lần này không thấy</div>` +
+    (r.drift.gone.length
+      ? `<div class="alert" style="margin-top:8px"><b>Lần trước báo, lần này không thấy — cần bạn xác nhận đã sửa hay AI bỏ sót:</b><ul class="gone">${r.drift.gone
+          .map((g) => `<li>${esc(g.title)} <span class="cap">(${esc(g.severity)}${g.scope === 'template' ? ', component dùng chung' : ''})</span></li>`)
+          .join('')}</ul></div>`
+      : '')
+    + `</div>`
+  : ''}
 ${r.rawFindingCount > r.findings.length
   ? `<div class="panel cap">Đã gộp <b>${r.rawFindingCount}</b> nhận xét thô thành <b>${r.findings.length}</b> lỗi — nhờ nhận diện ${r.sharedTextCount} chuỗi chữ thuộc component dùng chung (có mặt ở ≥60% số trang).</div>`
   : ''}
@@ -248,6 +321,8 @@ ${r.sweeps.some((s) => s.breaks.length)
       )
       .join('')}<div class="cap">Sweep chạy ở trang chủ (điểm vỡ layout là chuyện của template, không cần quét mọi trang).</div></div>`
   : ''}
+
+${r.findings.length ? `<h2>Tất cả lỗi theo kích thước màn hình</h2>${findingTable(r.findings, r)}` : ''}
 
 ${template.length
   ? `<h2>Lỗi ở component dùng chung — sửa một lần, hết ở mọi trang</h2>${template.map((f) => findingBlock(f, true)).join('')}`

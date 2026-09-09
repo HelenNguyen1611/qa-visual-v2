@@ -12,38 +12,6 @@
       "figmaNodeId": "2430:13484",
       "frameName": "07 / About us",
       "how": "khớp tên \"07 / About us\" (điểm 0.85, kế tiếp 0.00)"
-    },
-    {
-      "url": "https://woo.13-236-98-13.nip.io/contact/",
-      "figmaNodeId": "2468:13996",
-      "frameName": "08 / Contact",
-      "how": "khớp tên \"08 / Contact\" (điểm 1.00, kế tiếp 0.00)"
-    },
-    {
-      "url": "https://woo.13-236-98-13.nip.io/giant-lygon-street-turns-35/",
-      "how": "không frame nào đủ giống (cao nhất 0.00 < 0.5) — bỏ phần so design"
-    },
-    {
-      "url": "https://woo.13-236-98-13.nip.io/journal/",
-      "figmaNodeId": "2430:12945",
-      "frameName": "06 / Journal / Inside Page",
-      "how": "khớp tên \"06 / Journal / Inside Page\" (điểm 0.85, kế tiếp 0.00) — frame dạng template, dùng chung cho nhiều trang"
-    },
-    {
-      "url": "https://woo.13-236-98-13.nip.io/projects/",
-      "figmaNodeId": "2430:9420",
-      "frameName": "03 / Projects",
-      "how": "khớp tên \"03 / Projects\" (điểm 1.00, kế tiếp 0.85)"
-    },
-    {
-      "url": "https://woo.13-236-98-13.nip.io/services/",
-      "figmaNodeId": "2417:2710",
-      "frameName": "02 / Services",
-      "how": "khớp tên \"02 / Services\" (điểm 1.00, kế tiếp 0.00)"
-    },
-    {
-      "url": "https://woo.13-236-98-13.nip.io/uppingham-vietnam/",
-      "how": "không frame nào đủ giống (cao nhất 0.00 < 0.5) — bỏ phần so design"
     }
   ]
 }

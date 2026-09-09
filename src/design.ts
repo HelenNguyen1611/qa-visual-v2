@@ -113,6 +113,26 @@ export async function listFigmaFrames(link: string, token: string): Promise<Figm
   }));
 }
 
+/**
+ * One frame, named by a link pointing straight at it.
+ *
+ * The escape hatch for the dominant-width filter above: it deliberately drops frames, and it picks
+ * one Figma page, so the frame a person actually wants may not be in the list at all. Pasting its
+ * link has to work, or the pairing table is capped by what the tool managed to guess.
+ */
+export async function frameFromLink(link: string, token: string): Promise<FigmaFrame> {
+  if (!token) throw new Error('FIGMA_TOKEN chưa được đặt trong .env');
+  const { nodeId } = parseFigmaLink(link);
+  if (!nodeId) throw new Error('link không trỏ vào frame nào — mở frame trong Figma rồi Copy link to selection');
+  const { fileKey } = parseFigmaLink(link);
+  const j = await figmaGet(`/files/${fileKey}/nodes?ids=${encodeURIComponent(nodeId)}&depth=1`, token);
+  const doc: FigmaNode | undefined = j.nodes?.[nodeId]?.document;
+  if (!doc) throw new Error(`không thấy node ${nodeId} trong file ${fileKey}`);
+  const box = doc.absoluteBoundingBox;
+  if (!box) throw new Error(`node "${doc.name}" không có kích thước — chọn một frame, không phải page hay group rỗng`);
+  return { id: doc.id, name: doc.name, width: Math.round(box.width), height: Math.round(box.height) };
+}
+
 /** Render the frames we actually need. One API call for all ids, then download each PNG. */
 export async function renderFigmaFrames(link: string, frames: FigmaFrame[], token: string, cacheDir: string): Promise<Map<string, string>> {
   const out = new Map<string, string>();

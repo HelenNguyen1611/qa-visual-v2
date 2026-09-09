@@ -3,13 +3,20 @@
   "version": "2.0.0",
   "description": "One command: screenshot a site at 3 viewports, compare against the Figma design and the last approved run, find the width where layout breaks. One HTML report.",
   "type": "module",
-  "bin": { "qa-visual": "./dist/cli.js" },
+  "bin": {
+    "qa-visual": "./dist/cli.js"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "node dist/cli.js",
-    "postinstall": "playwright install chromium"
+    "postinstall": "playwright install chromium",
+    "start": "node dist/server.js",
+    "web": "node dist/server.js",
+    "share": "node dist/share.js"
   },
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "playwright": "^1.63.0",
     "pixelmatch": "^7.1.0",

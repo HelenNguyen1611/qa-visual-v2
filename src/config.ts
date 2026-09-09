@@ -115,4 +115,61 @@ export function loadConfig(argv: string[], cwd = process.cwd()): Config {
   };
 }
 
-export const log = (...a: unknown[]) => console.error('[qa-visual]', ...a);
+/**
+ * Where log lines go, besides stderr.
+ *
+ * One sink instead of threading a logger through every module: the web UI wants the exact lines the
+ * terminal shows, and every module already calls log(). Anything else would mean touching them all.
+ */
+let sink: ((line: string) => void) | null = null;
+export const setLogSink = (f: ((line: string) => void) | null) => {
+  sink = f;
+};
+
+/* ------------------------------- progress ------------------------------- */
+
+export interface Progress {
+  done: number;
+  total: number;
+  /** what is happening right now, in the user's language */
+  label: string;
+  phase: 'capture' | 'ai' | 'wrap';
+}
+
+let progressSink: ((p: Progress) => void) | null = null;
+export const setProgressSink = (f: ((p: Progress) => void) | null) => {
+  progressSink = f;
+};
+
+let state: Progress = { done: 0, total: 0, label: '', phase: 'capture' };
+
+/**
+ * Declare the size of the job before it starts.
+ *
+ * The unit is one API-or-screenshot step, not one page: a page takes three screenshots and up to
+ * three model calls, so counting pages makes the bar sit still for thirty seconds at a time on a
+ * job that is actually moving.
+ */
+export function progressTotal(total: number) {
+  state = { done: 0, total, label: 'đang bắt đầu…', phase: 'capture' };
+  progressSink?.({ ...state });
+}
+
+export function progressTick(label: string, phase: Progress['phase'] = state.phase) {
+  state = { ...state, done: Math.min(state.done + 1, state.total), label, phase };
+  progressSink?.({ ...state });
+}
+
+/** Move the label without claiming a step finished. */
+export function progressSay(label: string, phase: Progress['phase'] = state.phase) {
+  state = { ...state, label, phase };
+  progressSink?.({ ...state });
+}
+
+export const log = (...a: unknown[]) => {
+  const line = a.map((x) => (typeof x === 'string' ? x : String(x))).join(' ');
+  console.error('[qa-visual]', line);
+  try {
+    sink?.(line);
+  } catch {}
+};
