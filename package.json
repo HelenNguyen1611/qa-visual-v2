@@ -1,0 +1,23 @@
+{
+  "name": "qa-visual",
+  "version": "2.0.0",
+  "description": "One command: screenshot a site at 3 viewports, compare against the Figma design and the last approved run, find the width where layout breaks. One HTML report.",
+  "type": "module",
+  "bin": { "qa-visual": "./dist/cli.js" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "node dist/cli.js",
+    "postinstall": "playwright install chromium"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "playwright": "^1.63.0",
+    "pixelmatch": "^7.1.0",
+    "pngjs": "^7.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/pngjs": "^6.0.5",
+    "typescript": "^5.6.0"
+  }
+}

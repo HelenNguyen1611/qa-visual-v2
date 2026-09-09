@@ -1,0 +1,43 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>About — Buggy Co</title>
+<link rel="stylesheet" href="/missing.css">
+<style>
+body{margin:0;font-family:system-ui,sans-serif;color:#222}
+header{display:flex;gap:24px;align-items:center;padding:16px 24px;border-bottom:1px solid #ddd}
+header nav a{margin-right:14px;color:#06c;text-decoration:none}
+main{padding:24px}
+.hero{display:grid;grid-template-columns:repeat(3,minmax(360px,1fr));gap:24px} /* breaks below ~1130px */
+.card{border:1px solid #ddd;border-radius:8px;padding:16px;min-height:120px}
+footer{padding:24px;border-top:1px solid #ddd;font-size:10px;color:#666}
+.wide-banner{width:560px;background:#fde68a;padding:12px} /* overflows at 390 */
+.clip{width:140px;white-space:nowrap;overflow:hidden;border:1px solid #ccc;padding:4px}
+.stack{position:relative;height:60px}
+.stack .a,.stack .b{position:absolute;left:0;top:0;font-size:18px}
+.stack .b{top:8px;left:20px}
+.stretch{width:300px;height:120px}
+.tiny{display:inline-block;width:14px;height:14px;background:#06c;color:#fff;font-size:9px;text-align:center;line-height:14px}
+.skip-link{position:absolute;width:1px;height:1px;overflow:hidden;white-space:nowrap;left:0;top:0}
+/* Case: logo image drawn on top of a phone-number link (real occlusion bug) */
+.contactrow{position:relative;height:70px;width:340px}
+.contactrow a.phone{position:absolute;left:0;top:24px;font-size:16px}
+.contactrow img.brand{position:absolute;left:0;top:18px;width:190px;height:46px}
+/* Case: hero with a CSS background image that 404s */
+.bg-broken{height:180px;background-image:url(/img/hero-missing.jpg);background-size:cover;background-color:#eef}
+/* Case: video background hero — renders blank in screenshots, must NOT be reported */
+.videohero{position:relative;height:260px;overflow:hidden;background:#000}
+.videohero video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+/* Case: full-bleed backdrop image with text over it — intentional, must NOT be reported */
+.banner{position:relative;height:150px}
+.banner img{position:absolute;inset:0;width:100%;height:150px;object-fit:cover}
+.banner h3{position:relative;color:#fff;padding:60px 20px;margin:0}
+/* Case: hero whose vertical spacing balloons ONLY on mobile (real spacing bug) */
+.mobhero{padding:40px 0;background:#fafafa}
+.mobhero h2{margin:0}
+@media (max-width:600px){ .mobhero{padding:430px 0} }
+/* Case: empty gap that only appears on mobile */
+.gapblock{margin-bottom:20px}
+@media (max-width:600px){ .gapblock{margin-bottom:400px} }
+</style></head><body>
+<a class="skip-link screen-reader-text" href="#main">Skip to content</a><header><strong>Buggy Co</strong><nav><a href="/index.html">Home</a><a href="/about.html">About</a><a href="/services.html">Services</a><a href="/pricing.html">Pricing</a><a href="/contact.html">Contact</a><a href="/blog.html">Blog</a></nav></header>
+<main><h1>About us</h1><p>We build things.</p><div class="hero"><div class="card">A</div><div class="card">B</div><div class="card">C</div></div></main>
+<footer>© Buggy Co. Tiny footer text that is hard to read on mobile phones because it is only ten pixels tall.</footer>
+</body></html>

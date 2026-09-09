@@ -1,0 +1,16 @@
+{
+  "_": "CSS selectors whose pixels are ignored when comparing runs. Anything that legitimately changes between loads: video, embeds, carousels, live counters, ads, randomised content. Video/iframe/canvas are ALSO detected automatically from the DOM — this list is for things the DOM cannot reveal.",
+  "mask": [
+    "[class*='marquee']",
+    "[class*='carousel']",
+    "[class*='slider']",
+    "[class*='swiper']",
+    "[class*='ticker']"
+  ],
+  "hide": [
+    "#cookie-banner",
+    ".cookie-notice",
+    "[id*='cookieconsent']",
+    "[class*='chat-widget']"
+  ]
+}
