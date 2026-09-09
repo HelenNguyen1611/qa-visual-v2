@@ -76,6 +76,7 @@ export async function compareWithDesign(
   designWidth: number,
   viewportHeight: number,
   media: MediaRegion[],
+  skipBands: Array<{ from: number; to: number; where: string }> = [],
 ): Promise<AiFinding[]> {
   const site = slices(siteFile);
   const design = slices(designFile);
@@ -95,6 +96,7 @@ Trang site: rộng ${site.width}px, cao tổng ${site.height}px. Màn hình đ�
 
 Vùng media trên site (hiện trắng trong ảnh, KHÔNG báo là thiếu nội dung):
 ${mediaList(media)}
+${skipBands.length ? `\nVùng ĐÃ KIỂM ở trang khác (header/footer dùng chung) — BỎ QUA, đừng báo lỗi trong các vùng này:\n${skipBands.map((b) => `- y = ${b.from} … ${b.to} (${b.where === 'top' ? 'header' : 'footer'})`).join('\n')}` : ''}
 
 Trả JSON.`;
   const raw = await provider.complete({ system: RULES_VI, user, images: [...design.imgs, ...site.imgs], maxTokens: 1800 }, 90000);

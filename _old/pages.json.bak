@@ -1,0 +1,11 @@
+{
+  "_": "Ghép URL với frame Figma. Tool sinh file này lần đầu; sửa dòng nào sai rồi lần sau tool dùng nguyên file này, không đoán lại. Bỏ figmaNodeId nếu muốn trang đó không so với design.",
+  "pages": [
+    {
+      "url": "https://woo.13-236-98-13.nip.io/",
+      "figmaNodeId": "2366:8900",
+      "frameName": "01 / Homepage",
+      "how": "khớp tên \"01 / Homepage\" (điểm 1.00, kế tiếp 0.00)"
+    }
+  ]
+}

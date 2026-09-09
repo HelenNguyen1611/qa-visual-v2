@@ -13,6 +13,10 @@ export type ViewportName = (typeof VIEWPORTS)[number]['name'];
 
 export interface Config {
   url: string;
+  /** scan the whole site from its sitemap */
+  site?: string;
+  maxPages: number;
+  concurrency: number;
   /** Figma file/frame link, if the design lives in Figma */
   figma?: string;
   /** Folder of design PNGs (desktop.png / tablet.png / mobile.png), if not using Figma */
@@ -47,9 +51,13 @@ function arg(flags: string[], argv: string[]): string | undefined {
   return undefined;
 }
 
-export const USAGE = `qa-visual <url> [options]
+export const USAGE = `qa-visual <url|--site url> [options]
 
-  --figma <link>     Figma file or frame link. Frames are matched to viewports by width.
+  --site <url>       Quét cả site: danh sách trang lấy từ sitemap.xml
+  --pages <n>        Số trang tối đa (mặc định 8)
+  --concurrency <n>  Số trang chạy song song (mặc định 2)
+  --figma <link>     Link file / page / frame Figma. Frame được ghép với URL theo tên;
+                     kết quả ghép ghi ra pages.json để bạn sửa.
   --design <folder>  Folder with desktop.png / tablet.png / mobile.png (alternative to --figma)
   --approve          Make this run the approved baseline for future comparisons
   --ai <provider>    openrouter | openai | anthropic | none   (default: from .env, else none)
@@ -62,7 +70,8 @@ Output: reports/<timestamp>/report.html
 export function loadConfig(argv: string[], cwd = process.cwd()): Config {
   loadDotEnv(cwd);
   const url = argv.find((a) => /^https?:\/\//i.test(a) && !a.includes('figma.com'));
-  if (!url) throw new Error('Missing site URL.\n\n' + USAGE);
+  const siteArg = arg(['--site'], argv);
+  if (!url && !siteArg) throw new Error('Thiếu URL (hoặc --site).\n\n' + USAGE);
 
   const figma = arg(['--figma'], argv) ?? argv.find((a) => /figma\.com\//.test(a));
   const provider = (arg(['--ai'], argv) ?? process.env.QA_AI_PROVIDER ?? 'none') as AiProvider;
@@ -89,8 +98,12 @@ export function loadConfig(argv: string[], cwd = process.cwd()): Config {
   const maskPath = resolve(cwd, 'mask.json');
   const mask = existsSync(maskPath) ? JSON.parse(readFileSync(maskPath, 'utf8')) : { mask: [], hide: [] };
 
+  const site = arg(['--site'], argv);
   return {
-    url,
+    url: url ?? site!,
+    site,
+    maxPages: Math.max(1, Number(arg(['--pages'], argv) ?? 8)),
+    concurrency: Math.max(1, Math.min(4, Number(arg(['--concurrency'], argv) ?? 2))),
     figma,
     designDir: arg(['--design'], argv),
     approve: argv.includes('--approve'),
