@@ -11,8 +11,8 @@ import { fromSitemap, fromLinks, browserFetcher, dedupeUrls, slugOf, type PageTa
 import { mapUrlsToFrames, looksMispaired, type Mapped } from './mapping.js';
 import { detectShared } from './shared.js';
 import { groupFindings, markDrift, type Occurrence, type GroupedFinding } from './group.js';
-import { createProvider, aiStopped, resetAiCircuit, type VisionProvider } from './provider.js';
-import { compareWithDesign, compareSelf } from './ai.js';
+import { createProvider, aiStopped, resetAiCircuit, preflight, type VisionProvider } from './provider.js';
+import { compareWithDesign, compareSelf, looksNonVietnamese } from './ai.js';
 import { annotateCrop } from './annotate.js';
 import { locate } from './locate.js';
 
@@ -308,7 +308,6 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const runDir = join(cfg.stateDir, stamp);
   const approvedRoot = join(cfg.stateDir, '_approved');
-  mkdirSync(runDir, { recursive: true });
 
   const mapped: Mapped[] = rows.map((p) => {
     // A hand-edited row names the frame; the id is what the tool wrote. Name wins, because the
@@ -334,6 +333,8 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
 
   const provider = createProvider(cfg);
   resetAiCircuit();
+  // Check the key and the model choice before spending a run discovering they cannot work.
+  if (provider) await preflight(cfg, (l) => log(l));
 
   // Size the bar before starting: 3 screenshots per page, then the model calls that page will
   // actually make (3 when it has a design to compare against, 1 self-check when it does not),
@@ -341,6 +342,7 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
   const aiPerPage = (m: Mapped) => (provider ? (m.frame && rendered.get(m.frame.id) ? VIEWPORTS.length : 1) : 0);
   progressTotal(mapped.length * VIEWPORTS.length + mapped.reduce((n, m) => n + aiPerPage(m), 0) + 2);
 
+  mkdirSync(runDir, { recursive: true });
   const browser = await launch(cfg);
   let report: RunReport;
 
@@ -375,6 +377,21 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
         allOccurrences.push(...res.occurrences);
       });
     }
+
+    // ---- a model that answers "nothing wrong" to every single question is not a clean site
+    //
+    // 12 calls, 0 failures, 0 findings, on a site the previous run found 8 real defects on. The
+    // API said yes to everything and the model said nothing every time — which reads in the
+    // report as good news and is the opposite. Successful calls are not the same as a real answer.
+    const silentModel = Boolean(provider) && provider!.calls >= 3 && provider!.failures === 0 && allOccurrences.length === 0;
+    if (silentModel) {
+      log(`⚠ ${provider!.calls}/${provider!.calls} lời gọi AI THÀNH CÔNG nhưng model không nêu một lỗi nào.`);
+      log(`  Rất có thể model "${provider!.model}" quá yếu cho việc so ảnh — không phải site sạch. Đổi QA_AI_MODEL và chạy lại.`);
+    }
+
+    // ---- did the model answer in the language it was told to?
+    const wrongLang = allOccurrences.filter((o) => looksNonVietnamese(o.finding)).length;
+    if (wrongLang) log(`⚠ ${wrongLang}/${allOccurrences.length} nhận xét KHÔNG phải tiếng Việt — model đang bỏ qua yêu cầu ngôn ngữ. Nội dung vẫn giữ, nhưng nên đổi model.`);
 
     // ---- one finding per defect
     const grouped = groupFindings(allOccurrences, shared);
@@ -423,7 +440,16 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
       sharedTextCount: shared.texts.size,
       aiModel: provider ? `${provider.name}/${provider.model}` : undefined,
       rawFindingCount: allOccurrences.length,
-      ai: provider ? { calls: provider.calls, failures: provider.failures, lastError: provider.lastError, stopped: aiStopped() ?? undefined } : undefined,
+      ai: provider
+        ? {
+            calls: provider.calls,
+            failures: provider.failures,
+            lastError: provider.lastError,
+            stopped: aiStopped() ?? undefined,
+            wrongLang: wrongLang || undefined,
+            silent: silentModel || undefined,
+          }
+        : undefined,
       drift,
     };
   } finally {

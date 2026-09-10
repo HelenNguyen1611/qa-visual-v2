@@ -20,7 +20,9 @@ QUAN TRỌNG:
 - Ưu tiên ít mà chắc.
 - QUAN TRỌNG VỀ ĐỊNH VỊ: với mỗi nhận xét, trong "anchors" hãy TRÍCH NGUYÊN VĂN chữ đang hiển thị của các phần tử liên quan, copy đúng như đọc được trên ảnh site (ví dụ ["+1300 966 937", "hello@wooagency.com.au"]). Tool sẽ dùng chuỗi chữ này để tìm vị trí thật trong trang. Trích 1–3 chuỗi, ngắn và đặc trưng, ưu tiên chuỗi duy nhất trên trang. Nếu phần tử không có chữ (ảnh, khối màu) thì lấy chữ GẦN NHẤT ngay trên hoặc dưới nó. "y" chỉ là ước lượng thô để phân biệt khi một chuỗi xuất hiện nhiều lần — không cần chính xác.
 Định dạng: {"findings":[{"title":"ngắn gọn","severity":"major|minor|note","detail":"cụ thể","anchors":["chữ nguyên văn"],"y":number}]}
-Nếu không có khác biệt đáng kể: {"findings":[]}`;
+Nếu không có khác biệt đáng kể: {"findings":[]}
+
+NGÔN NGỮ — BẮT BUỘC: "title" và "detail" PHẢI viết bằng TIẾNG VIỆT. Không được dùng tiếng Anh, tiếng Tây Ban Nha, tiếng Trung hay bất kỳ thứ tiếng nào khác. Riêng "anchors" thì giữ NGUYÊN VĂN chữ trên ảnh, không dịch.`;
 
 const MAX_SLICE = 2400;
 
@@ -50,6 +52,33 @@ function rangeTable(label: string, r: Array<{ from: number; to: number }>) {
 function mediaList(media: MediaRegion[]) {
   const m = media.filter((r) => r.kind === 'video' || r.kind === 'iframe' || r.kind === 'canvas');
   return m.length ? m.map((r) => `- ${r.kind.toUpperCase()} tại x=${r.x} y=${r.y} rộng ${r.w} cao ${r.h}`).join('\n') : '- không có';
+}
+
+/**
+ * Did the model answer in Vietnamese, as instructed?
+ *
+ * Small models routinely ignore a language rule buried in a long prompt — one run came back in
+ * Spanish. The findings were probably still correct, so throwing them away would be worse than
+ * keeping them; what matters is that the report says the model disobeyed, instead of leaving the
+ * person to work out why their report is suddenly in another language.
+ *
+ * The test is the Vietnamese-only letters (ăâđêôơư and the tone marks). Any real sentence in
+ * Vietnamese has several; English and Spanish have none. Short strings are not judged — a title
+ * can legitimately be all ASCII ("Logo CTA sai") — so only long text counts as evidence.
+ */
+/*
+ * Only letters Vietnamese has and Spanish / French / Portuguese / Italian do NOT.
+ *
+ * The obvious set (à á â è é ê ì í ò ó ô ù ú) is useless here: Spanish "El menú de navegación"
+ * matches it, so the first version of this check called that sentence Vietnamese. What no other
+ * Latin-script language uses is ă ơ ư đ, the dot-below vowels, and the hook-above vowels.
+ */
+const VI_LETTERS =
+  /[ăơưĂƠƯđĐạặậẹệịọộợụựỵẠẶẬẸỆỊỌỘỢỤỰỴảẳẩẻểỉỏổởủửỷẢẲẨẺỂỈỎỔỞỦỬỶẫẵễỗỡữẽĩỹẪẴỄỖỠỮẼĨỹ]/;
+
+export function looksNonVietnamese(f: { title: string; detail: string }): boolean {
+  const text = `${f.title} ${f.detail}`.trim();
+  return text.length >= 40 && !VI_LETTERS.test(text);
 }
 
 function parse(raw: string): AiFinding[] {
@@ -98,7 +127,7 @@ Vùng media trên site (hiện trắng trong ảnh, KHÔNG báo là thiếu nộ
 ${mediaList(media)}
 ${skipBands.length ? `\nVùng ĐÃ KIỂM ở trang khác (header/footer dùng chung) — BỎ QUA, đừng báo lỗi trong các vùng này:\n${skipBands.map((b) => `- y = ${b.from} … ${b.to} (${b.where === 'top' ? 'header' : 'footer'})`).join('\n')}` : ''}
 
-Trả JSON.`;
+Trả JSON. "title" và "detail" viết bằng TIẾNG VIỆT (anchors giữ nguyên văn, không dịch).`;
   const raw = await provider.complete({ system: RULES_VI, user, images: [...design.imgs, ...site.imgs], maxTokens: 1800 }, 90000);
   return parse(raw);
 }
@@ -125,7 +154,7 @@ Trang mobile: rộng ${m.width}px, cao ${m.height}px.
 Vùng media trên mobile (hiện trắng, KHÔNG báo):
 ${mediaList(mobileMedia)}
 
-Trả JSON.`;
+Trả JSON. "title" và "detail" viết bằng TIẾNG VIỆT (anchors giữ nguyên văn, không dịch).`;
   const raw = await provider.complete({ system: RULES_VI, user, images: [...d.imgs, ...m.imgs], maxTokens: 1500 }, 90000);
   return parse(raw);
 }

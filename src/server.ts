@@ -294,6 +294,34 @@ const server = createServer(async (req, res) => {
   }
 });
 
+/**
+ * Stay alive through a bug.
+ *
+ * A QA run touches a browser, a filesystem and two HTTP APIs, so something will eventually throw
+ * where nothing catches it. Node's default is to exit — and a dead server shows up in the browser
+ * as the bare message "Failed to fetch", which says nothing about what happened and loses the one
+ * place the reason was printed. Logging and staying up keeps the tool usable and the cause visible.
+ */
+process.on('uncaughtException', (e: any) => {
+  log(`⚠ lỗi không bắt được (server vẫn chạy): ${e?.stack ?? e?.message ?? e}`);
+  busy = false;
+});
+process.on('unhandledRejection', (e: any) => {
+  log(`⚠ promise lỗi không bắt được (server vẫn chạy): ${e?.stack ?? e?.message ?? e}`);
+  busy = false;
+});
+
+server.on('error', (e: any) => {
+  if (e?.code === 'EADDRINUSE') {
+    log(`⚠ cổng ${PORT} đang bị chiếm — QA Visual có lẽ đã mở ở một cửa sổ Terminal khác.`);
+    log(`  Mở http://${HOST}:${PORT} là dùng được ngay. Muốn chạy bản mới thì đóng cửa sổ cũ trước,`);
+    log(`  hoặc đổi cổng: QA_PORT=5174 npm start`);
+  } else {
+    log(`⚠ không mở được server: ${e?.message ?? e}`);
+  }
+  process.exit(1);
+});
+
 server.listen(PORT, HOST, () => {
   const url = `http://${HOST}:${PORT}`;
   console.error('');
@@ -302,3 +330,6 @@ server.listen(PORT, HOST, () => {
   log('Mở link trên trong browser. Ctrl+C để tắt.');
   console.error('');
 });
+
+/** A liveness probe the page can poll, so the UI can tell "server died" from "request failed". */
+export {};

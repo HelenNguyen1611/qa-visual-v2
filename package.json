@@ -12,7 +12,8 @@
     "postinstall": "playwright install chromium",
     "start": "node dist/server.js",
     "web": "node dist/server.js",
-    "share": "node dist/share.js"
+    "share": "node dist/share.js",
+    "models": "node dist/models.js"
   },
   "engines": {
     "node": ">=20"

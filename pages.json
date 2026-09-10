@@ -2,16 +2,20 @@
   "_": "Ghép URL với frame Figma. Tool sinh file này lần đầu; sửa dòng nào sai rồi lần sau tool dùng nguyên file này, không đoán lại. Bỏ figmaNodeId nếu muốn trang đó không so với design.",
   "pages": [
     {
-      "url": "https://woo.13-236-98-13.nip.io/",
-      "figmaNodeId": "2366:8900",
-      "frameName": "01 / Homepage",
-      "how": "khớp tên \"01 / Homepage\" (điểm 1.00, kế tiếp 0.00)"
+      "url": "https://woo.13-236-98-13.nip.io/giant-lygon-street-turns-35/",
+      "how": "không frame nào đủ giống (cao nhất 0.00 < 0.5) — bỏ phần so design"
     },
     {
-      "url": "https://woo.13-236-98-13.nip.io/about/",
-      "figmaNodeId": "2430:13484",
-      "frameName": "07 / About us",
-      "how": "khớp tên \"07 / About us\" (điểm 0.85, kế tiếp 0.00)"
+      "url": "https://woo.13-236-98-13.nip.io/journal/",
+      "figmaNodeId": "2430:11986",
+      "frameName": "05 / Insights",
+      "how": "chọn tay: \"05 / Insights\""
+    },
+    {
+      "url": "https://woo.13-236-98-13.nip.io/projects/",
+      "figmaNodeId": "2430:9420",
+      "frameName": "03 / Projects",
+      "how": "khớp tên \"03 / Projects\" (điểm 1.00, kế tiếp 0.85)"
     }
   ]
 }

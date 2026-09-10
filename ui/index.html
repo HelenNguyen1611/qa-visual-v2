@@ -165,14 +165,29 @@ let ROWS = [];     // [{url, figmaNodeId, frameName, how}]
 /* ------------------------------- helpers -------------------------------- */
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+/**
+ * "Failed to fetch" is the browser saying it could not reach the server at all — and on its own it
+ * tells the reader nothing about why or what to do. Every time it means the local server is not
+ * listening: the Terminal window was closed, or it crashed. So say that, with the fix.
+ */
+const DEAD_SERVER =
+  'Không kết nối được server QA Visual (nó đã tắt hoặc bị lỗi).\n' +
+  '1. Mở lại "QA Visual.command" — nếu cửa sổ Terminal cũ còn mở thì đọc dòng lỗi cuối trong đó trước.\n' +
+  '2. Trang này giữ nguyên những gì bạn đã nhập; bấm lại là chạy tiếp.';
+
 async function post(path, body) {
-  const res = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  let res;
+  try {
+    res = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  } catch {
+    throw new Error(DEAD_SERVER);
+  }
   const data = await res.json().catch(() => ({ error: 'phản hồi không phải JSON' }));
   if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
   return data;
 }
 function showErr(where, msg) {
-  $(where).innerHTML = msg ? '<div class="err">' + esc(msg) + '</div>' : '';
+  $(where).innerHTML = msg ? '<div class="err">' + esc(msg).replace(/\n/g, '<br>') + '</div>' : '';
 }
 function busy(btn, on, label) {
   btn.disabled = on;

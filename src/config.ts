@@ -81,7 +81,8 @@ export function loadConfig(argv: string[], cwd = process.cwd()): Config {
   let defaultModel = '';
   if (provider === 'openrouter') {
     apiKey = process.env.OPENROUTER_API_KEY ?? '';
-    baseUrl = 'https://openrouter.ai/api/v1';
+    // Overridable so a corporate gateway (or a test) can stand in front of OpenRouter.
+    baseUrl = process.env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai/api/v1';
     defaultModel = 'google/gemini-3.7-flash';
   } else if (provider === 'openai') {
     apiKey = process.env.OPENAI_API_KEY ?? '';

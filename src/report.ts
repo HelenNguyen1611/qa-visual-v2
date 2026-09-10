@@ -66,7 +66,7 @@ export interface RunReport {
   aiModel?: string;
   rawFindingCount: number;
   /** vision calls attempted and how many never answered — a partial run must not read as a clean one */
-  ai?: { calls: number; failures: number; lastError?: string; stopped?: string };
+  ai?: { calls: number; failures: number; lastError?: string; stopped?: string; wrongLang?: number; silent?: boolean };
   /** the run this one was compared against, and what it reported that this run did not */
   drift?: { previousRun: string; gone: Array<{ title: string; severity: string; scope: string }> };
 }
@@ -101,108 +101,145 @@ export function renderReport(r: RunReport): string {
   const unmapped = r.pages.filter((p) => !p.mapping.frameName);
   const mispaired = r.pages.filter((p) => p.mispaired);
   const majors = r.findings.filter((f) => f.severity === 'major').length;
+  const SEV = { major: 'nặng', minor: 'vừa', note: 'nhẹ' } as Record<string, string>;
+  const VP_COLS = ['mobile', 'tablet', 'desktop'] as const;
+  const VP_W = { mobile: 390, tablet: 768, desktop: 1440 } as const;
 
-/**
- * Every finding as one row, with a column per screen size.
- *
- * The chip list ("mobile, tablet") answered the question one finding at a time; a developer
- * planning the fix needs the other cut — which sizes are affected, and whether a bug is
- * mobile-only or everywhere. That only reads off a grid.
- *
- * A blank cell means the model did not report it at that width, which is NOT proof the defect is
- * absent there: it may simply not have been mentioned. The caption says so, because a grid invites
- * being read as measurement.
- */
-const VP_COLS = ['mobile', 'tablet', 'desktop'] as const;
+  /**
+   * The one sentence somebody reads before deciding whether to keep reading.
+   *
+   * A run whose model calls mostly failed must not open with "no problems found" — that reads as
+   * good news and it is the opposite. Coverage is stated before any count.
+   */
+  const verdict = (() => {
+    if (r.ai?.failures && r.ai.failures >= r.ai.calls) return { tone: 'bad', line: 'Chưa kiểm được', sub: 'Toàn bộ lời gọi AI thất bại — chưa có kết luận nào về site.' };
+    if (!r.findings.length && r.ai?.silent)
+      return {
+        tone: 'warn',
+        line: 'Không có kết quả — nghi model quá yếu',
+        sub: `${r.ai.calls}/${r.ai.calls} lời gọi AI thành công nhưng model không nêu một lỗi nào. Đây không phải kết luận "site sạch".`,
+      };
+    // Zero findings right after a run that found several, with no errors, is a red flag not a pass.
+    if (!r.findings.length && (r.drift?.gone.length ?? 0) >= 3)
+      return {
+        tone: 'warn',
+        line: 'Không tìm thấy lỗi nào — đáng ngờ',
+        sub: `Lần chạy trước báo ${r.drift!.gone.length} lỗi trên cùng site này. Kiểm tra danh sách bên dưới trước khi coi là đã sửa hết.`,
+      };
+    if (!r.findings.length) return { tone: 'ok', line: 'Không tìm thấy lỗi nào', sub: `Đã đối chiếu ${r.pages.length} trang ở 3 kích thước màn hình.` };
+    const parts = [`${r.findings.length} lỗi`];
+    if (template.length) parts.push(`${template.length} ở component dùng chung`);
+    if (majors) parts.push(`${majors} mức nặng`);
+    return { tone: majors ? 'bad' : 'warn', line: parts[0], sub: parts.slice(1).join(' · ') || `Trên ${r.pages.length} trang.` };
+  })();
 
-const findingTable = (list: GroupedFinding[], r: RunReport) => {
-  if (!list.length) return '';
-  const sev = { major: 'nặng', minor: 'vừa', note: 'nhẹ' } as Record<string, string>;
-  return `<div class="panel" style="padding:0;overflow-x:auto">
+  /** Index of findings — the fast scan, with a column per screen size. Cards below are the detail. */
+  const indexTable = () =>
+    !r.findings.length
+      ? ''
+      : `<div class="tablewrap">
   <table class="grid">
     <thead><tr>
-      <th>#</th><th>Lỗi</th><th>Mức</th><th>Phạm vi</th>
-      ${VP_COLS.map((v) => `<th class="c">${v === 'mobile' ? 'Mobile<br><span class="cap">390</span>' : v === 'tablet' ? 'Tablet<br><span class="cap">768</span>' : 'Desktop<br><span class="cap">1440</span>'}</th>`).join('')}
-      <th class="c">Trang</th><th></th>
+      <th class="c">#</th><th>Lỗi</th><th>Mức</th><th>Phạm vi</th>
+      ${VP_COLS.map((v) => `<th class="c">${v[0].toUpperCase() + v.slice(1)}<br><span class="tiny">${VP_W[v]}px</span></th>`).join('')}
+      <th class="c">Trang</th>
     </tr></thead>
-    <tbody>${list
+    <tbody>${r.findings
       .map(
         (f) => `<tr>
-        <td class="mono">${f.num}</td>
-        <td><a href="#f${f.num}">${esc(f.title)}</a></td>
-        <td><span class="chip ${f.severity}">${sev[f.severity]}</span></td>
-        <td>${f.scope === 'template' ? '<span class="chip tpl">dùng chung</span>' : '<span class="cap">riêng trang</span>'}</td>
+        <td class="c tnum">${f.num}</td>
+        <td><a href="#f${f.num}">${esc(f.title)}</a>${f.isNew === true ? ' <span class="chip new">mới</span>' : ''}</td>
+        <td><span class="chip ${f.severity}">${SEV[f.severity]}</span></td>
+        <td>${f.scope === 'template' ? '<span class="chip tpl">dùng chung</span>' : '<span class="tiny">riêng trang</span>'}</td>
         ${VP_COLS.map((v) => `<td class="c ${f.viewports.includes(v) ? 'yes' : 'no'}">${f.viewports.includes(v) ? '●' : '·'}</td>`).join('')}
-        <td class="c mono">${f.pages.length}/${r.pages.length}</td>
-        <td class="c">${f.isNew === true ? '<span class="chip new">mới</span>' : ''}</td>
+        <td class="c tnum">${f.pages.length}/${r.pages.length}</td>
       </tr>`,
       )
       .join('')}</tbody>
   </table>
-  <div class="cap" style="padding:8px 12px">● = AI báo lỗi ở kích thước đó. Ô trống nghĩa là <b>không được báo</b> ở kích thước đó — chưa chắc là không có lỗi.</div>
+  <p class="note">● = AI báo lỗi ở kích thước đó. Ô trống nghĩa là <b>không được báo</b> ở kích thước đó — chưa chắc là không có lỗi.</p>
 </div>`;
-};
 
-
-  const findingBlock = (f: GroupedFinding, showScope: boolean) => `
-    <div class="find ${f.severity}" id="f${f.num}">
-      <div class="fhead"><span class="num">${f.num}</span>
-        <b>${esc(f.title)}</b>
-        <span class="chip ${f.severity}">${f.severity === 'major' ? 'nặng' : f.severity === 'minor' ? 'nhẹ' : 'ghi chú'}</span>
-        ${showScope && f.scope === 'template' ? `<span class="chip tpl">component dùng chung</span>` : ''}
-        <span class="chip">${f.viewports.join(', ')}</span>
-        ${f.merged > 1 ? `<span class="chip">gộp từ ${f.merged} nhận xét</span>` : ''}
+  /**
+   * One finding.
+   *
+   * The cropped screenshot leads, because it answers "where" in a glance that no sentence can. The
+   * prose that used to sit above it made every card look the same until you read it.
+   */
+  const findingBlock = (f: GroupedFinding) => `
+  <article class="find ${f.severity}" id="f${f.num}">
+    <div class="fbody">
+      <div class="fhead">
+        <span class="num">${f.num}</span>
+        <h3>${esc(f.title)}</h3>
+      </div>
+      <div class="chips">
+        <span class="chip ${f.severity}">${SEV[f.severity]}</span>
+        ${f.scope === 'template' ? `<span class="chip tpl">component dùng chung</span>` : ''}
+        ${f.viewports.map((v) => `<span class="chip">${v}</span>`).join('')}
         ${f.isNew === true ? `<span class="chip new">mới</span>` : f.isNew === false ? `<span class="chip">vẫn còn từ lần trước</span>` : ''}
+        ${f.merged > 1 ? `<span class="chip quiet">gộp từ ${f.merged} nhận xét</span>` : ''}
       </div>
       <p>${esc(f.detail)}</p>
-      <div class="cap">
-        ${f.scope === 'template'
-          ? `Xuất hiện ở <b>${f.pages.length}/${r.pages.length} trang</b> — sửa một lần là hết ở tất cả: ${f.pages.map((p) => `<code>${esc(path(p))}</code>`).join(' ')}`
-          : `Trang: ${f.pages.map((p) => `<code>${esc(path(p))}</code>`).join(' ')}`}
-      </div>
-      ${f.crop
-        ? `<a href="${esc(f.crop)}" target="_blank"><img class="crop" src="${esc(f.crop)}" alt="vùng lỗi ${f.num}"></a><div class="cap">Vùng khoanh: ${esc(f.locatedHow ?? '')}</div>`
-        : f.anchors?.length
-          ? `<div class="cap warn">Không định vị được trên trang — chữ AI trích: ${esc(f.anchors.join(' / '))}</div>`
-          : ''}
-    </div>`;
+      ${
+        !f.crop && f.anchors?.length
+          ? `<p class="noloc">Chưa khoanh được vùng trên ảnh — chữ AI trích: <code>${esc(f.anchors.slice(0, 2).join('</code> <code>'))}</code></p>`
+          : ''
+      }
+      <p class="where">${
+        f.scope === 'template'
+          ? `Có ở <b>${f.pages.length}/${r.pages.length} trang</b> — sửa một lần là hết ở tất cả: ${f.pages.map((p) => `<code>${esc(path(p))}</code>`).join(' ')}`
+          : `Trang: ${f.pages.map((p) => `<code>${esc(path(p))}</code>`).join(' ')}`
+      }</p>
+    </div>
+    ${
+      f.crop
+        ? `<a class="shot pic" href="${esc(f.crop)}" target="_blank"><img src="${esc(f.crop)}" alt="vùng lỗi ${f.num}" loading="lazy"><span class="zoom">Bấm để xem to</span></a>`
+        : ''
+    }
+  </article>`;
 
   const pageRow = (p: PageReport) => {
     const mine = perPage.filter((f) => f.pages.includes(p.url));
     const changed = p.viewports.filter((v) => v.diff.changed);
     const assets = p.viewports[0] ? [...p.viewports[0].brokenImages, ...p.viewports[0].failedBackgrounds] : [];
+    const flags = [
+      mine.length ? `${mine.length} lỗi riêng` : '',
+      changed.length ? `${changed.length} kích thước khác bản duyệt` : '',
+      p.mispaired ? 'nghi ghép sai design' : '',
+      p.aiError ? 'AI lỗi' : '',
+    ].filter(Boolean);
     return `
-    <details class="page" ${mine.length || changed.length || p.mispaired ? 'open' : ''}>
+    <details class="page"${mine.length || p.mispaired ? ' open' : ''}>
       <summary>
-        <b>${esc(path(p.url))}</b>
-        <span class="chip">${mine.length} lỗi riêng</span>
-        ${changed.length ? `<span class="chip bad">khác bản duyệt: ${changed.map((v) => v.name).join(', ')}</span>` : `<span class="chip ok">không đổi</span>`}
-        ${p.mapping.frameName ? `<span class="chip">design: ${esc(p.mapping.frameName)}</span>` : `<span class="chip warn">chưa có design</span>`}
-        ${assets.length ? `<span class="chip bad">${assets.length} ảnh lỗi</span>` : ''}
+        <code>${esc(path(p.url))}</code>
+        <span class="tiny">${p.mapping.frameName ? '↔ ' + esc(p.mapping.frameName) : 'chưa ghép design'}</span>
+        <span class="grow"></span>
+        ${flags.length ? `<span class="tiny ${mine.length || p.mispaired ? 'bad' : ''}">${flags.join(' · ')}</span>` : '<span class="tiny ok">ổn</span>'}
       </summary>
       <div class="pbody">
-        <div class="cap">Ghép design: ${esc(p.mapping.how)}</div>
-        ${p.mispaired ? `<div class="alert">Cảnh báo: có thể đã <b>ghép sai design</b> cho trang này — số lượng nhận xét kiểu "thiếu phần tử / sai thứ tự" bất thường cao. Kiểm tra lại <code>pages.json</code> trước khi tin các lỗi bên dưới.</div>` : ''}
-        ${p.aiError ? `<div class="cap warn">AI lỗi: ${esc(p.aiError)}</div>` : ''}
+        ${p.mispaired ? `<div class="alert"><b>Có thể ghép sai design cho trang này</b> — số nhận xét kiểu "thiếu phần tử / sai thứ tự" cao bất thường. Kiểm tra lại bảng ghép trước khi tin các lỗi bên dưới.</div>` : ''}
+        ${p.aiError ? `<div class="alert">AI lỗi ở trang này: ${esc(p.aiError)}</div>` : ''}
+        ${mine.map(findingBlock).join('')}
+        ${assets.length ? `<ul class="plain">${assets.map((m: any) => `<li class="bad">${m.why ? `Ảnh nền CSS lỗi (${esc(m.why)})` : 'Ảnh không load'}: <span class="mono">${esc(m.src)}</span></li>`).join('')}</ul>` : ''}
         <div class="shots">
           ${p.viewports
             .map(
-              (v) => `<div class="col">
-                <h4>${v.name} <span class="cap">${v.width}px · cao ${v.pageHeight}px</span></h4>
-                <div class="shotbox"><a href="${esc(v.shot)}" target="_blank"><img src="${esc(v.shot)}" alt=""></a></div>
-                ${v.diff.noBaseline
-                  ? `<div class="cap">chưa có bản duyệt</div>`
-                  : v.diff.changed
-                    ? `<div class="cap bad">${v.diff.changedPixels.toLocaleString()} px đổi${v.diff.baselineHeight !== v.diff.currentHeight ? ` · cao ${v.diff.baselineHeight}→${v.diff.currentHeight}` : ''}</div>
-                       ${v.diff.diffRel ? `<a href="${esc(v.diff.diffRel)}" target="_blank">xem ảnh diff</a>` : ''}`
-                    : `<div class="cap ok">không đổi</div>`}
-              </div>`,
+              (v) => `<figure>
+                <figcaption>${v.name} <span class="tiny">${v.width}px · cao ${v.pageHeight}px</span></figcaption>
+                <a href="${esc(v.shot)}" target="_blank"><img src="${esc(v.shot)}" alt="" loading="lazy"></a>
+                ${
+                  v.diff.noBaseline
+                    ? `<span class="tiny">chưa có bản duyệt</span>`
+                    : v.diff.changed
+                      ? `<span class="tiny bad">${v.diff.changedPixels.toLocaleString()} px đổi${v.diff.baselineHeight !== v.diff.currentHeight ? ` · cao ${v.diff.baselineHeight}→${v.diff.currentHeight}` : ''}${v.diff.diffRel ? ` · <a href="${esc(v.diff.diffRel)}" target="_blank">ảnh diff</a>` : ''}</span>`
+                      : `<span class="tiny ok">không đổi</span>`
+                }
+              </figure>`,
             )
             .join('')}
-          ${p.designFile ? `<div class="col"><h4>design <span class="cap">${p.mapping.frameWidth ?? ''}px</span></h4><div class="shotbox"><a href="${esc(p.designFile)}" target="_blank"><img src="${esc(p.designFile)}" alt=""></a></div></div>` : ''}
+          ${p.designFile ? `<figure><figcaption>design <span class="tiny">${p.mapping.frameWidth ?? ''}px</span></figcaption><a href="${esc(p.designFile)}" target="_blank"><img src="${esc(p.designFile)}" alt="" loading="lazy"></a></figure>` : ''}
         </div>
-        ${assets.length ? `<ul>${assets.map((m: any) => `<li class="bad">${m.why ? `Ảnh nền CSS lỗi (${esc(m.why)})` : 'Ảnh không load'}: <span class="mono">${esc(m.src)}</span></li>`).join('')}</ul>` : ''}
-        ${mine.length ? mine.map((f) => findingBlock(f, false)).join('') : `<div class="cap">Không có lỗi riêng của trang này.</div>`}
       </div>
     </details>`;
   };
@@ -210,132 +247,299 @@ const findingTable = (list: GroupedFinding[], r: RunReport) => {
   return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>QA Visual — ${esc(host)}</title>
 <style>
-:root{--bg:#f6f7f9;--card:#fff;--ink:#1a1d23;--mute:#6b7280;--line:#e5e7eb;--bad:#b91c1c;--warn:#a16207;--ok:#15803d;--tpl:#6d28d9}
-*{box-sizing:border-box}body{margin:0;font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink)}
-header{background:var(--card);border-bottom:1px solid var(--line);padding:18px 28px}
-h1{font-size:19px;margin:0}h1 small{color:var(--mute);font-weight:400;margin-left:8px}
-.meta{color:var(--mute);font-size:12px;margin-top:4px}
-main{max-width:1180px;margin:0 auto;padding:20px 28px 60px}
-h2{font-size:15px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);margin:28px 0 10px}
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
-.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px}.stat b{display:block;font-size:22px}.stat span{color:var(--mute);font-size:11px;text-transform:uppercase;letter-spacing:.04em}
-.find{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--mute);border-radius:10px;padding:14px 16px;margin-bottom:12px}
-.find.major{border-left-color:var(--bad)}.find.minor{border-left-color:var(--warn)}
-.fhead{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px}
-.find p{margin:4px 0 8px}
-.num{background:var(--ink);color:#fff;font-size:11px;font-weight:700;min-width:20px;height:20px;line-height:20px;text-align:center;border-radius:5px;padding:0 5px}
-.chip{font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--mute);white-space:nowrap}
-.chip.major{border-color:var(--bad);color:var(--bad)}.chip.minor{border-color:var(--warn);color:var(--warn)}
-.chip.tpl{border-color:var(--tpl);color:var(--tpl);font-weight:600}
-.chip.bad{border-color:var(--bad);color:var(--bad)}.chip.ok{border-color:var(--ok);color:var(--ok)}.chip.warn{border-color:var(--warn);color:var(--warn)}
-img.crop{max-width:100%;margin-top:8px;border:2px solid var(--bad);border-radius:6px;display:block}
-.cap{font-size:12px;color:var(--mute)}.cap.bad,.bad{color:var(--bad)}.cap.ok,.ok{color:var(--ok)}.cap.warn,.warn{color:var(--warn)}
-.mono{font:11px ui-monospace,Menlo,monospace;word-break:break-all}
-code{font:11px ui-monospace,Menlo,monospace;background:var(--bg);padding:1px 5px;border-radius:4px}
-.page{background:var(--card);border:1px solid var(--line);border-radius:10px;margin-bottom:10px}
-.page summary{padding:12px 16px;cursor:pointer;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.pbody{padding:0 16px 16px}
-.shots{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:10px 0}
-.col h4{margin:0 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute);font-weight:600}
-.shotbox{max-height:320px;overflow:auto;border:1px solid var(--line);border-radius:8px;background:#fff}.shotbox img{width:100%;display:block}
-.alert{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:8px;padding:10px 12px;font-size:13px;margin:8px 0}
+/* Light by default, dark when the reader's system says so — a report gets opened at night too. */
+:root{
+  --bg:#f7f8fa; --card:#fff; --ink:#15181d; --mute:#697280; --faint:#9aa3af;
+  --line:#e4e7ec; --line2:#eef0f4;
+  --bad:#b42318; --bad-bg:#fef3f2; --bad-line:#f6cfca;
+  --warn:#b45309; --warn-bg:#fffaeb; --warn-line:#fedf89;
+  --ok:#067647; --ok-bg:#ecfdf3;
+  --tpl:#6941c6; --link:#1f6feb;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0f1216; --card:#171b21; --ink:#e6e9ee; --mute:#98a2b3; --faint:#6b7480;
+    --line:#252a32; --line2:#1e232a;
+    --bad:#fda29b; --bad-bg:#2a1614; --bad-line:#5a2521;
+    --warn:#fec84b; --warn-bg:#2a2014; --warn-line:#5a4321;
+    --ok:#6ce9a6; --ok-bg:#0f2a1d;
+    --tpl:#c3b5fd; --link:#84b6ff;
+  }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",sans-serif}
+a{color:var(--link)}
+main{max-width:940px;margin:0 auto;padding:0 20px 80px}
 
-.chip.new{background:#ecfdf3;border-color:#abefc6;color:#067647}
-table.grid{width:100%;border-collapse:collapse;font-size:13px}
-table.grid th{text-align:left;padding:8px 10px;border-bottom:1px solid #e3e6ea;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#6b7280;vertical-align:bottom}
-table.grid td{padding:8px 10px;border-bottom:1px solid #eef0f3;vertical-align:middle}
+/* ---------------------------------- head --------------------------------- */
+header{padding:34px 20px 0;max-width:940px;margin:0 auto}
+.brand{font-size:12px;letter-spacing:.10em;text-transform:uppercase;color:var(--faint);font-weight:600}
+h1{font-size:30px;line-height:1.2;margin:14px 0 2px;letter-spacing:-.02em}
+h1.ok{color:var(--ok)} h1.warn{color:var(--warn)} h1.bad{color:var(--bad)}
+.verdict-sub{color:var(--mute);font-size:15px}
+.runmeta{color:var(--faint);font-size:13px;margin:16px 0 0;padding-bottom:22px;border-bottom:1px solid var(--line)}
+.runmeta b{color:var(--mute);font-weight:600}
+
+/* -------------------------------- sections ------------------------------- */
+section{margin:34px 0 0}
+h2{font-size:17px;margin:0 0 4px;letter-spacing:-.01em}
+h2+.lead{color:var(--mute);font-size:13.5px;margin:0 0 14px}
+h2:not(:has(+.lead)){margin-bottom:14px}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px}
+.pad{padding:16px 18px}
+
+/* --------------------------------- banners ------------------------------- */
+.alert,.fatal{border-radius:10px;padding:12px 14px;font-size:13.5px;margin:0 0 12px}
+.alert{background:var(--warn-bg);border:1px solid var(--warn-line);color:var(--warn)}
+.fatal{background:var(--bad-bg);border:1px solid var(--bad-line);color:var(--bad)}
+.alert b,.fatal b{color:inherit}
+.alert ul,.fatal ul{margin:6px 0 0;padding-left:20px}
+
+/* ---------------------------------- chips -------------------------------- */
+.chip{display:inline-block;font-size:11.5px;line-height:18px;padding:0 8px;border-radius:999px;
+  border:1px solid var(--line);color:var(--mute);white-space:nowrap;background:var(--card)}
+.chip.major{border-color:var(--bad);color:var(--bad)}
+.chip.minor{border-color:var(--warn);color:var(--warn)}
+.chip.tpl{border-color:var(--tpl);color:var(--tpl);font-weight:600}
+.chip.new{background:var(--ok-bg);border-color:transparent;color:var(--ok);font-weight:600}
+.chip.quiet{border-style:dashed;color:var(--faint)}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px}
+
+/* ---------------------------------- table -------------------------------- */
+.tablewrap{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow-x:auto}
+table.grid{width:100%;min-width:660px;border-collapse:collapse;font-size:13.5px}
+table.grid th{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line);
+  font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);font-weight:600;vertical-align:bottom}
+table.grid td{padding:11px 12px;border-bottom:1px solid var(--line2);vertical-align:middle}
 table.grid tr:last-child td{border-bottom:0}
 table.grid th.c,table.grid td.c{text-align:center}
-table.grid td.yes{color:#b42318;font-size:15px}
-table.grid td.no{color:#cbd2d9}
-table.grid td a{color:inherit;text-decoration:none;border-bottom:1px solid #d5dae0}
-table.grid td a:hover{border-bottom-color:#1f6feb;color:#1f6feb}
-.gone li{margin:3px 0}
-.fatal{background:#fef3f2;border:1px solid #f6cfca;color:#b42318;border-radius:8px;padding:12px 14px;font-size:13.5px;margin:8px 0}
-.panel{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:12px}
-table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}th{color:var(--mute);font-size:11px;text-transform:uppercase;letter-spacing:.04em}
-ul{margin:6px 0;padding-left:18px}li{margin:3px 0}
-footer{color:var(--mute);font-size:12px;padding:16px 28px;border-top:1px solid var(--line)}
+table.grid td.yes{color:var(--bad);font-size:16px;line-height:1}
+table.grid td.no{color:var(--line);font-size:16px;line-height:1}
+table.grid td.tnum{color:var(--mute);font-variant-numeric:tabular-nums;font-size:12.5px}
+table.grid td a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--line)}
+table.grid td a:hover{color:var(--link);border-bottom-color:var(--link)}
+.note{font-size:12px;color:var(--faint);margin:0;padding:10px 12px;border-top:1px solid var(--line2)}
+
+/* --------------------------------- findings ------------------------------ */
+.find{background:var(--card);border:1px solid var(--line);border-radius:12px;margin:0 0 12px;
+  overflow:hidden;display:grid;grid-template-columns:1fr;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+@media (min-width:760px){ .find:has(.shot.pic){grid-template-columns:1fr 300px} }
+.find{border-left:3px solid var(--line)}
+.find.major{border-left-color:var(--bad)}
+.find.minor{border-left-color:var(--warn)}
+.fbody{padding:16px 18px;min-width:0}
+.fhead{display:flex;gap:10px;align-items:baseline;margin:0 0 9px}
+.fhead h3{font-size:16px;margin:0;line-height:1.35;letter-spacing:-.01em}
+.num{flex:0 0 auto;font-size:11px;font-weight:700;color:var(--faint);
+  font-variant-numeric:tabular-nums;line-height:22px}
+.find p{margin:0 0 8px;font-size:14px;color:var(--ink)}
+.find p.where{margin:0;font-size:12.5px;color:var(--mute)}
+.shot{position:relative;display:flex;align-items:center;justify-content:center;padding:12px;
+  border-left:1px solid var(--line2);background:var(--bg);max-height:280px;overflow:hidden}
+.shot img{max-width:100%;max-height:256px;width:auto;display:block;border-radius:6px}
+.shot .zoom{position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,.66);color:#fff;
+  font-size:11px;padding:3px 8px;border-radius:999px;opacity:0;transition:opacity .15s}
+.shot:hover .zoom{opacity:1}
+.find p.noloc{font-size:12.5px;color:var(--faint);margin:0 0 8px}
+
+/* ---------------------------------- pages -------------------------------- */
+.page{background:var(--card);border:1px solid var(--line);border-radius:12px;margin:0 0 8px}
+.page>summary{padding:13px 16px;cursor:pointer;display:flex;gap:10px;align-items:center;
+  flex-wrap:wrap;list-style:none}
+.page>summary::-webkit-details-marker{display:none}
+.page>summary::before{content:'▸';color:var(--faint);font-size:11px;flex:0 0 auto}
+.page[open]>summary::before{content:'▾'}
+.page[open]>summary{border-bottom:1px solid var(--line2)}
+.page .grow{flex:1}
+.pbody{padding:14px 16px 16px}
+.pbody .find{box-shadow:none}
+.shots{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-top:12px}
+.shots figure{margin:0;min-width:0}
+.shots figcaption{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);
+  font-weight:600;margin:0 0 6px}
+.shots a{display:block;max-height:300px;overflow:auto;border:1px solid var(--line);border-radius:8px;background:var(--card)}
+.shots img{width:100%;display:block}
+.shots .tiny{display:block;margin-top:5px}
+
+/* --------------------------------- details ------------------------------- */
+details.tech{margin-top:34px;border-top:1px solid var(--line);padding-top:18px}
+details.tech>summary{cursor:pointer;font-size:14px;font-weight:600;color:var(--mute);list-style:none}
+details.tech>summary::-webkit-details-marker{display:none}
+details.tech>summary::before{content:'▸ ';color:var(--faint)}
+details.tech[open]>summary::before{content:'▾ '}
+details.tech h3{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);margin:22px 0 8px}
+
+/* ----------------------------------- bits -------------------------------- */
+.tiny{font-size:12px;color:var(--mute)}
+.bad{color:var(--bad)} .ok{color:var(--ok)} .warn{color:var(--warn)}
+.mono{font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}
+code{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--bg);
+  border:1px solid var(--line2);padding:1px 5px;border-radius:5px;color:var(--mute)}
+ul.plain{margin:8px 0;padding-left:20px;font-size:13px}
+ul.plain li{margin:3px 0}
+table.plain{width:100%;border-collapse:collapse;font-size:13px}
+table.plain th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;
+  color:var(--faint);padding:8px 10px;border-bottom:1px solid var(--line)}
+table.plain td{padding:8px 10px;border-bottom:1px solid var(--line2);vertical-align:top}
+table.plain tr:last-child td{border-bottom:0}
+.empty{color:var(--mute);font-size:13.5px}
+footer{max-width:940px;margin:0 auto;padding:22px 20px 50px;border-top:1px solid var(--line);
+  color:var(--faint);font-size:12px}
+
+@media print{
+  body{background:#fff}
+  .find,.page,.card,.tablewrap{break-inside:avoid;box-shadow:none}
+  details.tech,.page{display:none}
+  .shot{max-height:none}
+}
 </style></head><body>
 <header>
-  <h1>QA Visual <small>${esc(host)}</small></h1>
-  <div class="meta">${esc(r.when.slice(0, 19).replace('T', ' '))} · ${(r.durationMs / 1000).toFixed(0)}s · ${r.pages.length} trang${r.aiModel ? ' · AI: ' + esc(r.aiModel) : ' · AI tắt'}${r.approvedThisRun ? ' · <b>lần chạy này đã thành bản duyệt</b>' : ''}</div>
+  <div class="brand">QA Visual · ${esc(host)}</div>
+  <h1 class="${verdict.tone}">${esc(verdict.line)}</h1>
+  <div class="verdict-sub">${esc(verdict.sub)}</div>
+  <p class="runmeta">
+    <b>${esc(r.when.slice(0, 16).replace('T', ' '))}</b> · ${r.pages.length} trang · 3 kích thước · ${(r.durationMs / 1000).toFixed(0)}s
+    · ${r.aiModel ? 'AI ' + esc(r.aiModel) : 'AI tắt'}${r.approvedThisRun ? ' · <b>đã chốt làm bản duyệt</b>' : ''}
+  </p>
 </header>
 <main>
 
-<div class="stats">
-  <div class="stat"><b class="${majors ? 'bad' : 'ok'}">${majors}</b><span>lỗi nặng</span></div>
-  <div class="stat"><b class="${template.length ? 'bad' : 'ok'}" style="color:var(--tpl)">${template.length}</b><span>lỗi component dùng chung</span></div>
-  <div class="stat"><b>${perPage.length}</b><span>lỗi riêng từng trang</span></div>
-  <div class="stat"><b class="${changedPages.length ? 'bad' : 'ok'}">${changedPages.length}/${r.pages.length}</b><span>trang khác bản duyệt</span></div>
-  <div class="stat"><b class="${brokenAssets.size ? 'bad' : 'ok'}">${brokenAssets.size}</b><span>ảnh / nền không load</span></div>
-  <div class="stat"><b class="${criticalReq.length ? 'bad' : 'ok'}">${criticalReq.length}</b><span>script/css/font lỗi</span></div>
-</div>
+${
+  r.ai && r.ai.failures
+    ? `<div class="fatal"><b>⚠ Báo cáo chưa đầy đủ.</b> ${r.ai.failures}/${r.ai.calls} lời gọi AI thất bại, nên những vùng đó <b>chưa được kiểm</b> — danh sách dưới đây thiếu, không phải site sạch.
+       <div class="tiny" style="margin-top:6px;color:inherit;opacity:.85">${r.ai.stopped ? esc(r.ai.stopped) : esc(r.ai.lastError ?? '')}</div></div>`
+    : ''
+}
+${
+  r.ai?.silent
+    ? `<div class="fatal"><b>⚠ Model không trả về kết quả nào.</b> ${r.ai.calls}/${r.ai.calls} lời gọi AI <b>thành công</b> (không có lỗi mạng, không hết quota) nhưng model không nêu một lỗi nào ở bất kỳ lượt nào.
+       <div class="tiny" style="margin-top:6px;color:inherit;opacity:.85">Gọi được ≠ trả lời được. Rất có thể model đang dùng quá yếu cho việc so ảnh — đổi <code>QA_AI_MODEL</code> rồi chạy lại (<code>npm run models</code>). Đừng đọc báo cáo này là "site sạch".</div></div>`
+    : ''
+}
+${
+  r.ai?.wrongLang
+    ? `<div class="alert"><b>Model trả lời sai ngôn ngữ.</b> ${r.ai.wrongLang} nhận xét không phải tiếng Việt — model đang bỏ qua yêu cầu trong prompt. Nội dung lỗi vẫn dùng được, nhưng nên đổi <code>QA_AI_MODEL</code> sang model khoẻ hơn (<code>npm run models</code>).</div>`
+    : ''
+}
+${
+  mispaired.length
+    ? `<div class="alert"><b>Có thể ghép sai design</b> ở ${mispaired.length} trang: ${mispaired.map((p) => `<code>${esc(path(p.url))}</code>`).join(' ')}. Kiểm tra lại bảng ghép trước khi tin các lỗi của những trang này.</div>`
+    : ''
+}
+${
+  r.drift && r.drift.gone.length
+    ? `<div class="alert"><b>Lần chạy trước báo, lần này không thấy</b> — cần bạn xác nhận đã sửa hay AI bỏ sót:
+       <ul>${r.drift.gone.map((g) => `<li>${esc(g.title)} <span class="tiny" style="color:inherit;opacity:.8">(${esc(SEV[g.severity] ?? g.severity)}${g.scope === 'template' ? ', dùng chung' : ''})</span></li>`).join('')}</ul></div>`
+    : ''
+}
 
-${r.ai && r.ai.failures
-  ? `<div class="panel fatal"><b>⚠ Báo cáo KHÔNG đầy đủ.</b> ${r.ai.failures}/${r.ai.calls} lời gọi AI thất bại (đã thử lại 3 lần), nên những vùng đó <b>chưa được kiểm</b> — danh sách lỗi dưới đây thiếu, không phải site sạch.<br><span class="cap">${r.ai.stopped ? esc(r.ai.stopped) : 'Lỗi đầu tiên: ' + esc(r.ai.lastError ?? '')}</span></div>`
-  : ''}
-${r.drift
-  ? `<div class="panel"><h3 style="margin:0 0 6px;font-size:13px">Đối chiếu với lần chạy trước (${esc(r.drift.previousRun)})</h3>` +
-    `<div class="cap">${r.findings.filter((f) => f.isNew).length} lỗi mới · ${r.findings.filter((f) => f.isNew === false).length} vẫn còn · ${r.drift.gone.length} lần trước có mà lần này không thấy</div>` +
-    (r.drift.gone.length
-      ? `<div class="alert" style="margin-top:8px"><b>Lần trước báo, lần này không thấy — cần bạn xác nhận đã sửa hay AI bỏ sót:</b><ul class="gone">${r.drift.gone
-          .map((g) => `<li>${esc(g.title)} <span class="cap">(${esc(g.severity)}${g.scope === 'template' ? ', component dùng chung' : ''})</span></li>`)
-          .join('')}</ul></div>`
-      : '')
-    + `</div>`
-  : ''}
-${r.rawFindingCount > r.findings.length
-  ? `<div class="panel cap">Đã gộp <b>${r.rawFindingCount}</b> nhận xét thô thành <b>${r.findings.length}</b> lỗi — nhờ nhận diện ${r.sharedTextCount} chuỗi chữ thuộc component dùng chung (có mặt ở ≥60% số trang).</div>`
-  : ''}
+${
+  r.findings.length
+    ? `<section>
+  <h2>Danh sách lỗi</h2>
+  <p class="lead">Bấm tên lỗi để xem ảnh khoanh vùng.${
+    r.drift ? ` So với lần chạy trước: ${r.findings.filter((f) => f.isNew).length} mới · ${r.findings.filter((f) => f.isNew === false).length} vẫn còn.` : ''
+  }${r.rawFindingCount > r.findings.length ? ` Đã gộp ${r.rawFindingCount} nhận xét thô thành ${r.findings.length} lỗi.` : ''}</p>
+  ${indexTable()}
+</section>`
+    : ''
+}
 
-${mispaired.length
-  ? `<div class="alert"><b>Có thể ghép sai design</b> ở ${mispaired.length} trang: ${mispaired.map((p) => `<code>${esc(path(p.url))}</code>`).join(' ')}. Mở <code>pages.json</code> kiểm tra lại trước khi tin các lỗi của những trang này.</div>`
-  : ''}
+${
+  template.length
+    ? `<section>
+  <h2>Lỗi ở component dùng chung</h2>
+  <p class="lead">Header / nav / footer — sửa một lần là hết ở mọi trang. Đây là chỗ đáng sửa trước.</p>
+  ${template.map(findingBlock).join('')}
+</section>`
+    : ''
+}
 
-<h2>Bảng ghép URL ↔ design</h2>
-<div class="panel">
-  <table>
-    <tr><th>Trang</th><th>Frame Figma</th><th>Cách ghép</th></tr>
-    ${r.pages
-      .map(
-        (p) => `<tr>
-          <td><a href="${esc(p.url)}" target="_blank">${esc(path(p.url))}</a></td>
-          <td>${p.mapping.frameName ? esc(p.mapping.frameName) + (p.mapping.isTemplate ? ' <span class="chip">template</span>' : '') : '<span class="warn">chưa ghép</span>'}</td>
-          <td class="cap">${esc(p.mapping.how)}</td>
-        </tr>`,
-      )
-      .join('')}
-  </table>
-  ${unmapped.length ? `<div class="cap warn" style="margin-top:8px">${unmapped.length} trang chưa có design — vẫn được so với bản duyệt, quét sweep và kiểm ảnh lỗi, nhưng không đối chiếu design.</div>` : ''}
-</div>
+${
+  perPage.length
+    ? `<section>
+  <h2>Lỗi riêng từng trang</h2>
+  <p class="lead">Mở từng trang để xem lỗi kèm ảnh chụp cả 3 kích thước.</p>
+  ${r.pages.map(pageRow).join('')}
+</section>`
+    : `<section>
+  <h2>Từng trang</h2>
+  <p class="lead">Không có lỗi riêng của trang nào. Mở ra nếu muốn xem ảnh chụp.</p>
+  ${r.pages.map(pageRow).join('')}
+</section>`
+}
 
-${r.sweeps.some((s) => s.breaks.length)
-  ? `<h2>Layout tràn ngang</h2><div class="panel">${r.sweeps
-      .filter((s) => s.breaks.length)
-      .map(
-        (s) =>
-          `<div><code>${esc(path(s.url))}</code><ul>${s.breaks
-            .map((b) => `<li>Từ <b>${b.from}px</b> xuống <b>${b.to}px</b> trang rộng hơn màn hình tới ${b.overflowPx}px — cần media query quanh ${b.from}px.</li>`)
-            .join('')}</ul></div>`,
-      )
-      .join('')}<div class="cap">Sweep chạy ở trang chủ (điểm vỡ layout là chuyện của template, không cần quét mọi trang).</div></div>`
-  : ''}
+${
+  r.sweeps.some((s) => s.breaks.length)
+    ? `<section>
+  <h2>Layout tràn ngang</h2>
+  <p class="lead">Dải chiều rộng mà trang rộng hơn màn hình — cần thêm media query.</p>
+  <div class="card pad">${r.sweeps
+    .filter((s) => s.breaks.length)
+    .map(
+      (s) =>
+        `<code>${esc(path(s.url))}</code><ul class="plain">${s.breaks
+          .map((b) => `<li>Từ <b>${b.from}px</b> xuống <b>${b.to}px</b>: rộng hơn màn hình tới ${b.overflowPx}px — cần media query quanh ${b.from}px.</li>`)
+          .join('')}</ul>`,
+    )
+    .join('')}<p class="tiny" style="margin:0">Chỉ quét ở trang chủ — điểm vỡ layout là chuyện của template.</p></div>
+</section>`
+    : ''
+}
 
-${r.findings.length ? `<h2>Tất cả lỗi theo kích thước màn hình</h2>${findingTable(r.findings, r)}` : ''}
+<details class="tech">
+  <summary>Chi tiết kỹ thuật</summary>
 
-${template.length
-  ? `<h2>Lỗi ở component dùng chung — sửa một lần, hết ở mọi trang</h2>${template.map((f) => findingBlock(f, true)).join('')}`
-  : `<h2>Lỗi ở component dùng chung</h2><div class="panel cap">Không phát hiện lỗi nào ở header / nav / footer.</div>`}
+  <h3>Bảng ghép URL ↔ design</h3>
+  <div class="card" style="overflow-x:auto">
+    <table class="plain">
+      <thead><tr><th>Trang</th><th>Frame Figma</th><th>Cách ghép</th></tr></thead>
+      <tbody>${r.pages
+        .map(
+          (p) => `<tr>
+        <td><a href="${esc(p.url)}" target="_blank">${esc(path(p.url))}</a></td>
+        <td>${p.mapping.frameName ? esc(p.mapping.frameName) + (p.mapping.isTemplate ? ' <span class="chip">template</span>' : '') : '<span class="warn">chưa ghép</span>'}</td>
+        <td class="tiny">${esc(p.mapping.how)}</td>
+      </tr>`,
+        )
+        .join('')}</tbody>
+    </table>
+  </div>
+  ${unmapped.length ? `<p class="tiny warn">${unmapped.length} trang chưa có design — vẫn so với bản duyệt, quét sweep và kiểm ảnh lỗi, nhưng không đối chiếu design.</p>` : ''}
 
-<h2>Từng trang</h2>
-${r.pages.map(pageRow).join('')}
+  <h3>Số liệu lần chạy</h3>
+  <div class="card pad">
+    <table class="plain">
+      <tbody>
+        <tr><td>Lỗi nặng</td><td class="${majors ? 'bad' : 'ok'}">${majors}</td></tr>
+        <tr><td>Lỗi ở component dùng chung</td><td>${template.length}</td></tr>
+        <tr><td>Lỗi riêng từng trang</td><td>${perPage.length}</td></tr>
+        <tr><td>Trang khác bản duyệt</td><td class="${changedPages.length ? 'bad' : 'ok'}">${changedPages.length}/${r.pages.length}</td></tr>
+        <tr><td>Ảnh / nền không load</td><td class="${brokenAssets.size ? 'bad' : 'ok'}">${brokenAssets.size}</td></tr>
+        <tr><td>Script / CSS / font lỗi</td><td class="${criticalReq.length ? 'bad' : 'ok'}">${criticalReq.length}</td></tr>
+        <tr><td>Nhận xét thô từ AI</td><td>${r.rawFindingCount}</td></tr>
+        <tr><td>Chuỗi chữ nhận là component dùng chung</td><td>${r.sharedTextCount}</td></tr>
+        ${r.ai ? `<tr><td>Lời gọi AI</td><td>${r.ai.calls - r.ai.failures}/${r.ai.calls} thành công</td></tr>` : ''}
+        ${r.drift ? `<tr><td>Đối chiếu với lần chạy</td><td class="mono">${esc(r.drift.previousRun)}</td></tr>` : ''}
+      </tbody>
+    </table>
+  </div>
 
-${criticalReq.length
-  ? `<h2>Request lỗi</h2><div class="panel"><ul>${criticalReq.slice(0, 20).map((f) => `<li class="bad mono">${esc(f)}</li>`).join('')}</ul></div>`
-  : ''}
+  ${
+    criticalReq.length
+      ? `<h3>Request lỗi</h3><div class="card pad"><ul class="plain">${criticalReq.slice(0, 20).map((f) => `<li class="bad mono">${esc(f)}</li>`).join('')}</ul></div>`
+      : ''
+  }
+</details>
 
 </main>
-<footer>qa-visual v2 · Vùng video/iframe/canvas hiện trắng trong ảnh chụp nên được tự loại khỏi so sánh. Vùng lỗi được khoanh bằng cách tra chữ AI trích dẫn vào DOM, không dùng toạ độ AI đoán. Chạy lại với <code>--approve</code> để chốt bản duyệt mới.</footer>
+<footer>
+  Vùng video/iframe/canvas hiện trắng trong ảnh chụp nên được tự loại khỏi so sánh.
+  Vùng lỗi được khoanh bằng cách tra chữ AI trích dẫn vào DOM, không dùng toạ độ AI đoán.
+  Chạy lại với <code>--approve</code> để chốt bản duyệt mới.
+</footer>
 </body></html>`;
 }

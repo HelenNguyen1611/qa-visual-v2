@@ -72,6 +72,110 @@ function isInFlightWall(msg: string) {
   return /in_flight_budget|in-flight requests|in flight requests/i.test(msg);
 }
 
+/**
+ * Say what a 402 actually means, in the terms the person has to act on.
+ *
+ * "would exceed your available credits given your current in-flight requests" reads like a
+ * concurrency problem, and it is not: OpenRouter reserves the request's maximum possible cost
+ * against the balance before sending it, so on a zero balance the reservation fails with ONE
+ * request in flight. Sending fewer at a time cannot fix it, which is why the earlier fix did not.
+ * The daily free allowance does not apply either — that is only for model ids ending in ':free'.
+ */
+function explain402(msg: string, model: string): string {
+  if (!isInFlightWall(msg) && !/insufficient credits|negative credit/i.test(msg)) return msg;
+  const free = model.endsWith(':free');
+  return (
+    `hết credit OpenRouter. ` +
+    (free
+      ? `Model "${model}" là bản :free nhưng số dư đang âm hoặc bằng 0 — OpenRouter chặn cả model free khi số dư âm.`
+      : `Model "${model}" là model TRẢ PHÍ, nên hạn mức free 50 lượt/ngày KHÔNG áp dụng (hạn mức đó chỉ dành cho model id kết thúc bằng ":free"). ` +
+        `OpenRouter giữ trước chi phí tối đa của mỗi request vào số dư, nên với số dư 0 thì một request cũng bị chặn — giảm số request song song không giải quyết được.`) +
+    ` Cách xử lý: nạp credit, hoặc đổi sang model ":free" (xem "npm run models").`
+  );
+}
+
+/**
+ * Ask the provider what this key can do, before spending a run finding out.
+ *
+ * Undocumented endpoint, so it is best-effort: anything unexpected is ignored. What is NOT
+ * best-effort is the model-name check, which needs no network and catches the actual mistake.
+ */
+export async function preflight(cfg: Config, logLine: (s: string) => void): Promise<void> {
+  const { provider, model, apiKey, baseUrl } = cfg.ai;
+  if (provider !== 'openrouter' || !apiKey) return;
+
+  // 1. Can this model even see? Checked first, because a text-only model is a certain failure and
+  //    the message the API gives back ("No endpoints found that support image input") arrives only
+  //    after a full run of screenshots has already been taken.
+  await requireVision(model, apiKey, baseUrl, logLine);
+
+  // 2. Is the model on the free allowance at all?
+  if (!model.endsWith(':free')) {
+    logLine(`model "${model}" là model trả phí — hạn mức free 50 lượt/ngày không áp dụng cho nó. Cần có credit, hoặc đổi sang model ":free".`);
+  }
+
+  // 3. What is left on the key. Undocumented endpoint, so best-effort.
+  try {
+    const res = await fetch(`${baseUrl}/key`, { headers: { authorization: `Bearer ${apiKey}` } });
+    if (!res.ok) return;
+    const d: any = await res.json();
+    const k = d?.data ?? d;
+    if (!k || typeof k !== 'object') return;
+    const bits: string[] = [];
+    if (typeof k.usage === 'number') bits.push(`đã dùng $${k.usage.toFixed(4)}`);
+    if (k.limit === null) bits.push('hạn mức: không giới hạn');
+    else if (typeof k.limit === 'number') bits.push(`hạn mức $${k.limit}`);
+    if (typeof k.limit_remaining === 'number') bits.push(`còn $${k.limit_remaining.toFixed(4)}`);
+    if (k.is_free_tier === true) bits.push('tài khoản free tier');
+    if (bits.length) logLine(`key OpenRouter: ${bits.join(' · ')}`);
+  } catch {
+    /* undocumented endpoint; never let it break a run */
+  }
+}
+
+/**
+ * Refuse to start when the chosen model cannot accept images.
+ *
+ * This tool has exactly one job — look at a screenshot next to a design — so a text-only model is
+ * not a degraded run, it is zero coverage. Stopping here costs one small request; finding out from
+ * the API costs the whole capture phase first, and the reply ("No endpoints found that support
+ * image input") does not say which models WOULD work.
+ *
+ * If the model list cannot be reached, this only warns: a network hiccup must not block a run.
+ */
+async function requireVision(model: string, apiKey: string, baseUrl: string, logLine: (s: string) => void): Promise<void> {
+  let list: any[];
+  try {
+    const res = await fetch(`${baseUrl}/models`, { headers: { authorization: `Bearer ${apiKey}` } });
+    if (!res.ok) throw new Error(String(res.status));
+    list = (await res.json())?.data ?? [];
+    if (!Array.isArray(list) || !list.length) throw new Error('empty');
+  } catch {
+    logLine('không kiểm được model có nhận ảnh hay không (không gọi được danh sách model) — cứ chạy tiếp.');
+    return;
+  }
+
+  const takesImage = (m: any) => (m?.architecture?.input_modalities ?? []).includes('image');
+  const mine = list.find((m: any) => m.id === model);
+
+  if (!mine) {
+    logLine(`⚠ không thấy model "${model}" trong danh sách OpenRouter — kiểm tra lại id trong .env.`);
+    return;
+  }
+  if (takesImage(mine)) return;
+
+  const options = list
+    .filter((m: any) => m.id?.endsWith(':free') && takesImage(m))
+    .map((m: any) => m.id)
+    .sort();
+  throw new Error(
+    `model "${model}" KHÔNG nhận ảnh vào — tool này chỉ làm một việc là xem ảnh chụp cạnh design, nên model chỉ đọc chữ thì không kiểm được gì.\n` +
+      (options.length
+        ? `Model ":free" có nhận ảnh hiện có (${options.length}):\n` + options.map((id: string) => `  ${id}`).join('\n') + `\n\nSửa QA_AI_MODEL trong .env rồi chạy lại. Danh sách đầy đủ: npm run models`
+        : `Hiện không có model ":free" nào nhận ảnh — cần nạp credit và dùng model trả phí có vision. Xem: npm run models`),
+  );
+}
+
 /** Errors worth trying again: rate limits, transient server faults, in-flight credit holds. */
 function retryable(status: number, body: string): boolean {
   if (status === 429 || status === 408 || status >= 500) return true;
@@ -134,9 +238,9 @@ class OpenAICompatible implements VisionProvider {
       return await gate(() => withRetry(this.name, () => this.once(msg, timeoutMs)));
     } catch (e: any) {
       this.failures++;
-      this.lastError ??= String(e?.message ?? e).slice(0, 300);
+      this.lastError ??= explain402(String(e?.message ?? e), this.model).slice(0, 400);
       if (++consecutiveFailures >= GIVE_UP_AFTER && !stopped) {
-        stopped = `đã dừng gọi AI sau ${GIVE_UP_AFTER} lỗi liên tiếp — không tiêu thêm quota vào các lời gọi chắc chắn thất bại. Lỗi: ${this.lastError}`;
+        stopped = `đã dừng gọi AI sau ${GIVE_UP_AFTER} lỗi liên tiếp — không tiêu thêm quota vào các lời gọi chắc chắn thất bại. ${this.lastError}`;
       }
       throw e;
     }
