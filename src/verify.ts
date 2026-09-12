@@ -107,11 +107,11 @@ function overlaps(items: TextItem[], viewportWidth: number): Measured[] {
       used.add(j);
       out.push({
         finding: {
-          title: 'Overlapping text',
+          title: 'Text covers other text',
           severity: 'major',
           detail:
-            `Two text blocks overlap by ${Math.round(ratio * 100)}% (${Math.round(inter.w)}×${Math.round(inter.h)}px): ` +
-            `“${a.text.slice(0, 60)}” and “${b.text.slice(0, 60)}”. Measured on the DOM, not inferred from the screenshot.`,
+            `Live: “${a.text.slice(0, 60)}” and “${b.text.slice(0, 60)}” overlap by ${Math.round(ratio * 100)}%.\n` +
+            `Design: Text should not cover other text.`,
           anchors: [a.text.slice(0, 60), b.text.slice(0, 60)],
           y: Math.min(a.y, b.y),
           locatedHow: 'measured on DOM: two text boxes intersect',
@@ -152,12 +152,11 @@ function typeHierarchy(items: TextItem[], viewportWidth: number): Measured[] {
     if (a >= b - 0.5) continue;
     out.push({
       finding: {
-        title: `Type hierarchy inverted: ${hi.toUpperCase()} smaller than ${lo.toUpperCase()}`,
+        title: `${hi.toUpperCase()} is smaller than ${lo.toUpperCase()}`,
         severity: 'minor',
         detail:
-          `Largest ${hi.toUpperCase()} on the page is ${a}px (“${big.text.slice(0, 50)}”), ` +
-          `while the largest ${lo.toUpperCase()} is ${b}px (“${small.text.slice(0, 50)}”). ` +
-          `The higher level must be larger or equal. Measured from computed style.`,
+          `Live: largest ${hi.toUpperCase()} is ${a}px (“${big.text.slice(0, 50)}”); largest ${lo.toUpperCase()} is ${b}px (“${small.text.slice(0, 50)}”).\n` +
+          `Design: ${hi.toUpperCase()} should be the same size as ${lo.toUpperCase()}, or larger.`,
         anchors: [big.text.slice(0, 60), small.text.slice(0, 60)],
         y: big.y,
         locatedHow: `measured on DOM: font-size ${a}px vs ${b}px`,
@@ -234,12 +233,11 @@ function firstScreenGap(
   return [
     {
       finding: {
-        title: 'Large empty band on the first screen',
+        title: 'Empty gap on the first screen',
         severity: 'minor',
         detail:
-          `No text or media in y = ${Math.round(worst.from)} … ${Math.round(worst.to)} ` +
-          `(${size}px, ${Math.round((size / viewportHeight) * 100)}% of the ${viewportHeight}px first screen). ` +
-          `Measured on the DOM: images, video, CSS backgrounds, and media reserved for effects all count as content.`,
+          `Live: ${size}px empty gap (${Math.round((size / viewportHeight) * 100)}% of the first screen).\n` +
+          `Design: The first screen should be filled with content.`,
         anchors: anchors.length ? anchors : undefined,
         y: Math.round(worst.from),
         locatedHow: `measured on DOM: ${size}px empty on the first screen`,
@@ -334,11 +332,11 @@ export function peerImageAspect(media: MediaRegion[], viewportWidth: number): Me
     const shown = aspects[idx];
     out.push({
       finding: {
-        title: 'Card image aspect differs from its row',
+        title: 'Card image is a different shape than the rest of the row',
         severity: 'minor',
         detail:
-          `Image ${Math.round(hit.w)}×${Math.round(hit.h)}px (aspect ${shown.toFixed(2)}) is off the rest of the row ` +
-          `(median ${med.toFixed(2)}, ${row.length} images). Measured from displayed boxes, not the source file.`,
+          `Live: this card is ${Math.round(hit.w)}×${Math.round(hit.h)}px.\n` +
+          `Design: the other images in the row are a different shape (${row.length} compared).`,
         y: hit.y,
         locatedHow: `measured on DOM: aspect ${shown.toFixed(2)} vs median ${med.toFixed(2)}`,
         measured: true,
@@ -457,14 +455,14 @@ export function overlayBannerPad(
     const delta = Math.abs(dg - fg);
     if (delta < Math.max(16, fg * 0.2)) continue;
     used.add(ds);
-    const scaled = Math.abs(scale - 1) > 0.03 ? ` (×${scale.toFixed(2)} → ${Math.round(fg)}px)` : '';
+    const quote = dt.text.slice(0, 60);
     out.push({
       finding: {
-        title: 'Banner inset differs from Figma',
+        title: `“${quote}” is too far from the banner edge`,
         severity: 'minor',
         detail:
-          `Overlay text “${dt.text.slice(0, 60)}” is ${Math.round(dg)}px from the image edge on the page, ` +
-          `Figma ${Math.round(raw)}px${scaled}. Measured as text inset on the image surface, not a text-wrap wrapper.`,
+          `Live: ${Math.round(dg)}px from the image edge.\n` +
+          `Design: ${Math.round(fg)}px from the image edge.`,
         anchors: [dt.text.slice(0, 60)],
         y: ds.y,
         locatedHow: `measured on DOM: gutter ${Math.round(dg)}px vs Figma ${Math.round(fg)}px`,

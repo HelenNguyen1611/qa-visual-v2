@@ -18,8 +18,13 @@ IMPORTANT:
 - Only report: layout and element position, element order, spacing that is clearly off or ABSURD, type size and weight hierarchy (H1 larger than H2…), font family, brand colour, missing or unemphasised CTAs, an element in the design but not on the site (or the reverse), stretched or wrongly cropped images, clipped or overlapping text.
 - You MUST inspect the FIRST SCREEN (the top, about one viewport tall). That is what visitors see first. If it has an unusually large empty band, text pushed absurdly far apart, or content shoved too far down compared with the design, you MUST report it — even when there is no same-width design to compare pixel-for-pixel. Compare RATIOS: how much of the first screen the design fills vs the site.
 - Prefer few, high-confidence findings.
+- WRITE FOR A DESIGNER. title: one short sentence naming the element and what is wrong (e.g. “Our mission” sits at the bottom of the banner). Do not write jargon: inset, gutter, container, wrapper, overlay, DOM, viewport, measured.
+- detail: exactly two lines, nothing else:
+  Design: <where it is in the design>
+  Live: <where it is on the site>
+  Do not explain how you know. Do not mention measurement, screenshots, or the model.
 - LOCATION: for each finding, put VERBATIM on-screen text of the related elements in "anchors", copied as read on the site image (e.g. ["+1300 966 937", "hello@wooagency.com.au"]). The tool uses those strings to find the real box. Quote 1–3 short distinctive strings, preferably unique on the page. If the element has no text (image, colour block), take the NEAREST text above or below it. "y" is only a rough hint when a string appears more than once — it does not need to be exact.
-Format: {"findings":[{"title":"short","severity":"major|minor|note","detail":"specific","anchors":["verbatim text"],"y":number}]}
+Format: {"findings":[{"title":"short","severity":"major|minor|note","detail":"Design: …\\nLive: …","anchors":["verbatim text"],"y":number}]}
 If nothing significant differs: {"findings":[]}
 
 LANGUAGE — REQUIRED: "title" and "detail" MUST be in ENGLISH. Do not use Vietnamese, Spanish, Chinese, or any other language. "anchors" stay VERBATIM from the screenshot — do not translate them.`;

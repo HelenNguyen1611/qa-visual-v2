@@ -176,6 +176,150 @@
       ],
       "why": "chu y, ux tot hon",
       "at": "2026-09-12"
+    },
+    {
+      "id": "1h35i8m",
+      "title": "\"One integrated platform\" text is split by the image",
+      "anchors": [
+        "One integrated platform.",
+        "Aino delivers a fully integrated ecosystem"
+      ],
+      "detail": "Design: Eyebrow, heading, paragraph, and CTA button sit together in a single text block beside the image.\nLive: The solar image is placed between the heading and the supporting paragraph and CTA button.",
+      "pages": [
+        "https://aino.energy.wootech.com.au/"
+      ],
+      "why": "Co y",
+      "at": "2026-09-12"
+    },
+    {
+      "id": "1pkpazy",
+      "title": "Middle insights card is missing its thumbnail image",
+      "anchors": [
+        "Understanding Time-of-Use Tariffs for Commercial Sites",
+        "Read more"
+      ],
+      "detail": "Design: all three insight cards show a photo above the headline.\nLive: the middle card (\"Understanding Time-of-Use Tariffs for Commercial Sites\") has no image, leaving a blank white area above the text.",
+      "pages": [
+        "https://aino.energy.wootech.com.au/"
+      ],
+      "why": "not loaded yet, pls ignore",
+      "at": "2026-09-12"
+    },
+    {
+      "id": "1nznltg",
+      "title": "The hero takes too much of the first screen",
+      "anchors": [
+        "Reliable energy",
+        "Request a meeting"
+      ],
+      "detail": "Design: the opening banner fits the heading, supporting copy and CTA high within the hero so the page feels dense immediately.\nLive: the hero image and top spacing consume almost the whole first screen, pushing the next section well below the fold.",
+      "pages": [
+        "https://aino.energy.wootech.com.au/"
+      ],
+      "why": "ignore",
+      "at": "2026-09-12"
+    },
+    {
+      "id": "17gdutl",
+      "title": "The intro statement is too faint to read",
+      "anchors": [
+        "Every year, Australia generates more renewable energy.",
+        "Aino exists to close that gap.",
+        "Every year, Australia generates more"
+      ],
+      "detail": "Design: the large paragraph under the hero keeps strong dark emphasis on the opening lines.\nLive: the same paragraph below “Request a meeting” is washed out in very pale grey, making the key message hard to read.",
+      "pages": [
+        "https://aino.energy.wootech.com.au/"
+      ],
+      "why": "animation",
+      "at": "2026-09-12"
+    },
+    {
+      "id": "1unzjix",
+      "title": "Industry cards are cropped off at the screen edges",
+      "anchors": [
+        "COMMERCIAL & HIGH-ENERGY BUSINESS",
+        "HOSPITALS & HEALTHCARE",
+        "Supply & Support"
+      ],
+      "detail": "Design: the industry tiles are fully framed in a clean row with each card visible.\nLive: the left and right cards are cut off by the viewport, so the card set looks clipped rather than intentionally laid out.",
+      "pages": [
+        "https://aino.energy.wootech.com.au/"
+      ],
+      "why": "slider, not bugs",
+      "at": "2026-09-12"
+    },
+    {
+      "id": "0vgy990",
+      "title": "Hero section headline pushed too far down on mobile",
+      "anchors": [
+        "Protecting what you've built, for those you love."
+      ],
+      "detail": "Design: Headline \"Protecting what you've built, for those you love.\" appears in the upper half of the hero, with substantial text and CTAs visible in the first screen.\nLive: On mobile, the same headline is positioned much lower; the first screen (y 0–844) is dominated by the video region (y 104–624) with headline text starting around y 625, leaving the top third of the first screen mostly empty.",
+      "pages": [
+        "https://exect.wootech.com.au/"
+      ],
+      "why": "ignore",
+      "at": "2026-09-12"
+    },
+    {
+      "id": "0r6iun0",
+      "title": "Stats row layout collapses to single column with excessive vertical spacing",
+      "anchors": [
+        "1947",
+        "ESTABLISHED",
+        "40+",
+        "2,000+"
+      ],
+      "detail": "Design: Four stat items (1947, 40+, 2,000+, QLD) are displayed horizontally in a compact row below the hero.\nLive: Stats are stacked vertically with large gaps between each pair, consuming much more vertical space and pushing subsequent content further down the page.",
+      "pages": [
+        "https://exect.wootech.com.au/"
+      ],
+      "why": "it is mobile, not desktop",
+      "at": "2026-09-12"
+    },
+    {
+      "id": "1agd6eg",
+      "title": "Our Purpose section layout changed from two-column to four-column grid",
+      "anchors": [
+        "Our Purpose. Our Values.",
+        "Holistic Approach",
+        "Genuine Service"
+      ],
+      "detail": "Design: 'Our Purpose. Our Values.' heading with two value cards below (Holistic Approach, Genuine Service) in a two-column layout\nLive: Same heading but four value cards displayed in a 2×2 grid (Holistic Approach, Genuine Service, Thoughtful Guidance, Decades of Experience)",
+      "pages": [
+        "https://exect.wootech.com.au/"
+      ],
+      "why": "change require, not follow figma",
+      "at": "2026-09-12"
+    },
+    {
+      "id": "1p7irif",
+      "title": "Decorative line elements removed from Our Purpose section",
+      "anchors": [
+        "Our Purpose. Our Values."
+      ],
+      "detail": "Design: Two small gold/tan circular dots positioned above and below the value cards as decorative separators\nLive: No decorative dots visible; layout uses grid spacing instead",
+      "pages": [
+        "https://exect.wootech.com.au/"
+      ],
+      "why": "change ui concept",
+      "at": "2026-09-12"
+    },
+    {
+      "id": "153ywnu",
+      "title": "Services section switches from 2×2 grid to single-column stack",
+      "anchors": [
+        "Estate Planning",
+        "Estate Administration",
+        "Executor & Trustee Services"
+      ],
+      "detail": "Design: Four service cards (Estate Planning, Estate Administration, Executor & Trustee Services, Estate Litigation) arranged in a 2×2 grid with the CTA box on the right.\nLive: Services stack vertically in a single column; the 'Speak with our experienced lawyers' CTA box moves below all four service items instead of sitting alongside them.",
+      "pages": [
+        "https://exect.wootech.com.au/"
+      ],
+      "why": "reponsive",
+      "at": "2026-09-12"
     }
   ]
 }

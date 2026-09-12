@@ -2,70 +2,70 @@
   "_": "Pairs each URL with a Figma frame. The tool writes this file the first time; edit a wrong row and later runs keep your edit. Drop figmaNodeId to skip design compare for that page.",
   "pages": [
     {
-      "url": "https://aino.energy.wootech.com.au/",
-      "figmaNodeId": "116:878",
+      "url": "https://exect.wootech.com.au/",
+      "figmaNodeId": "883:4311",
       "frameName": "01 / Homepage",
-      "how": "khớp tên \"01 / Homepage\" (điểm 1.00, kế tiếp 0.00)"
+      "how": "name match \"01 / Homepage\" (score 1.00, next 0.00)"
     },
     {
-      "url": "https://aino.energy.wootech.com.au/aino-os/",
-      "figmaNodeId": "2174:4044",
-      "frameName": "03 / AinoOS",
-      "how": "chọn tay: \"03 / AinoOS\""
+      "url": "https://exect.wootech.com.au/contact/",
+      "figmaNodeId": "883:4785",
+      "frameName": "09 / Contact",
+      "how": "name match \"09 / Contact\" (score 1.00, next 0.00)"
     },
     {
-      "url": "https://aino.energy.wootech.com.au/company/",
-      "figmaNodeId": "2006:692",
-      "frameName": "06 / Company",
-      "how": "khớp tên \"06 / Company\" (điểm 1.00, kế tiếp 0.00)"
+      "url": "https://exect.wootech.com.au/disclaimer/",
+      "how": "no frame similar enough (best 0.00 < 0.5) — skip design compare"
     },
     {
-      "url": "https://aino.energy.wootech.com.au/contact/",
-      "figmaNodeId": "2006:1083",
-      "frameName": "13 / Contact",
-      "how": "khớp tên \"13 / Contact\" (điểm 1.00, kế tiếp 0.00)"
+      "url": "https://exect.wootech.com.au/hello-world/",
+      "how": "no frame similar enough (best 0.00 < 0.5) — skip design compare"
     },
     {
-      "url": "https://aino.energy.wootech.com.au/faqs/",
-      "figmaNodeId": "2006:979",
-      "frameName": "12 / FAQs",
-      "how": "khớp tên \"12 / FAQs\" (điểm 1.00, kế tiếp 0.00)"
+      "url": "https://exect.wootech.com.au/our-services/",
+      "figmaNodeId": "883:4390",
+      "frameName": "02 / Our Services",
+      "how": "name match \"02 / Our Services\" (score 1.00, next 0.50)"
     },
     {
-      "url": "https://aino.energy.wootech.com.au/industries/",
-      "figmaNodeId": "2006:498",
-      "frameName": "05 / Industries",
-      "how": "khớp tên \"05 / Industries\" (điểm 1.00, kế tiếp 0.00)"
+      "url": "https://exect.wootech.com.au/privacy-policy/",
+      "how": "no frame similar enough (best 0.00 < 0.5) — skip design compare"
     },
     {
-      "url": "https://aino.energy.wootech.com.au/insights/",
-      "figmaNodeId": "2006:1374",
-      "frameName": "09 / Insights",
-      "how": "khớp tên \"09 / Insights\" (điểm 1.00, kế tiếp 0.85)"
+      "url": "https://exect.wootech.com.au/test/",
+      "how": "no frame similar enough (best 0.00 < 0.5) — skip design compare"
     },
     {
-      "url": "https://aino.energy.wootech.com.au/leadership-and-partners/",
-      "figmaNodeId": "2006:811",
-      "frameName": "07 / Leadership & Partners",
-      "how": "khớp tên \"07 / Leadership & Partners\" (điểm 0.67, kế tiếp 0.00)"
+      "url": "https://exect.wootech.com.au/thank-you/",
+      "how": "no frame similar enough (best 0.00 < 0.5) — skip design compare"
     },
     {
-      "url": "https://aino.energy.wootech.com.au/one-aino/",
-      "figmaNodeId": "2174:4270",
-      "frameName": "02 / OneAino™",
-      "how": "chọn tay: \"02 / OneAino™\""
+      "url": "https://exect.wootech.com.au/who-we-are/",
+      "figmaNodeId": "883:4674",
+      "frameName": "08 / Who We Are",
+      "how": "name match \"08 / Who We Are\" (score 1.00, next 0.67)"
     },
     {
-      "url": "https://aino.energy.wootech.com.au/products/",
-      "figmaNodeId": "2006:324",
-      "frameName": "04 / Products",
-      "how": "khớp tên \"04 / Products\" (điểm 1.00, kế tiếp 0.00)"
+      "url": "https://exect.wootech.com.au/who-we-help/",
+      "figmaNodeId": "883:4631",
+      "frameName": "07 / Who We Help",
+      "how": "name match \"07 / Who We Help\" (score 1.00, next 0.67)"
     },
     {
-      "url": "https://aino.energy.wootech.com.au/insights/a-guide-to-battery-warranty-terms/",
-      "figmaNodeId": "2069:2852",
-      "frameName": "11 / Article / Detail",
-      "how": "chọn tay: \"11 / Article / Detail\""
+      "url": "https://exect.wootech.com.au/our-services/estate-administration/",
+      "how": "ambiguous: two frames nearly tied (0.85 vs 0.68) — skip design compare to avoid a wrong pair"
+    },
+    {
+      "url": "https://exect.wootech.com.au/our-services/estate-litigation/",
+      "how": "ambiguous: two frames nearly tied (0.85 vs 0.68) — skip design compare to avoid a wrong pair"
+    },
+    {
+      "url": "https://exect.wootech.com.au/our-services/estate-planning/",
+      "how": "ambiguous: two frames nearly tied (0.85 vs 0.68) — skip design compare to avoid a wrong pair"
+    },
+    {
+      "url": "https://exect.wootech.com.au/our-services/executor-trustee-services/",
+      "how": "ambiguous: two frames nearly tied (0.85 vs 0.68) — skip design compare to avoid a wrong pair"
     }
   ]
 }

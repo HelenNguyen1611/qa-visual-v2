@@ -2,6 +2,7 @@ import type { DiffResult } from './compare.js';
 import type { SweepResult } from './sweep.js';
 import type { MediaRegion, TextItem, ReservedRegion } from './browser.js';
 import type { GroupedFinding } from './group.js';
+import { findingCompare, findingStatus, findingTitle } from './finding-copy.js';
 import { formatQaWhen } from './time.js';
 
 export interface AiFinding {
@@ -125,7 +126,7 @@ const ACCEPT_SCRIPT = [
   "      var accepted = act !== 'undo';",
   "      if (!stamp) { if (st) { st.className = 'acceptstate bad'; st.textContent = 'open the report from QA Visual (localhost) to save'; } return; }",
   "      if (accepted && !why.trim()) {",
-  "        if (st) { st.className = 'acceptstate bad'; st.textContent = 'a reason is required — will not save silently'; }",
+  "        if (st) { st.className = 'acceptstate bad'; st.textContent = 'write why this is not a bug — empty notes are not saved'; }",
   '        return;',
   '      }',
   '      btn.disabled = true;',
@@ -280,19 +281,16 @@ export function renderReport(r: RunReport, stamp?: string): string {
       .map(
         (f) => `<tr>
         <td class="c tnum">${f.num}</td>
-        <td><a href="#f${f.num}">${esc(f.title)}</a>${f.isNew === true ? ' <span class="mark">new</span>' : ''}${
-          f.measured ? ' <span class="tiny">measured</span>' : ''
-        }</td>
+        <td><a href="#f${f.num}">${esc(findingTitle(f.title, f.detail, f.anchors))}</a>${f.isNew === true ? ' <span class="mark">new</span>' : ''}</td>
         <td class="${f.severity}">${SEV[f.severity]}</td>
         <td class="tiny">${f.scope === 'template' ? 'shared' : 'page'}</td>
-        ${VP_COLS.map((v) => `<td class="c ${f.viewports.includes(v) ? 'yes' : 'no'}">${f.viewports.includes(v) ? '●' : '·'}</td>`).join('')}
+        ${VP_COLS.map((v) => `<td class="c ${f.viewports.includes(v) ? 'yes ' + f.severity : 'no'}">${f.viewports.includes(v) ? '●' : '·'}</td>`).join('')}
         <td class="c tnum">${f.pages.length}/${r.pages.length}</td>
       </tr>`,
       )
       .join('')}</tbody>
   </table>
-  <p class="note">● = reported at that viewport. An empty cell means it was <b>not reported</b> there — not that it is absent.
-  <b>measured</b> = the tool measured it on the DOM (overlapping boxes, type scale, empty space), so it does not depend on the model; no label means an AI comment.</p>
+  <p class="note">● = seen at that screen size. An empty cell means it was not reported there.</p>
 </div>`;
 
   /**
@@ -301,43 +299,51 @@ export function renderReport(r: RunReport, stamp?: string): string {
    * The cropped screenshot leads, because it answers "where" in a glance that no sentence can. The
    * prose that used to sit above it made every card look the same until you read it.
    */
+  const findingBody = (f: GroupedFinding) => {
+    const cmp = findingCompare(f.detail);
+    const rows = [
+      cmp.live ? `<div><dt>Live</dt><dd>${esc(cmp.live)}</dd></div>` : '',
+      cmp.design ? `<div><dt>Design</dt><dd>${esc(cmp.design)}</dd></div>` : '',
+    ]
+      .filter(Boolean)
+      .join('');
+    const compare = rows ? `<dl class="cmp">${rows}</dl>` : '';
+    const extra = cmp.extra && !rows ? `<p>${esc(cmp.extra)}</p>` : cmp.extra && rows ? `<p class="fextra">${esc(cmp.extra)}</p>` : !rows ? `<p>${esc(f.detail)}</p>` : '';
+    return `${compare}${extra}`;
+  };
+
   const findingBlock = (f: GroupedFinding) => `
   <article class="find ${f.severity}${f.accepted ? ' ok2' : ''}" id="f${f.num}">
     <div class="fbody">
       <div class="fhead">
         <span class="num">${f.num}</span>
-        <h3>${esc(f.title)}</h3>
+        <h3>${esc(findingTitle(f.title, f.detail, f.anchors))}</h3>
       </div>
-      <p class="fmeta">${[
-        SEV[f.severity],
-        f.measured ? 'measured' : 'AI',
-        f.scope === 'template' ? 'shared' : null,
-        f.viewports.join(' · '),
-        f.isNew === true ? '<span class="mark">new</span>' : f.isNew === false ? 'still present' : null,
-        f.merged > 1 ? `merged ×${f.merged}` : null,
-      ]
-        .filter(Boolean)
-        .join(' · ')}</p>
-      <p>${esc(f.detail)}</p>
+      <p class="fmeta">${esc(findingStatus(f))}</p>
+      ${findingBody(f)}
       ${
         !f.crop && f.anchors?.length
-          ? `<p class="noloc">Could not crop a region — AI quoted: <code>${esc(f.anchors.slice(0, 2).join('</code> <code>'))}</code></p>`
+          ? `<p class="noloc">Could not crop a region — quoted: <code>${esc(f.anchors.slice(0, 2).join('</code> <code>'))}</code></p>`
           : ''
       }
       <p class="where">${
         f.scope === 'template'
           ? `On <b>${f.pages.length}/${r.pages.length} pages</b> — fix once and it is gone everywhere: ${f.pages.map((p) => `<code>${esc(path(p))}</code>`).join(' ')}`
-          : `Pages: ${f.pages.map((p) => `<code>${esc(path(p))}</code>`).join(' ')}`
+          : `Page: ${f.pages.map((p) => `<code>${esc(path(p))}</code>`).join(' ')}`
       }</p>
       <details class="acceptbox" data-num="${f.num}"${f.accepted ? ' open' : ''}>
-        <summary>${f.accepted ? 'Dismissed — not counted' : 'Not a defect?'}</summary>
+        <summary>${f.accepted ? 'Marked as not a bug' : 'This is not a real bug'}</summary>
         ${f.accepted ? `<p class="accepted">${esc(f.acceptedWhy ?? '')}</p>` : ''}
         <div class="acceptedit">
-          <label class="accepthint">${f.accepted ? 'Edit the reason, or undo if this is still a defect.' : 'Write why, then dismiss. Leave closed if it is a real issue.'}</label>
-          <textarea class="why" rows="2" placeholder="e.g. empty space is the right-column form, not a bug.">${f.accepted ? esc(f.acceptedWhy ?? '') : ''}</textarea>
+          <label class="accepthint">${
+            f.accepted
+              ? 'Edit the note, or put the finding back if it is a real bug.'
+              : 'If the screenshot is wrong or the design is meant to look like this, write why and save. Skip this if the bug is real.'
+          }</label>
+          <textarea class="why" rows="2" placeholder="e.g. The heading is meant to sit at the bottom on desktop.">${f.accepted ? esc(f.acceptedWhy ?? '') : ''}</textarea>
           <div class="acceptrow">
-            <button type="button" data-act="save">${f.accepted ? 'Update reason' : 'Dismiss'}</button>
-            ${f.accepted ? `<button type="button" data-act="undo">Undo</button>` : ''}
+            <button type="button" data-act="save">${f.accepted ? 'Update note' : 'Save'}</button>
+            ${f.accepted ? `<button type="button" data-act="undo">Put back</button>` : ''}
             <span class="acceptstate"></span>
           </div>
         </div>
@@ -402,8 +408,8 @@ export function renderReport(r: RunReport, stamp?: string): string {
   ];
   if (open.length) toc.push({ href: '#findings', label: 'Index', count: open.length });
   if (template.length) toc.push({ href: '#shared', label: 'Shared', count: template.length });
-  if (accepted.length) toc.push({ href: '#dismissed', label: 'Dismissed', count: accepted.length });
   toc.push({ href: '#pages', label: 'Pages', count: r.pages.length });
+  if (accepted.length) toc.push({ href: '#dismissed', label: 'Dismissed', count: accepted.length });
   if (hasOverflow) toc.push({ href: '#overflow', label: 'Overflow' });
   toc.push({ href: '#tech', label: 'Tech' });
   const tocNav = `<nav class="toc" aria-label="On this page"><span class="toc-label">On this page</span>${toc
@@ -413,13 +419,17 @@ export function renderReport(r: RunReport, stamp?: string): string {
   return `<!doctype html><html lang="en"${stamp ? ` data-stamp="${esc(stamp)}"` : ''}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>QA Visual — ${esc(host)}</title>
 <style>
-/* Woo 0862: paper, ink, one red mark. Red is the wordmark — not chrome. */
+/* Status-first bug report: green = ok, orange = warning, red = error. */
 :root{
-  --bg:#fff; --card:#fff; --ink:#111; --mute:#6a6a6a; --faint:#8c8c8c;
-  --line:#e6e6e6; --line2:#f0f0f0; --wash:#fafafa;
-  --red:#ff021f; --gold:#b8924a;
-  --bad:#ff021f; --warn:#8a6a2a;
-  --ok:#111; --link:#111;
+  --bg:#f4f6f8; --card:#fff; --ink:#16181d; --mute:#5c6370; --faint:#8a919c;
+  --line:#dfe3e8; --line2:#eef1f4; --wash:#f8f9fb;
+  --accent:#8ec8f5; --accent-bg:#e8f4fc; --accent-ink:#0c2f4a;
+  --red:#ff021f; --link:var(--accent-ink);
+  --ok:#067647; --ok-bg:#ecfdf3; --ok-line:#abefc6;
+  --warn:#b54708; --warn-bg:#fffaeb; --warn-line:#f7d59a;
+  --bad:#b42318; --bad-bg:#fef3f2; --bad-line:#fecdca;
+  --tpl:#6941c6; --tpl-bg:#f4ebff; --tpl-line:#d6bbfb;
+  --radius:3px;
   --font:"Helvetica Neue",Helvetica,Arial,sans-serif;
 }
 *{box-sizing:border-box}
@@ -427,9 +437,9 @@ html{-webkit-text-size-adjust:100%;scroll-padding-top:48px}
 body{margin:0;background:var(--bg);color:var(--ink);
   font:400 15px/1.5 var(--font);-webkit-font-smoothing:antialiased}
 a{color:var(--link);text-decoration-thickness:1px;text-underline-offset:2px}
-a:hover{color:var(--red)}
-main{max-width:960px;margin:0 auto;padding:0 24px 96px}
-header,section,details.tech,.find{scroll-margin-top:56px}
+a:hover{color:var(--ink)}
+main{max-width:1180px;margin:0 auto;padding:0 24px 96px}
+header,section,details.tech,details.fold,.find{scroll-margin-top:56px}
 
 /* Jump list: quiet text. Pills were the AI look. */
 .toc{position:sticky;top:0;z-index:20;display:flex;gap:18px;align-items:center;
@@ -443,7 +453,7 @@ header,section,details.tech,.find{scroll-margin-top:56px}
 .toc a[aria-current="true"]{color:var(--ink)}
 @media (min-width:1100px){
   html{scroll-padding-top:16px}
-  header,section,details.tech,.find{scroll-margin-top:16px}
+  header,section,details.tech,details.fold,.find{scroll-margin-top:16px}
   body{padding-left:176px}
   .toc{position:fixed;left:0;top:0;bottom:0;width:176px;flex-direction:column;align-items:flex-start;
     gap:10px;overflow-x:hidden;overflow-y:auto;padding:40px 28px;
@@ -452,34 +462,41 @@ header,section,details.tech,.find{scroll-margin-top:56px}
 }
 
 /* ---------------------------------- head --------------------------------- */
-header{padding:40px 24px 0;max-width:960px;margin:0 auto}
+header{padding:40px 24px 0;max-width:1180px;margin:0 auto}
 .brand{font-size:12px;color:var(--faint);font-weight:400}
 .brand b{color:var(--red);font-weight:500}
-h1{font-size:28px;line-height:1.25;margin:16px 0 6px;letter-spacing:-.02em;font-weight:500;color:var(--ink)}
-h1.ok,h1.warn,h1.bad{color:var(--ink)}
+h1{font-size:28px;line-height:1.25;margin:16px 0 6px;letter-spacing:-.02em;font-weight:600;color:var(--ink)}
+h1.ok{color:var(--ok)}
+h1.warn{color:var(--warn)}
+h1.bad{color:var(--bad)}
 .verdict-sub{color:var(--mute);font-size:15px}
 .runmeta{color:var(--faint);font-size:13px;margin:18px 0 0;padding-bottom:28px;border-bottom:1px solid var(--line)}
 .runmeta b{color:var(--mute);font-weight:500}
 
 /* -------------------------------- sections ------------------------------- */
-section{margin:48px 0 0}
-h2{font-size:18px;margin:0 0 6px;letter-spacing:-.015em;font-weight:500}
-h2+.lead{color:var(--mute);font-size:14px;margin:0 0 20px}
-h2:not(:has(+.lead)){margin-bottom:20px}
+section{margin:28px 0 0;padding:20px 20px 16px 18px;background:var(--card);border:1px solid var(--line);
+  border-radius:var(--radius);border-left:4px solid var(--accent);box-shadow:0 1px 2px rgba(16,24,40,.04)}
+#notes{border-left-color:var(--ok)}
+#findings,#shared,#pages{border-left-color:var(--warn)}
+#dismissed{border-left-color:var(--ok)}
+#overflow{border-left-color:var(--bad)}
+h2{font-size:20px;margin:0 0 4px;letter-spacing:-.015em;font-weight:500}
+h2+.lead{color:var(--mute);font-size:14px;margin:0 0 16px}
+h2:not(:has(+.lead)){margin-bottom:16px}
 
-.card{background:var(--card);border-top:1px solid var(--line);border-radius:0}
-.pad{padding:16px 0}
+.card{background:var(--wash);border:1px solid var(--line);border-radius:var(--radius)}
+.pad{padding:14px 16px}
 
 /* --------------------------------- banners ------------------------------- */
-.alert,.fatal{border-radius:0;padding:0 0 0 14px;font-size:14px;margin:0 0 16px;
-  border:0;border-left:2px solid var(--line);background:transparent;color:var(--ink)}
-.alert{border-left-color:var(--gold)}
-.fatal{border-left-color:var(--red)}
-.alert b,.fatal b{color:inherit;font-weight:500}
+.alert,.fatal{border-radius:var(--radius);padding:12px 14px;font-size:14px;margin:0 0 12px;border:1px solid}
+.alert{background:var(--warn-bg);border-color:var(--warn-line);color:var(--warn)}
+.fatal{background:var(--bad-bg);border-color:var(--bad-line);color:var(--bad)}
+.alert b,.fatal b{color:inherit;font-weight:650}
 .alert ul,.fatal ul{margin:6px 0 0;padding-left:18px}
 
-.mark{color:var(--red);font-size:12px;font-weight:500}
-.humannote{padding:4px 0;font-size:15px;line-height:1.55;white-space:pre-wrap}
+.mark{color:var(--warn);font-size:12px;font-weight:650}
+.humannote{padding:12px 14px;font-size:15px;line-height:1.55;white-space:pre-wrap;
+  background:var(--ok-bg);border:1px solid var(--ok-line);border-radius:var(--radius);color:var(--ink)}
 
 /* ---------------------------------- table -------------------------------- */
 .tablewrap{background:var(--card);overflow-x:auto}
@@ -489,30 +506,41 @@ table.grid th{text-align:left;padding:10px 8px;border-bottom:1px solid var(--lin
 table.grid td{padding:12px 8px;border-bottom:1px solid var(--line2);vertical-align:middle}
 table.grid tr:last-child td{border-bottom:1px solid var(--line)}
 table.grid th.c,table.grid td.c{text-align:center}
-table.grid td.yes{color:var(--ink);font-size:14px;line-height:1}
+table.grid td.yes{font-size:21px;line-height:1}
 table.grid td.no{color:var(--line);font-size:14px;line-height:1}
 table.grid td.tnum{color:var(--mute);font-variant-numeric:tabular-nums;font-size:13px}
 table.grid td a{color:var(--ink);text-decoration:none}
-table.grid td a:hover{color:var(--red)}
-table.grid td.major{color:var(--red)}
-table.grid td.minor,table.grid td.note{color:var(--mute)}
+table.grid td a:hover{color:var(--bad)}
+table.grid td.major{color:var(--red);font-weight:600}
+table.grid td.minor{color:var(--warn);font-weight:400}
+table.grid td.note{color:var(--mute);font-weight:400}
 .note{font-size:13px;color:var(--faint);margin:10px 0 0}
 
 /* --------------------------------- findings ------------------------------ */
-.find{background:var(--card);border-top:1px solid var(--line);margin:0 0 28px;
-  display:grid;grid-template-columns:1fr}
-.find .shot{border:0;background:var(--wash);max-height:340px;padding:0;margin:12px 0 0;
+.find{background:var(--wash);border:1px solid var(--line);border-radius:var(--radius);margin:0 0 14px;
+  display:grid;grid-template-columns:1fr;border-left:1px solid var(--line);overflow:hidden}
+.find.major{border-left-color:var(--red)}
+.find.minor{border-left-color:var(--warn)}
+.find.note{border-left-color:var(--mute)}
+.find.ok2{border-left-color:var(--ok);opacity:1;background:var(--ok-bg)}
+.find .shot{border:0;background:#fff;max-height:340px;padding:12px;margin:0;
   position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden}
 @media (min-width:800px){
   .find:has(.shot.pic){grid-template-columns:1fr 400px;gap:32px;align-items:start}
   .find .shot{max-height:none;margin:20px 0 0;background:var(--wash)}
 }
-.fbody{padding:20px 0 8px;min-width:0}
-.fhead{display:flex;gap:12px;align-items:baseline;margin:0 0 6px}
-.fhead h3{font-size:18px;margin:0;line-height:1.3;letter-spacing:-.015em;font-weight:500}
+.fbody{padding:16px 16px 12px;min-width:0}
+.fhead{display:flex;gap:12px;align-items:baseline;margin:0 0 8px}
+.fhead h3{font-size:17px;margin:0;line-height:1.3;letter-spacing:-.015em;font-weight:400}
+.find.major .fhead h3{font-weight:600}
 .num{flex:0 0 auto;font-size:13px;color:var(--faint);font-variant-numeric:tabular-nums}
 .fmeta{margin:0 0 12px;font-size:13px;color:var(--faint)}
+.cmp{margin:0 0 12px;display:grid;gap:8px}
+.cmp>div{display:grid;grid-template-columns:64px 1fr;gap:10px;align-items:baseline}
+.cmp dt{margin:0;font-size:12px;font-weight:650;color:var(--faint);letter-spacing:.01em}
+.cmp dd{margin:0;font-size:15px;color:var(--ink)}
 .find p{margin:0 0 10px;font-size:15px;color:var(--ink)}
+.find p.fextra{font-size:13px;color:var(--mute)}
 .find p.where{margin:0 0 16px;font-size:13px;color:var(--mute)}
 .shot img{max-width:100%;max-height:340px;width:auto;display:block}
 @media (min-width:800px){ .shot img{max-height:480px} }
@@ -520,35 +548,40 @@ table.grid td.minor,table.grid td.note{color:var(--mute)}
   font-size:12px;padding:4px 8px;opacity:0}
 .shot:hover .zoom{opacity:1}
 .find p.noloc{font-size:13px;color:var(--faint);margin:0 0 10px}
-.find.ok2{opacity:.62}
-.find p.accepted{font-size:13px;color:var(--mute);margin:8px 0}
-.acceptbox{margin:8px 0 0;padding:0;border:0;background:transparent}
-.acceptbox>summary{cursor:pointer;font-size:13px;color:var(--faint);list-style:none}
+.find p.accepted{font-size:13px;color:var(--ok);margin:8px 0;font-weight:650}
+.acceptbox{margin:8px 0 0;padding:10px 12px;border:1px solid var(--warn-line);background:var(--warn-bg);border-radius:var(--radius)}
+.find.ok2 .acceptbox{border-color:var(--ok-line);background:#fff}
+.acceptbox>summary{cursor:pointer;font-size:13px;color:var(--warn);font-weight:650;list-style:none}
+.find.ok2 .acceptbox>summary{color:var(--ok)}
 .acceptbox>summary::-webkit-details-marker{display:none}
-.acceptbox>summary::before{content:'▸ ';color:var(--faint)}
+.acceptbox>summary::before{content:'▸ ';color:inherit}
 .acceptbox[open]>summary::before{content:'▾ '}
-.acceptbox>summary:hover{color:var(--ink)}
-.acceptbox .accepthint{display:block;font-size:13px;color:var(--mute);margin:10px 0 8px}
-.acceptbox textarea.why,.notesbox textarea.notes{width:100%;box-sizing:border-box;font:14px/1.45 inherit;padding:10px 0;
-  border:0;border-bottom:1px solid var(--line);border-radius:0;resize:vertical;min-height:48px;background:transparent;color:inherit}
-.acceptbox textarea.why:focus,.notesbox textarea.notes:focus{outline:0;border-bottom-color:var(--ink)}
-.acceptbox .acceptrow,.notesbox .acceptrow{display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin-top:10px}
-.acceptbox button,.notesbox button{font:400 13px/1 inherit;padding:0;border-radius:0;cursor:pointer;
-  border:0;background:transparent;color:var(--ink)}
-.acceptbox button:hover,.notesbox button:hover{color:var(--red)}
+.acceptbox>summary:hover{opacity:.85}
+.acceptbox .accepthint{display:block;font-size:13px;color:var(--ink);margin:10px 0 8px}
+.acceptbox textarea.why,.notesbox textarea.notes{width:100%;box-sizing:border-box;font:14px/1.45 inherit;padding:8px 10px;
+  border:1px solid var(--line);border-radius:8px;resize:vertical;min-height:52px;background:#fff;color:inherit}
+.acceptbox textarea.why:focus,.notesbox textarea.notes:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:var(--accent)}
+.acceptbox .acceptrow,.notesbox .acceptrow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
+.acceptbox button,.notesbox button{font:inherit;font-weight:600;padding:8px 14px;border-radius:8px;cursor:pointer;
+  border:1px solid var(--line);background:var(--card);color:var(--ink)}
+.acceptbox button:hover,.notesbox button:hover{border-color:#c8cdd4;background:#f8f9fb}
+.acceptbox button[data-act=save],.notesbox button[data-act=savenote]{background:var(--ok);border-color:var(--ok);color:#fff}
+.acceptbox button[data-act=save]:hover,.notesbox button[data-act=savenote]:hover{background:#05603a;border-color:#05603a;color:#fff}
+.acceptbox button[data-act=undo]{background:var(--bad-bg);border-color:var(--bad-line);color:var(--bad)}
+.acceptbox button[data-act=undo]:hover{color:#fff;background:var(--bad);border-color:var(--bad)}
 .acceptbox .acceptstate,.notesbox .acceptstate{font-size:12px;color:var(--mute)}
-.acceptbox .acceptstate.bad,.notesbox .acceptstate.bad{color:var(--red)}
-.notesbox{background:transparent;border:0;padding:0;margin:0 0 8px}
+.acceptbox .acceptstate.bad,.notesbox .acceptstate.bad{color:var(--bad)}
+.notesbox{margin:0 0 8px}
 
 /* ---------------------------------- pages -------------------------------- */
-.page{background:transparent;border-top:1px solid var(--line);margin:0}
-.page>summary{padding:14px 0;cursor:pointer;display:flex;gap:10px;align-items:center;
+.page{background:var(--wash);border:1px solid var(--line);border-radius:var(--radius);margin:0 0 8px}
+.page>summary{padding:13px 14px;cursor:pointer;display:flex;gap:10px;align-items:center;
   flex-wrap:wrap;list-style:none}
 .page>summary::-webkit-details-marker{display:none}
 .page>summary::before{content:'▸';color:var(--faint);font-size:12px;flex:0 0 auto}
 .page[open]>summary::before{content:'▾'}
 .page .grow{flex:1}
-.pbody{padding:0 0 20px}
+.pbody{padding:4px 14px 16px}
 .shots{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:16px;margin-top:12px}
 .shots figure{margin:0;min-width:0}
 .shots figcaption{font-size:12px;color:var(--faint);font-weight:400;margin:0 0 6px}
@@ -557,7 +590,15 @@ table.grid td.minor,table.grid td.note{color:var(--mute)}
 .shots .tiny{display:block;margin-top:5px}
 
 /* --------------------------------- details ------------------------------- */
-details.tech{margin-top:34px;border-top:1px solid var(--line);padding-top:18px}
+details.fold{margin:28px 0 0;padding:20px 20px 16px 18px;background:var(--card);border:1px solid var(--line);
+  border-radius:var(--radius);border-left:4px solid var(--ok);box-shadow:0 1px 2px rgba(16,24,40,.04)}
+details.fold>summary{cursor:pointer;font-size:20px;letter-spacing:-.015em;font-weight:500;list-style:none}
+details.fold>summary::-webkit-details-marker{display:none}
+details.fold>summary::before{content:'▸ ';color:var(--faint);font-weight:400}
+details.fold[open]>summary::before{content:'▾ '}
+details.fold>summary+.lead{color:var(--mute);font-size:14px;margin:8px 0 16px}
+details.tech{margin-top:28px;padding:16px 18px;background:var(--card);border:1px solid var(--line);
+  border-radius:var(--radius);border-left:4px solid #98a2b3}
 details.tech>summary{cursor:pointer;font-size:13px;font-weight:500;letter-spacing:-.01em;color:var(--mute);list-style:none}
 details.tech>summary::-webkit-details-marker{display:none}
 details.tech>summary::before{content:'▸ ';color:var(--faint)}
@@ -578,7 +619,7 @@ table.plain th{text-align:left;font-size:12px;
 table.plain td{padding:10px 8px 10px 0;border-bottom:1px solid var(--line2);vertical-align:top}
 table.plain tr:last-child td{border-bottom:0}
 .empty{color:var(--mute);font-size:13.5px}
-footer{max-width:940px;margin:0 auto;padding:22px 20px 50px;border-top:1px solid var(--line);
+footer{max-width:1180px;margin:0 auto;padding:22px 20px 50px;border-top:1px solid var(--line);
   color:var(--faint);font-size:12px}
 
 @media print{
@@ -674,16 +715,6 @@ ${
 }
 
 ${
-  accepted.length
-    ? `<section id="dismissed">
-  <h2>Dismissed as intentional (${accepted.length})</h2>
-  <p class="lead">A reviewer marked these as false positives or intentional, so they do not count. Edit the reason or undo on the card — later runs will keep them dismissed.</p>
-  ${accepted.map(findingBlock).join('')}
-</section>`
-    : ''
-}
-
-${
   perPage.length
     ? `<section id="pages">
   <h2>Page-only findings</h2>
@@ -695,6 +726,16 @@ ${
   <p class="lead">No page-only findings. Open a page to see its screenshots.</p>
   ${r.pages.map(pageRow).join('')}
 </section>`
+}
+
+${
+  accepted.length
+    ? `<details class="fold" id="dismissed">
+  <summary>Marked as not a bug (${accepted.length})</summary>
+  <p class="lead">A reviewer said these are intentional or a false alarm, so they do not count. Edit the note or put them back on the card.</p>
+  ${accepted.map(findingBlock).join('')}
+</details>`
+    : ''
 }
 
 ${

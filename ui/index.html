@@ -5,23 +5,29 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>QA Visual</title>
     <style>
-      /* Woo: paper, ink, one red mark. Red is the wordmark — not chrome. */
+      /* Status-first: green / orange / red are the language of a bug report. */
       :root {
-        --bg: #fff;
+        --bg: #f4f6f8;
         --card: #fff;
-        --ink: #111;
-        --dim: #6a6a6a;
-        --line: #e6e6e6;
-        --accent: #ff021f;
+        --ink: #16181d;
+        --dim: #5c6370;
+        --line: #dfe3e8;
+        --accent: #8ec8f5;
+        --accent-bg: #e8f4fc;
+        --accent-ink: #0c2f4a;
         --red: #ff021f;
-        --gold: #b8924a;
-        --warn: #8a6a2a;
-        --warn-bg: transparent;
-        --bad: #ff021f;
-        --bad-bg: transparent;
-        --ok: #111;
-        --radius: 0;
+        --ok: #067647;
+        --ok-bg: #ecfdf3;
+        --ok-line: #abefc6;
+        --warn: #b54708;
+        --warn-bg: #fffaeb;
+        --warn-line: #f7d59a;
+        --bad: #b42318;
+        --bad-bg: #fef3f2;
+        --bad-line: #fecdca;
+        --radius: 3px;
         --font: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        --width: 100%;
       }
       * {
         box-sizing: border-box;
@@ -65,11 +71,27 @@
       }
       .card {
         background: var(--card);
-        border: 0;
-        border-top: 1px solid var(--line);
-        border-radius: 0;
-        padding: 24px 0;
-        margin-bottom: 8px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 20px 20px 20px 18px;
+        margin-bottom: 16px;
+        border-left: 4px solid var(--accent);
+        box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+      }
+      #s1.card {
+        border-left-color: var(--accent);
+      }
+      #s2.card {
+        border-left-color: var(--warn);
+      }
+      #s3.card {
+        border-left-color: var(--accent);
+      }
+      #notes.card {
+        border-left-color: var(--ok);
+      }
+      #history.card {
+        border-left-color: #98a2b3;
       }
       h2 {
         font-size: 20px;
@@ -96,15 +118,59 @@
         width: 100%;
         padding: 8px 10px;
         border: 1px solid var(--line);
-        border-radius: 0;
+        border-radius: 8px;
         font: inherit;
         background: #fff;
         color: inherit;
       }
-      input:focus,
+      input[type='url']:focus,
+      input[type='text']:focus,
+      input[type='number']:focus,
+      input[type='password']:focus,
       select:focus {
-        outline: 0;
-        border-color: var(--ink);
+        outline: 2px solid var(--accent);
+        outline-offset: -1px;
+        border-color: var(--accent);
+      }
+      input[type='checkbox'],
+      input[type='radio'] {
+        appearance: none;
+        -webkit-appearance: none;
+        width: 18px;
+        height: 18px;
+        margin: 0;
+        padding: 0;
+        flex: 0 0 auto;
+        box-sizing: border-box;
+        border: 1.5px solid #111;
+        background: #fff;
+        cursor: pointer;
+        display: inline-grid;
+        place-content: center;
+        vertical-align: middle;
+      }
+      input[type='checkbox'] {
+        border-radius: 3px;
+      }
+      input[type='radio'] {
+        border-radius: 50%;
+      }
+      input[type='checkbox']:checked {
+        background: #111
+          url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' d='M3.5 8.5 6.5 11.5 12.5 4.5'/></svg>")
+          center / 12px 12px no-repeat;
+        border-color: #111;
+      }
+      input[type='radio']:checked {
+        background: #111
+          url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='3.5' fill='%23fff'/></svg>")
+          center / 16px 16px no-repeat;
+        border-color: #111;
+      }
+      input[type='checkbox']:focus-visible,
+      input[type='radio']:focus-visible {
+        outline: 2px solid #111;
+        outline-offset: 2px;
       }
       .field {
         margin-bottom: 14px;
@@ -116,44 +182,69 @@
       }
       button {
         font: inherit;
-        font-weight: 500;
-        border-radius: 0;
-        padding: 8px 0;
+        font-weight: 600;
+        border-radius: 8px;
+        padding: 8px 14px;
         cursor: pointer;
-        border: 0;
-        background: transparent;
+        border: 1px solid var(--line);
+        background: var(--card);
         color: var(--ink);
       }
       button:hover:not(:disabled) {
-        color: var(--red);
+        border-color: #c8cdd4;
+        background: #f8f9fb;
       }
       button.primary {
-        background: var(--ink);
-        border: 0;
-        color: #fff;
-        padding: 9px 16px;
+        background: var(--accent-bg);
+        border-color: var(--accent);
+        color: var(--accent-ink);
       }
       button.primary:hover:not(:disabled) {
-        background: var(--ink);
+        background: #d4ebfa;
+        border-color: #6eb6ea;
+        color: var(--accent-ink);
+        opacity: 1;
+      }
+      button.ok {
+        background: var(--ok);
+        border-color: var(--ok);
+        color: #fff !important;
+      }
+      button.ok:hover:not(:disabled) {
+        background: #05603a;
+        border-color: #05603a;
         color: #fff;
-        opacity: 0.86;
+      }
+      button.warn {
+        background: var(--warn-bg);
+        border-color: var(--warn-line);
+        color: var(--warn);
+      }
+      button.bad {
+        background: var(--bad-bg);
+        border-color: var(--bad-line);
+        color: var(--bad);
       }
       button:disabled {
         opacity: 0.5;
         cursor: not-allowed;
       }
       button.icon {
-        padding: 5px 0;
-        font-weight: 400;
-        color: var(--dim);
+        padding: 5px 9px;
+        font-weight: 500;
+        color: var(--bad);
+        background: var(--bad-bg);
+        border-color: var(--bad-line);
       }
       button.icon:hover {
-        color: var(--ink);
+        color: #fff;
+        background: var(--bad);
+        border-color: var(--bad);
       }
       .hint {
         color: var(--dim);
         font-size: 12px;
-        margin-top: 6px;
+        /* margin-top: 6px; */
       }
       .spinner {
         display: inline-block;
@@ -202,21 +293,18 @@
         padding-top: 16px;
       }
       td.pick input {
-        width: 16px;
-        height: 16px;
         margin: 0;
-        cursor: pointer;
-        accent-color: var(--ink);
       }
       .qa {
         font-size: 12px;
         margin-top: 6px;
       }
       .qa.new {
-        color: var(--red);
+        color: var(--warn);
+        font-weight: 600;
       }
       .qa.old {
-        color: var(--dim);
+        color: var(--ok);
       }
       td.thumb {
         width: 96px;
@@ -254,9 +342,19 @@
       }
       .flag.warn {
         color: var(--warn);
+        background: var(--warn-bg);
+        border: 1px solid var(--warn-line);
+        border-radius: 6px;
+        padding: 4px 8px;
+        display: inline-block;
       }
       .flag.bad {
         color: var(--bad);
+        background: var(--bad-bg);
+        border: 1px solid var(--bad-line);
+        border-radius: 6px;
+        padding: 4px 8px;
+        display: inline-block;
       }
       .why {
         font-size: 12px;
@@ -272,15 +370,41 @@
       }
       .toolbar {
         display: flex;
-        align-items: center;
-        gap: 10px;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 16px;
         margin-top: 16px;
         padding-top: 16px;
         border-top: 1px solid var(--line);
+      }
+      .toolbar-left {
+        flex: 1 1 auto;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .toolbar-left-up {
+        display: flex;
+        justify-content: flex-start;
+        align-items: center;
+        gap: 8px;
         flex-wrap: wrap;
       }
-      .toolbar .grow {
-        flex: 1;
+      .toolbar-left-down {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .toolbar-right {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+      }
+      .grow {
+        flex: 1 1 auto;
+        min-width: 8px;
       }
       .toolbar .fastlab {
         display: flex;
@@ -293,24 +417,21 @@
         white-space: nowrap;
       }
       .toolbar .fastlab input {
-        width: auto;
         margin: 0;
       }
       .toggle {
         display: flex;
         align-items: flex-start;
         gap: 10px;
-        padding: 10px 0;
-        border: 0;
-        border-radius: 0;
+        padding: 10px 12px;
+        border: 1px solid var(--warn-line);
+        border-radius: var(--radius);
         margin-bottom: 14px;
         cursor: pointer;
-        background: transparent;
+        background: var(--warn-bg);
       }
       .toggle input {
-        width: auto;
         margin: 3px 0 0;
-        flex: 0 0 auto;
       }
       .toggle .tlab {
         font-weight: 500;
@@ -324,18 +445,18 @@
         margin: 2px 0 0;
       }
       .err {
-        background: transparent;
-        color: var(--ink);
-        border: 0;
-        border-left: 2px solid var(--red);
-        padding: 0 0 0 12px;
-        border-radius: 0;
+        background: var(--bad-bg);
+        color: var(--bad);
+        border: 1px solid var(--bad-line);
+        border-left: 4px solid var(--bad);
+        padding: 10px 12px;
+        border-radius: 8px;
         font-size: 13px;
         margin-bottom: 14px;
       }
       pre.log {
-        background: #fafafa;
-        color: var(--ink);
+        background: #111;
+        color: #fff;
         border-radius: 0;
         padding: 14px 12px;
         font:
@@ -352,16 +473,16 @@
         margin: 4px 0 18px;
       }
       .prog .bar {
-        height: 1px;
-        background: var(--line);
-        border-radius: 0;
+        height: 8px;
+        background: #e9edf2;
+        border-radius: 99px;
         overflow: hidden;
       }
       .prog .fill {
         height: 100%;
         width: 0;
-        background: var(--ink);
-        border-radius: 0;
+        background: var(--accent);
+        border-radius: 99px;
         transition: width 0.35s ease;
       }
       .prog .prow {
@@ -419,12 +540,11 @@
         font-size: 11.5px;
       }
       .saved {
-        background: transparent;
-        border: 0;
-        border-left: 2px solid var(--ink);
-        color: var(--ink);
-        border-radius: 0;
-        padding: 0 0 0 12px;
+        background: var(--ok-bg);
+        border: 1px solid var(--ok-line);
+        color: var(--ok);
+        border-radius: var(--radius);
+        padding: 10px 12px;
         font-size: 13px;
         margin-bottom: 14px;
       }
@@ -433,8 +553,22 @@
       }
       .btnrow {
         display: flex;
-        gap: 10px;
+        justify-content: space-between;
         align-items: center;
+        gap: 16px;
+        width: 100%;
+      }
+      .btnrow .hint {
+        margin: 0;
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      .btnrow-actions {
+        display: flex;
+        gap: 10px;
+        flex: 0 0 auto;
+        align-items: center;
+        justify-content: flex-end;
       }
       .notes label {
         display: block;
@@ -449,7 +583,7 @@
         width: 100%;
         padding: 10px 12px;
         border: 1px solid var(--line);
-        border-radius: 0;
+        border-radius: 8px;
         font: inherit;
         line-height: 1.6;
         resize: vertical;
@@ -458,14 +592,17 @@
         color: inherit;
       }
       .notes textarea:focus {
-        outline: 0;
-        border-color: var(--ink);
+        outline: 2px solid var(--ok);
+        outline-offset: -1px;
+        border-color: var(--ok);
       }
       .notes .noterow {
         display: flex;
         align-items: center;
         gap: 12px;
         margin-top: 10px;
+        width: 100%;
+        flex-wrap: wrap;
       }
       .notes .noterow .hint {
         margin: 0;
@@ -482,10 +619,35 @@
         gap: 14px;
         flex-wrap: wrap;
         margin-bottom: 16px;
+        width: 100%;
       }
       .done .big {
         font-size: 16px;
-        font-weight: 500;
+        font-weight: 650;
+      }
+      .done .big.ok {
+        color: var(--ok);
+      }
+      .done .big.bad {
+        color: var(--bad);
+      }
+      .history td.nfind.ok {
+        color: var(--ok);
+        font-weight: 650;
+      }
+      .history td.nfind.bad {
+        color: var(--bad);
+        font-weight: 650;
+      }
+      .history .acts [data-act='open'] {
+        background: var(--accent-bg);
+        border-color: var(--accent);
+        color: var(--accent-ink);
+      }
+      .history .acts [data-act='note'] {
+        background: var(--ok-bg);
+        border-color: var(--ok-line);
+        color: var(--ok);
       }
       .history td {
         vertical-align: middle;
@@ -507,6 +669,7 @@
         flex-wrap: wrap;
         gap: 8px;
         align-items: center;
+        justify-content: flex-end;
       }
       .history .acts button {
         padding: 6px 10px;
@@ -594,17 +757,6 @@
             <input type="number" id="max" value="8" min="1" max="80" />
           </div>
         </div>
-        <label class="toggle" for="fast">
-          <input type="checkbox" id="fast" />
-          <span>
-            <span class="tlab">Fast mode</span>
-            <span class="thint"
-              >Up to 3 AI calls at once — same pages and screenshots, usually
-              ~2.5–3 min / 8 pages. Off = one call at a time. Tokens do not
-              increase unless the API retries.</span
-            >
-          </span>
-        </label>
         <details class="authbox" id="authbox">
           <summary>
             Password-protected site? (staging, Basic auth, or a login page)
@@ -638,16 +790,30 @@
             login form.
           </p>
         </details>
+        <label class="toggle" for="fast">
+          <input type="checkbox" id="fast" />
+          <span>
+            <span class="tlab">Fast mode</span>
+            <span class="thint"
+              >Up to 3 AI calls at once — same pages and screenshots, usually
+              ~2.5–3 min / 8 pages. Off = one call at a time. Tokens do not
+              increase unless the API retries.</span
+            >
+          </span>
+        </label>
+
         <div id="e1"></div>
         <div class="saved" id="saved" hidden></div>
         <div class="btnrow">
-          <button class="primary" id="go1">Discover pages</button>
-          <button id="redo" hidden>Discover from scratch</button>
+          <p class="hint" id="hint1">
+            This step takes 15–30 seconds: open a browser, read the sitemap (or
+            homepage links), read the Figma file and render frames.
+          </p>
+          <div class="btnrow-actions">
+            <button id="redo" hidden>Discover from scratch</button>
+            <button class="primary" id="go1">Discover pages</button>
+          </div>
         </div>
-        <p class="hint" id="hint1">
-          This step takes 15–30 seconds: open a browser, read the sitemap (or
-          homepage links), read the Figma file and render frames.
-        </p>
       </section>
 
       <!-- ============================ 2. pairing =========================== -->
@@ -669,17 +835,25 @@
           <tbody id="rows"></tbody>
         </table>
         <div class="toolbar">
-          <button id="add">+ Add pair</button>
-          <button id="back2">Change links</button>
-          <button id="picknew">Select unreviewed</button>
-          <button id="pickold">Select already QA’d</button>
-          <button id="pickall">Select all</button>
-          <span class="grow"></span>
-          <label class="fastlab" for="fast2"
-            ><input type="checkbox" id="fast2" /> Fast mode</label
-          >
-          <span class="hint" id="count"></span>
-          <button class="primary" id="go2">Run QA</button>
+          <div class="toolbar-left">
+            <div class="toolbar-left-up">
+              <button id="add">+ Add pair</button>
+              <button id="back2">Change links</button>
+              <button id="picknew">Select unreviewed</button>
+              <button id="pickold">Select already QA’d</button>
+              <button id="pickall">Select all</button>
+            </div>
+            <div class="toolbar-left-down">
+              <label class="fastlab" for="fast2"
+                ><input type="checkbox" id="fast2" /> Fast mode</label
+              >
+              <span class="hint" id="count"></span>
+              <span class="grow"></span>
+            </div>
+          </div>
+          <div class="toolbar-right">
+            <button class="primary" id="go2">Run QA</button>
+          </div>
         </div>
       </section>
 
@@ -728,9 +902,10 @@
           placeholder="For example:&#10;- Hero is a video background; a white screenshot is expected.&#10;- Mobile menu is missing the cart icon — AI did not catch it.&#10;- /journal/ has no design; ignore the design-compare section."
         ></textarea>
         <div class="noterow">
-          <button class="primary" id="savenote">Save to report</button>
-          <button type="button" id="closenote">Close</button>
           <span class="hint" id="notestate"></span>
+          <span class="grow"></span>
+          <button type="button" id="closenote">Close</button>
+          <button class="ok" id="savenote">Save to report</button>
         </div>
       </section>
 
@@ -1569,13 +1744,16 @@
           $('doneBar').hidden = false;
           const stamp = (d.reportUrl || '').split('/')[2] || '';
           $('doneBar').innerHTML =
-            '<span class="big">' +
+            '<span class="big ' +
+            (d.findings ? 'bad' : 'ok') +
+            '">' +
             d.findings +
             ' findings</span>' +
-            '<button class="primary" id="open">Open report</button>' +
+            '<span class="grow"></span>' +
+            '<span class="hint" id="shareOut" style="margin:0"></span>' +
             '<button id="share">Export share file</button>' +
             '<button id="again">Run again</button>' +
-            '<span class="hint" id="shareOut" style="margin:0"></span>';
+            '<button class="primary" id="open">Open report</button>';
           openNotes(stamp, $('site').value.trim());
           $('open').onclick = () => window.open(d.reportUrl, '_blank');
           $('again').onclick = () => backToPairing();
@@ -1594,6 +1772,7 @@
             '<div class="err" style="margin:0">' +
             esc(JSON.parse(ev.data).error) +
             '</div>' +
+            '<span class="grow"></span>' +
             '<button id="again2">Back to pairing</button>';
           $('again2').onclick = () => backToPairing();
         });
@@ -1757,7 +1936,9 @@
           '<td class="when">' +
           esc(formatWhen(r.when, r.stamp)) +
           '</td>' +
-          '<td class="nfind">' +
+          '<td class="nfind ' +
+          (r.findings ? 'bad' : 'ok') +
+          '">' +
           r.findings +
           '</td>' +
           '<td><div class="acts">' +

@@ -90,7 +90,7 @@ describe('peerImageAspect', () => {
     );
     assert.equal(hits.length, 1);
     assert.equal(hits[0].box.w, 330);
-    assert.match(hits[0].finding.title, /aspect/i);
+    assert.match(hits[0].finding.title, /shape|row|card/i);
     assert.equal(hits[0].finding.measured, true);
   });
 
@@ -175,8 +175,10 @@ describe('overlayBannerPad', () => {
       1440,
     );
     assert.equal(hits.length, 1);
-    assert.match(hits[0].finding.title, /banner/i);
+    assert.match(hits[0].finding.title, /Our mission|banner/i);
     assert.match(hits[0].finding.detail, /75px/);
+    assert.match(hits[0].finding.detail, /Live:/);
+    assert.match(hits[0].finding.detail, /Design:/);
     assert.equal(hits[0].box.w, 1200);
   });
 
