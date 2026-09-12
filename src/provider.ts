@@ -270,7 +270,7 @@ class OpenAICompatible implements VisionProvider {
           { role: 'system', content: msg.system },
           {
             role: 'user',
-            content: [{ type: 'text', text: msg.user }, ...msg.images.map((im) => ({ type: 'image_url', image_url: { url: `data:${im.mime};base64,${im.b64}`, detail: 'high' } }))],
+            content: [{ type: 'text', text: msg.user }, ...msg.images.map((im) => ({ type: 'image_url', image_url: { url: `data:${im.mime};base64,${im.b64}`, detail: 'low' } }))],
           },
         ],
       };

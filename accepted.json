@@ -161,6 +161,21 @@
       ],
       "why": "Co y",
       "at": "2026-09-12"
+    },
+    {
+      "id": "1h17p3r",
+      "title": "Hàng thẻ bị tràn khung làm mất thẻ 'Future grid ready'",
+      "anchors": [
+        "Clean energy infrastructure, built for life.",
+        "Infrastructure first",
+        "Engineered reliability"
+      ],
+      "detail": "Trên bản thiết kế, danh sách hiển thị đủ 4 thẻ ngang trong khung nhìn. Trên trang thực tế, kích thước các thẻ quá lớn làm thẻ thứ 4 ('Future grid ready') bị tràn ra ngoài màn hình.",
+      "pages": [
+        "https://aino.energy.wootech.com.au/company/"
+      ],
+      "why": "This is slider, not bug",
+      "at": "2026-09-12"
     }
   ]
 }

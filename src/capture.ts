@@ -1,5 +1,5 @@
 import { chromium, type Browser, type Page } from 'playwright';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { VIEWPORTS, type Config, type ViewportName, log, progressTick } from './config.js';
 import { authOptions } from './auth.js';
@@ -13,6 +13,8 @@ import {
   type TextItem,
   type ReservedRegion,
 } from './browser.js';
+import { collectGeometry } from './geometry/collect.js';
+import type { GeomSnapshot } from './geometry/types.js';
 
 export interface Capture {
   viewport: ViewportName;
@@ -25,6 +27,8 @@ export interface Capture {
   reserved: ReservedRegion[];
   /** every visible text run with its real box — used to locate AI findings precisely */
   textIndex: TextItem[];
+  /** DOM layout snapshot for later geometry detectors — not a finding, not in the report */
+  geometry: GeomSnapshot;
   failedRequests: string[];
   jsErrors: string[];
   title: string;
@@ -85,14 +89,18 @@ export async function captureAll(browser: Browser, cfg: Config, outDir: string):
       const media = await page.evaluate(collectMedia).catch(() => [] as MediaRegion[]);
       const reserved = await page.evaluate(collectReservedSpace, 200).catch(() => [] as ReservedRegion[]);
       const textIndex = await page.evaluate(collectTextIndex, 800).catch(() => [] as TextItem[]);
+      const geometry = await page.evaluate(collectGeometry).catch(
+        (): GeomSnapshot => ({ viewportWidth: vp.width, viewportHeight: vp.height, pageHeight: 0, nodes: [] }),
+      );
       const pageHeight = await page.evaluate(() => document.documentElement.scrollHeight);
       const file = join(outDir, `${vp.name}.png`);
       await page.screenshot({ path: file, fullPage: true, animations: 'disabled', caret: 'hide', timeout: 20000 });
-      out.push({ viewport: vp.name, width: vp.width, file, pageHeight, media, reserved, textIndex, failedRequests: dedupe(failed), jsErrors: dedupe(jsErrors), title });
+      writeFileSync(join(outDir, `${vp.name}.geometry.json`), JSON.stringify(geometry));
+      out.push({ viewport: vp.name, width: vp.width, file, pageHeight, media, reserved, textIndex, geometry, failedRequests: dedupe(failed), jsErrors: dedupe(jsErrors), title });
       const nAv = media.filter((m) => m.kind === 'video' || m.kind === 'iframe' || m.kind === 'canvas').length;
       const nImg = media.filter((m) => m.kind === 'img').length;
       const nBg = media.filter((m) => m.kind === 'background').length;
-      log(`captured ${vp.name} ${vp.width}px — trang cao ${pageHeight}px · ${nImg} ảnh, ${nBg} ảnh nền CSS, ${nAv} video/iframe/canvas`);
+      log(`captured ${vp.name} ${vp.width}px — trang cao ${pageHeight}px · ${nImg} ảnh, ${nBg} ảnh nền CSS, ${nAv} video/iframe/canvas · ${geometry.nodes.length} node geometry`);
       progressTick(`Chụp ${vp.name} · ${shortUrl(cfg.url)}`, 'capture');
     }
   } finally {

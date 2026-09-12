@@ -133,6 +133,19 @@ export async function frameFromLink(link: string, token: string): Promise<FigmaF
   return { id: doc.id, name: doc.name, width: Math.round(box.width), height: Math.round(box.height) };
 }
 
+/**
+ * Children of one mapped page frame. listFigmaFrames stays at depth=2 (page list only).
+ * Geometry matching needs the inner tree; callers flatten this themselves.
+ */
+export async function fetchFigmaSubtree(link: string, nodeId: string, token: string, depth = 8): Promise<unknown> {
+  if (!token) throw new Error('FIGMA_TOKEN chưa được đặt trong .env');
+  const { fileKey } = parseFigmaLink(link);
+  const j = await figmaGet(`/files/${fileKey}/nodes?ids=${encodeURIComponent(nodeId)}&depth=${depth}`, token);
+  const doc = j.nodes?.[nodeId]?.document;
+  if (!doc) throw new Error(`không thấy node ${nodeId} trong file ${fileKey}`);
+  return doc;
+}
+
 /** Render the frames we actually need. One API call for all ids, then download each PNG. */
 export async function renderFigmaFrames(link: string, frames: FigmaFrame[], token: string, cacheDir: string): Promise<Map<string, string>> {
   const out = new Map<string, string>();

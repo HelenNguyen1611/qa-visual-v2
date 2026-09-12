@@ -6,7 +6,7 @@ import { launch, captureAll, type Capture } from './capture.js';
 import { sweep, type SweepResult } from './sweep.js';
 import { compare } from './compare.js';
 import { renderReport, type RunReport, type PageReport, type ViewportReport } from './report.js';
-import { listFigmaFrames, renderFigmaFrames, framesFromFolder, type FigmaFrame } from './design.js';
+import { listFigmaFrames, renderFigmaFrames, framesFromFolder, fetchFigmaSubtree, type FigmaFrame } from './design.js';
 import { fromSitemap, fromLinks, browserFetcher, dedupeUrls, slugOf, type PageTarget } from './pages.js';
 import { mapUrlsToFrames, looksMispaired, type Mapped } from './mapping.js';
 import { detectShared } from './shared.js';
@@ -19,6 +19,14 @@ import { annotateCrop } from './annotate.js';
 import { locate } from './locate.js';
 import { prepareAuth, authOptions } from './auth.js';
 import { listPageCoverage, listRunStamps, pageKey, reportPageUrls, reportSite, sameSite, siteKey } from './site.js';
+import { detectAllGeometry, GEOMETRY_CAPABILITIES } from './geometry/run.js';
+import { flattenFigmaTree, type FigmaGeomTree } from './geometry/figmaTree.js';
+import { matchFigmaToDom } from './geometry/match.js';
+import { mapBlocks } from './geometry/blockMap.js';
+import { rankCandidates, strongCandidates } from './geometry/rank.js';
+import { judgeBatchAudit, MAX_JUDGE_PER_PAGE, type JudgeBatchAudit } from './geometry/judge.js';
+import { attachCrops } from './geometry/evidence.js';
+import type { Candidate, JudgeVerdict, ParseStatus } from './geometry/candidate.js';
 
 /**
  * The engine, with no opinion about how it is driven.
@@ -393,6 +401,30 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
   const usedFrames = mapped.map((m) => m.frame).filter(Boolean) as FigmaFrame[];
   const rendered = await renderAll(cfg, usedFrames);
 
+  const figmaTrees = new Map<string, FigmaGeomTree>();
+  let figmaFetchNote: string | undefined;
+  if (cfg.figma && cfg.figmaToken) {
+    const ids = [...new Set(mapped.map((m) => m.figmaNodeId).filter((id): id is string => Boolean(id)))];
+    if (!ids.length) figmaFetchNote = 'Không có frame đã ghép — không so Figma ↔ DOM.';
+    else {
+      for (const id of ids) {
+        try {
+          const raw = await fetchFigmaSubtree(cfg.figma, id, cfg.figmaToken);
+          const tree = flattenFigmaTree(raw, id);
+          if (tree) {
+            figmaTrees.set(id, tree);
+            log(`Figma cây "${tree.frameName}": ${tree.nodes.length} node so được`);
+          }
+        } catch (e: any) {
+          log(`Figma cây ${id}: ${e?.message ?? e}`);
+        }
+      }
+      if (!figmaTrees.size) figmaFetchNote = 'Không lấy được cây node Figma.';
+    }
+  } else {
+    figmaFetchNote = cfg.figma ? 'FIGMA_TOKEN trống — không so Figma ↔ DOM.' : 'Không có link Figma — không so node.';
+  }
+
   const provider = createProvider(cfg);
   resetAiCircuit(Boolean(cfg.aiFast));
   // Check the key and the model choice before spending a run discovering they cannot work.
@@ -474,6 +506,180 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
     const wrongLang = allOccurrences.filter((o) => !o.finding.measured && looksNonVietnamese(o.finding)).length;
     if (wrongLang) log(`⚠ ${wrongLang}/${aiFindingCount} nhận xét KHÔNG phải tiếng Việt — model đang bỏ qua yêu cầu ngôn ngữ. Nội dung vẫn giữ, nhưng nên đổi model.`);
 
+    // ---- geometry candidates (rank → crop → optional AI judge). Raw JSON stays on disk.
+    progressSay('Đo geometry + consistency', 'wrap');
+    const geomByKind = new Map<string, { raw: number; strong: number; valid: number; rejected: number; uncertain: number }>();
+    for (const cap of GEOMETRY_CAPABILITIES) geomByKind.set(cap.id, { raw: 0, strong: 0, valid: 0, rejected: 0, uncertain: 0 });
+    const geomOcc: Occurrence[] = [];
+    let geomJudgeCalls = 0;
+    const geomAuditRows: GeomAuditRow[] = [];
+    const geomAuditBatches: Array<{
+      page: string;
+      viewport: string;
+      truncated: boolean;
+      parseFailure: boolean;
+      extraIds: string[];
+      judgedIds: string[];
+      rawReply: string;
+    }> = [];
+    const figmaMatch = { frames: 0, pairs: 0, figmaText: 0, media: 0, ambiguous: 0 };
+    for (let i = 0; i < captured.length; i++) {
+      const r = captured[i];
+      const frameId = mapped[i]?.figmaNodeId;
+      const figma = frameId ? figmaTrees.get(frameId) : undefined;
+      for (const cap of r.caps) {
+        const raw = detectAllGeometry(cap.geometry, figma);
+        const ranked = rankCandidates(raw);
+        const match = figma ? matchFigmaToDom(cap.geometry, figma) : undefined;
+        if (match && cap.viewport === 'desktop') {
+          figmaMatch.frames++;
+          figmaMatch.pairs += match.stats.matched;
+          figmaMatch.figmaText += match.stats.figmaText;
+          figmaMatch.media += match.stats.media;
+          figmaMatch.ambiguous += match.stats.ambiguous;
+        }
+        for (const c of raw) {
+          const s = geomByKind.get(c.kind);
+          if (s) s.raw++;
+        }
+        const strong = strongCandidates(ranked);
+        for (const c of ranked) c.parseStatus = 'not-judged';
+        for (const c of strong) {
+          const s = geomByKind.get(c.kind);
+          if (s) s.strong++;
+        }
+        // One text batch per viewport — not a vision call per candidate.
+        let audit: JudgeBatchAudit | undefined;
+        const toJudge = provider && strong.length ? strong.slice(0, MAX_JUDGE_PER_PAGE) : [];
+        if (toJudge.length) {
+          progressSay(`Geometry judge ${toJudge.length} candidate · ${shortPath(r.page.url)}`, 'wrap');
+          geomJudgeCalls++;
+          try {
+            audit = await judgeBatchAudit(provider!, toJudge);
+          } catch (e: any) {
+            const why = String(e?.message ?? e).slice(0, 160);
+            audit = {
+              rawReply: '',
+              truncated: false,
+              parseFailure: true,
+              extraIds: [],
+              results: toJudge.map(() => ({
+                verdict: 'uncertain' as const,
+                reason: why,
+                parseStatus: 'parse-failure' as const,
+              })),
+            };
+          }
+          for (let n = 0; n < toJudge.length; n++) {
+            const c = toJudge[n];
+            const v = audit.results[n];
+            c.verdict = v?.verdict;
+            c.verdictWhy = v?.reason;
+            c.parseStatus = v?.parseStatus ?? 'parse-failure';
+          }
+        }
+        writeFileSync(
+          join(r.pageDir, `${cap.viewport}.candidates.json`),
+          JSON.stringify(
+            {
+              raw,
+              ranked,
+              judge: audit
+                ? {
+                    truncated: audit.truncated,
+                    parseFailure: audit.parseFailure,
+                    extraIds: audit.extraIds,
+                    judgedIds: toJudge.map((c) => c.id),
+                    rawReply: audit.rawReply,
+                  }
+                : undefined,
+              figma: match
+                ? {
+                    stats: match.stats,
+                    pairs: match.pairs.map((p) => ({
+                      score: p.score,
+                      figmaId: p.figma.id,
+                      figmaText: p.figma.text,
+                      locator: p.dom.locator,
+                    })),
+                    blocks: mapBlocks(cap.geometry, figma!, match.pairs),
+                  }
+                : undefined,
+            },
+            null,
+            2,
+          ),
+        );
+        if (audit) {
+          geomAuditBatches.push({
+            page: r.page.url,
+            viewport: cap.viewport,
+            truncated: audit.truncated,
+            parseFailure: audit.parseFailure,
+            extraIds: audit.extraIds,
+            judgedIds: toJudge.map((c) => c.id),
+            rawReply: audit.rawReply,
+          });
+        }
+        for (const c of ranked) {
+          geomAuditRows.push({
+            id: c.id,
+            kind: c.kind,
+            page: r.page.url,
+            viewport: cap.viewport,
+            locator: c.locator,
+            evidence: evidenceAuditLine(c),
+            summary: c.summary,
+            keep: Boolean(c.keep),
+            rank: c.rank,
+            verdict: c.verdict,
+            reason: c.verdictWhy ?? '',
+            parseStatus: c.parseStatus ?? 'not-judged',
+          });
+        }
+        const valid = attachCrops(
+          toJudge.filter((c) => c.verdict === 'valid'),
+          cap.file,
+          runDir,
+          r.pageDir,
+          cap.viewport,
+        );
+        let vi = 0;
+        for (const c of toJudge) {
+          const s = geomByKind.get(c.kind);
+          if (s && c.verdict === 'valid') s.valid++;
+          else if (s && c.verdict === 'rejected') s.rejected++;
+          else if (s && c.verdict === 'uncertain') s.uncertain++;
+          if (c.verdict !== 'valid') continue;
+          const cropped = valid[vi++];
+          geomOcc.push({
+            url: r.page.url,
+            viewport: cap.viewport,
+            finding: {
+              title: c.summary.slice(0, 140),
+              severity: (c.rank ?? 0) >= 0.7 ? 'minor' : 'note',
+              detail: `${c.summary}${c.verdictWhy ? ` — ${c.verdictWhy}` : ''}. locator ${c.locator}; value ${c.evidence.value}; median nhóm ${c.evidence.groupMedian}; Δ ${c.evidence.delta}.`,
+              anchors: [c.locator, ...c.evidence.peers.slice(0, 2).map((p) => p.locator)],
+              y: c.box.y,
+              locatedHow: `geometry: ${c.kind}`,
+              measured: true,
+              crop: cropped?.crop,
+            },
+          });
+        }
+      }
+    }
+    writeGeometryAudit(runDir, geomAuditRows, geomAuditBatches);
+    allOccurrences.push(...geomOcc);
+    const geomRaw = [...geomByKind.values()].reduce((n, s) => n + s.raw, 0);
+    const geomStrong = [...geomByKind.values()].reduce((n, s) => n + s.strong, 0);
+    if (geomRaw) {
+      log(
+        `geometry: ${geomOcc.length} valid / ${geomStrong} strong / ${geomRaw} raw · ${geomJudgeCalls} lần judge (text, không ảnh, tối đa ${MAX_JUDGE_PER_PAGE}/viewport)`,
+      );
+    }
+    progressTick('Xong geometry', 'wrap');
+
     // ---- one finding per defect
     const grouped = groupFindings(allOccurrences, shared);
 
@@ -551,6 +757,39 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
       drift,
       authHow: cfg.authState?.how,
       coverage: { ran: urls.length, seen: seenKeys.size },
+      geometry: {
+        capabilities: GEOMETRY_CAPABILITIES.map((cap) => {
+          const s = geomByKind.get(cap.id) ?? { raw: 0, strong: 0, valid: 0, rejected: 0, uncertain: 0 };
+          if (cap.id === 'figma-dom' && !figmaTrees.size) {
+            return {
+              id: cap.id,
+              label: cap.label,
+              status: 'not-tested' as const,
+              raw: 0,
+              strong: 0,
+              valid: 0,
+              note: figmaFetchNote ?? 'Không so Figma ↔ DOM.',
+            };
+          }
+          const matchNote =
+            cap.id === 'figma-dom'
+              ? `${figmaMatch.pairs} cặp chữ / ${figmaMatch.figmaText} text Figma · ${figmaMatch.media} ảnh neo chữ · ${figmaMatch.ambiguous} mơ hồ (desktop)`
+              : undefined;
+          return {
+            id: cap.id,
+            label: cap.label,
+            status: (s.raw === 0 ? 'no-finding' : 'checked') as 'checked' | 'no-finding',
+            raw: s.raw,
+            strong: s.strong,
+            valid: s.valid,
+            rejected: s.rejected,
+            uncertain: s.uncertain,
+            note:
+              matchNote ??
+              (s.raw && !s.valid ? `${s.raw} candidate, 0 valid sau rank/judge` : undefined),
+          };
+        }),
+      },
     };
   } finally {
     await browser.close().catch(() => {});
@@ -573,4 +812,73 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
     `xong trong ${((Date.now() - t0) / 1000).toFixed(0)}s — ${report.pages.length} trang, ${openFindings(report).length} lỗi (${openFindings(report).filter((f) => f.scope === 'template').length} dùng chung), ${changed} trang khác bản duyệt`,
   );
   return { runDir, reportPath, stamp, report };
+}
+
+interface GeomAuditRow {
+  id: string;
+  kind: string;
+  page: string;
+  viewport: string;
+  locator: string;
+  evidence: string;
+  summary: string;
+  keep: boolean;
+  rank?: number;
+  verdict?: JudgeVerdict;
+  reason: string;
+  parseStatus: ParseStatus;
+}
+
+function evidenceAuditLine(c: Candidate): string {
+  const e = c.evidence;
+  return `value ${e.value} · median ${e.groupMedian} · Δ ${e.delta} · ${e.howGrouped}`;
+}
+
+function csvCell(v: string): string {
+  if (/[",\n\r]/.test(v)) return `"${v.replace(/"/g, '""')}"`;
+  return v;
+}
+
+function writeGeometryAudit(
+  runDir: string,
+  rows: GeomAuditRow[],
+  batches: Array<{
+    page: string;
+    viewport: string;
+    truncated: boolean;
+    parseFailure: boolean;
+    extraIds: string[];
+    judgedIds: string[];
+    rawReply: string;
+  }>,
+) {
+  const byParse: Record<string, number> = {};
+  const byVerdict: Record<string, number> = {};
+  for (const r of rows) {
+    byParse[r.parseStatus] = (byParse[r.parseStatus] ?? 0) + 1;
+    const v = r.verdict ?? '—';
+    byVerdict[v] = (byVerdict[v] ?? 0) + 1;
+  }
+  writeFileSync(
+    join(runDir, 'geometry-audit.json'),
+    JSON.stringify({ summary: { byParseStatus: byParse, byVerdict }, rows, batches }, null, 2),
+  );
+  const header = ['candidate', 'detector', 'page', 'viewport', 'evidence', 'judge verdict', 'judge reason', 'parse status'];
+  const lines = [
+    header.join(','),
+    ...rows.map((r) =>
+      [
+        csvCell(r.id),
+        csvCell(r.kind),
+        csvCell(r.page),
+        csvCell(r.viewport),
+        csvCell(`${r.evidence} · ${r.summary}`),
+        csvCell(r.verdict ?? ''),
+        csvCell(r.reason),
+        csvCell(r.parseStatus),
+      ].join(','),
+    ),
+  ];
+  writeFileSync(join(runDir, 'geometry-audit.csv'), lines.join('\n') + '\n');
+  log(`geometry audit: ${rows.length} candidate → geometry-audit.csv`);
 }

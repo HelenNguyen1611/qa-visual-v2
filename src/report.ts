@@ -82,6 +82,20 @@ export interface RunReport {
   authHow?: string;
   /** this batch vs every URL of the same site that has appeared in any run */
   coverage?: { ran: number; seen: number };
+  /** Geometry + consistency capabilities — never "ổn" when a capability was not actually run. */
+  geometry?: { capabilities: GeometryCapability[] };
+}
+
+export interface GeometryCapability {
+  id: string;
+  label: string;
+  status: 'checked' | 'no-finding' | 'not-tested';
+  raw: number;
+  strong: number;
+  valid: number;
+  rejected?: number;
+  uncertain?: number;
+  note?: string;
 }
 
 const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
@@ -238,7 +252,7 @@ export function renderReport(r: RunReport, stamp?: string): string {
         <td class="c tnum">${f.num}</td>
         <td><a href="#f${f.num}">${esc(f.title)}</a>${f.isNew === true ? ' <span class="chip new">mới</span>' : ''}${
           f.measured ? ' <span class="chip meas">đo được</span>' : ''
-        }</td>
+        }${f.locatedHow?.startsWith('geometry:') ? ' <span class="chip geom">geometry</span>' : ''}</td>
         <td><span class="chip ${f.severity}">${SEV[f.severity]}</span></td>
         <td>${f.scope === 'template' ? '<span class="chip tpl">dùng chung</span>' : '<span class="tiny">riêng trang</span>'}</td>
         ${VP_COLS.map((v) => `<td class="c ${f.viewports.includes(v) ? 'yes' : 'no'}">${f.viewports.includes(v) ? '●' : '·'}</td>`).join('')}
@@ -283,6 +297,7 @@ export function renderReport(r: RunReport, stamp?: string): string {
       <div class="chips">
         <span class="chip ${f.severity}">${SEV[f.severity]}</span>
         ${f.measured ? `<span class="chip meas" title="${esc(f.locatedHow ?? '')}">đo được</span>` : `<span class="chip quiet">AI nhận xét</span>`}
+        ${f.locatedHow?.startsWith('geometry:') ? `<span class="chip geom">geometry · ${esc((f.locatedHow ?? '').slice(10))}</span>` : ''}
         ${f.scope === 'template' ? `<span class="chip tpl">component dùng chung</span>` : ''}
         ${f.viewports.map((v) => `<span class="chip">${v}</span>`).join('')}
         ${f.isNew === true ? `<span class="chip new">mới</span>` : f.isNew === false ? `<span class="chip">vẫn còn từ lần trước</span>` : ''}
@@ -415,6 +430,10 @@ h2:not(:has(+.lead)){margin-bottom:14px}
 .chip.new{background:var(--ok-bg);border-color:transparent;color:var(--ok);font-weight:600}
 /* Proved by measurement. Deliberately plain: it is a fact about the finding, not a severity. */
 .chip.meas{border-color:var(--ok);color:var(--ok);font-weight:600}
+.chip.geom{border-color:var(--tpl);color:var(--tpl)}
+.chip.checked{border-color:var(--ok);color:var(--ok)}
+.chip.nofind{border-color:var(--mute);color:var(--mute)}
+.chip.untested{border-style:dashed;color:var(--faint)}
 /* Written by a person, so it must not look like one more generated panel. */
 .humannote{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--ok);
   border-radius:12px;padding:16px 18px;font-size:14.5px;line-height:1.65;white-space:pre-wrap}
@@ -585,6 +604,27 @@ ${
     </div>
   </div>
 </section>
+
+${
+  r.geometry?.capabilities?.length
+    ? `<section>
+  <h2>Geometry + consistency</h2>
+  <p class="lead">Trạng thái từng khả năng. <b>not tested</b> nghĩa là chưa chạy — không phải “ổn”.</p>
+  <div class="tablewrap">
+  <table class="grid">
+    <thead><tr><th>Khả năng</th><th>Trạng thái</th><th class="c">raw</th><th class="c">strong</th><th class="c">valid</th><th>Ghi chú</th></tr></thead>
+    <tbody>${r.geometry.capabilities
+      .map((c) => {
+        const st =
+          c.status === 'checked' ? '<span class="chip checked">checked</span>' : c.status === 'no-finding' ? '<span class="chip nofind">no finding</span>' : '<span class="chip untested">not tested</span>';
+        return `<tr><td>${esc(c.label)}</td><td>${st}</td><td class="c tnum">${c.raw}</td><td class="c tnum">${c.strong}</td><td class="c tnum">${c.valid}</td><td class="tiny">${esc(c.note ?? '')}</td></tr>`;
+      })
+      .join('')}</tbody>
+  </table>
+  </div>
+</section>`
+    : ''
+}
 
 ${
   open.length

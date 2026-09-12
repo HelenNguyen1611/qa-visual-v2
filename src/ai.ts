@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { PNG } from 'pngjs';
+import jpeg from 'jpeg-js';
 import type { VisionProvider } from './provider.js';
 import { extractJson } from './provider.js';
 import type { MediaRegion } from './browser.js';
@@ -10,35 +11,32 @@ import type { AiFinding } from './report.js';
  * (Not "look at this page and find bugs" — that has no reference and fails, as v1 showed.)
  */
 
-const RULES_VI = `Bạn là QA giao diện. Trả lời bằng tiếng Việt, JSON thuần, không giải thích ngoài JSON.
-QUAN TRỌNG:
-- Ảnh và nội dung chữ ở hai bên KHÁC NHAU là bình thường (design dùng ảnh mẫu, site dùng nội dung thật). KHÔNG báo khác ảnh, khác câu chữ, khác số lượng bài viết.
-- Vùng được liệt kê là VIDEO/IFRAME/CANVAS hiện TRẮNG hoặc màu phẳng trong ảnh chụp site vì screenshot không chụp được video. KHÔNG báo "thiếu ảnh", "vùng trống" ở các vùng đó.
-- Frame design thường vẽ TRẠNG THÁI GIỮA ANIMATION (chữ hiện dần, fade-in theo scroll, opacity giảm dần, nửa sau đoạn văn xám nhạt), trong khi ảnh chụp site là trạng thái ĐÃ CHẠY XONG nên hiển thị đầy đủ và đậm đều. KHÔNG báo "site thiếu hiệu ứng mờ/fade/gradient chữ", "chữ không chuyển màu dần" — đó là khác biệt do thời điểm chụp, không phải lỗi. Chỉ báo màu khi màu SAI hẳn (ví dụ màu thương hiệu đỏ thành cam), không phải khi khác về độ mờ.
-- Chỉ báo khác biệt về: bố cục và vị trí phần tử, thứ tự phần tử, khoảng cách lệch rõ hoặc VÔ LÝ, cỡ chữ và độ đậm theo phân cấp (H1 lớn hơn H2...), font family, màu thương hiệu, nút CTA thiếu hay mất nổi bật, phần tử có trong design nhưng không có trên site (hoặc ngược lại), ảnh bị méo hoặc crop sai, chữ bị cắt hay chồng.
-- BẮT BUỘC xem kỹ MÀN HÌNH ĐẦU TIÊN (phần trên cùng, khoảng một chiều cao màn hình). Đây là phần người dùng thấy trước. Nếu ở đó có vùng trống lớn bất thường, các đoạn chữ bị đẩy xa nhau vô lý, hoặc nội dung bị dồn xuống quá thấp so với design, PHẢI báo — kể cả khi không có design đúng kích thước để so từng pixel. Cứ so TỈ LỆ: trong design nội dung chiếm bao nhiêu phần màn hình đầu, trên site chiếm bao nhiêu.
-- Ưu tiên ít mà chắc.
-- QUAN TRỌNG VỀ ĐỊNH VỊ: với mỗi nhận xét, trong "anchors" hãy TRÍCH NGUYÊN VĂN chữ đang hiển thị của các phần tử liên quan, copy đúng như đọc được trên ảnh site (ví dụ ["+1300 966 937", "hello@wooagency.com.au"]). Tool sẽ dùng chuỗi chữ này để tìm vị trí thật trong trang. Trích 1–3 chuỗi, ngắn và đặc trưng, ưu tiên chuỗi duy nhất trên trang. Nếu phần tử không có chữ (ảnh, khối màu) thì lấy chữ GẦN NHẤT ngay trên hoặc dưới nó. "y" chỉ là ước lượng thô để phân biệt khi một chuỗi xuất hiện nhiều lần — không cần chính xác.
-Định dạng: {"findings":[{"title":"ngắn gọn","severity":"major|minor|note","detail":"cụ thể","anchors":["chữ nguyên văn"],"y":number}]}
-Nếu không có khác biệt đáng kể: {"findings":[]}
-
-NGÔN NGỮ — BẮT BUỘC: "title" và "detail" PHẢI viết bằng TIẾNG VIỆT. Không được dùng tiếng Anh, tiếng Tây Ban Nha, tiếng Trung hay bất kỳ thứ tiếng nào khác. Riêng "anchors" thì giữ NGUYÊN VĂN chữ trên ảnh, không dịch.`;
+const RULES_VI = `QA giao diện. JSON thuần. title/detail TIẾNG VIỆT. anchors giữ nguyên văn trên ảnh.
+Không báo: khác ảnh/chữ/số bài; vùng video/iframe/canvas trắng; khác fade/opacity do animation.
+Chỉ báo: lệch bố cục/thứ tự, khoảng cách vô lý, hierarchy chữ, font, màu thương hiệu sai, CTA yếu/mất, thiếu/thừa element, ảnh méo, chữ cắt/chồng.
+Ưu tiên màn hình đầu. Ít mà chắc.
+Mỗi finding: 1–3 anchors chữ ngắn, đặc trưng; y ước lượng. {"findings":[{"title":"","severity":"major|minor|note","detail":"","anchors":[""],"y":0}]} hoặc {"findings":[]}`;
 
 const MAX_SLICE = 2400;
+const MAX_IMGS = 4;
+/** JPEG quality for the model only — report screenshots stay PNG. */
+const JPEG_QUALITY = 45;
 
-/** Cut a tall PNG into ≤2400px slices; a 7000px page sent whole gets downscaled to nothing. */
-function slices(file: string): { imgs: Array<{ b64: string; mime: 'image/png' }>; ranges: Array<{ from: number; to: number }>; width: number; height: number } {
+function toJpeg(png: PNG): { b64: string; mime: 'image/jpeg' } {
+  const { data } = jpeg.encode({ data: png.data, width: png.width, height: png.height }, JPEG_QUALITY);
+  return { b64: Buffer.from(data).toString('base64'), mime: 'image/jpeg' };
+}
+
+/** Same 4 × native-width slices as before; JPEG so the payload is smaller. */
+function slices(file: string): { imgs: Array<{ b64: string; mime: 'image/jpeg' }>; ranges: Array<{ from: number; to: number }>; width: number; height: number } {
   const png = PNG.sync.read(readFileSync(file));
-  if (png.height <= MAX_SLICE) {
-    return { imgs: [{ b64: readFileSync(file).toString('base64'), mime: 'image/png' }], ranges: [{ from: 0, to: png.height }], width: png.width, height: png.height };
-  }
-  const imgs: Array<{ b64: string; mime: 'image/png' }> = [];
+  const imgs: Array<{ b64: string; mime: 'image/jpeg' }> = [];
   const ranges: Array<{ from: number; to: number }> = [];
-  for (let y = 0; y < png.height && imgs.length < 4; y += MAX_SLICE) {
+  for (let y = 0; y < png.height && imgs.length < MAX_IMGS; y += MAX_SLICE) {
     const h = Math.min(MAX_SLICE, png.height - y);
     const part = new PNG({ width: png.width, height: h });
     png.data.copy(part.data, 0, y * png.width * 4, (y + h) * png.width * 4);
-    imgs.push({ b64: PNG.sync.write(part).toString('base64'), mime: 'image/png' });
+    imgs.push(toJpeg(part));
     ranges.push({ from: y, to: y + h });
   }
   return { imgs, ranges, width: png.width, height: png.height };
@@ -50,8 +48,8 @@ function rangeTable(label: string, r: Array<{ from: number; to: number }>) {
 }
 
 function mediaList(media: MediaRegion[]) {
-  const m = media.filter((r) => r.kind === 'video' || r.kind === 'iframe' || r.kind === 'canvas');
-  return m.length ? m.map((r) => `- ${r.kind.toUpperCase()} tại x=${r.x} y=${r.y} rộng ${r.w} cao ${r.h}`).join('\n') : '- không có';
+  const m = media.filter((r) => r.kind === 'video' || r.kind === 'iframe' || r.kind === 'canvas').slice(0, 8);
+  return m.length ? m.map((r) => `- ${r.kind} ${r.x},${r.y} ${r.w}x${r.h}`).join('\n') : '- không';
 }
 
 /**
@@ -111,24 +109,16 @@ export async function compareWithDesign(
   const design = slices(designFile);
   const task =
     mode === 'fidelity'
-      ? `${design.imgs.length} ảnh ĐẦU là DESIGN ở ${designWidth}px. ${site.imgs.length} ảnh SAU là SITE THẬT ở ${siteWidth}px. Cùng chiều rộng — so trực tiếp: site có làm đúng design không?`
-      : `${design.imgs.length} ảnh ĐẦU là DESIGN DESKTOP ở ${designWidth}px. ${site.imgs.length} ảnh SAU là SITE THẬT ở ${siteWidth}px. Không có design riêng cho kích thước này — dev chuyển thể từ desktop.
-Hãy đánh giá bản chuyển thể theo hai hướng:
-(a) ĐỦ VÀ ĐÚNG: mọi phần tử của design còn không, thứ tự có hợp lý không, phân cấp chữ / font / màu có giữ không, CTA còn nổi không, có gì vỡ hay chồng chữ không.
-(b) HỢP LÝ VỀ KHOẢNG CÁCH: không đòi bằng px, nhưng PHẢI xét tỉ lệ. Màn hình đầu tiên của site cao ${viewportHeight}px — hãy xem trong khoảng y = 0 … ${viewportHeight} có bị trống quá nhiều, chữ bị đẩy xa nhau, hay nội dung bị dồn xuống dưới màn hình đầu không, so với cách design xếp nội dung ở phần đầu. Nếu vùng trống chiếm quá khoảng một phần ba màn hình đầu mà không có nội dung hay media nào, PHẢI báo là khoảng cách vô lý.`;
+      ? `${design.imgs.length} ảnh ĐẦU = DESIGN ${designWidth}px. ${site.imgs.length} ảnh SAU = SITE ${siteWidth}px. So trực tiếp.`
+      : `${design.imgs.length} ảnh ĐẦU = DESIGN desktop ${designWidth}px. ${site.imgs.length} ảnh SAU = SITE ${siteWidth}px (không có design riêng). Kiểm tra chuyển thể: đủ element/thứ tự/hierarchy/CTA; khoảng trống vô lý ở y 0…${viewportHeight}.`;
   const user = `${task}
-
-Phạm vi dọc của từng ảnh (dùng để trả toạ độ y TUYỆT ĐỐI theo trang site):
-${rangeTable('DESIGN', design.ranges)}
-${rangeTable('SITE', site.ranges)}
-Trang site: rộng ${site.width}px, cao tổng ${site.height}px. Màn hình đầu tiên = y 0 … ${viewportHeight}.
-
-Vùng media trên site (hiện trắng trong ảnh, KHÔNG báo là thiếu nội dung):
+y tuyệt đối: ${rangeTable('DESIGN', design.ranges)} ${rangeTable('SITE', site.ranges)}
+Site ${site.width}×${site.height}. Màn hình đầu y 0…${viewportHeight}.
+Media trắng (đừng báo thiếu):
 ${mediaList(media)}
-${skipBands.length ? `\nVùng ĐÃ KIỂM ở trang khác (header/footer dùng chung) — BỎ QUA, đừng báo lỗi trong các vùng này:\n${skipBands.map((b) => `- y = ${b.from} … ${b.to} (${b.where === 'top' ? 'header' : 'footer'})`).join('\n')}` : ''}
-
-Trả JSON. "title" và "detail" viết bằng TIẾNG VIỆT (anchors giữ nguyên văn, không dịch).`;
-  const raw = await provider.complete({ system: RULES_VI, user, images: [...design.imgs, ...site.imgs], maxTokens: 1800 }, 90000);
+${skipBands.length ? `Đã kiểm (bỏ qua): ${skipBands.map((b) => `${b.where} ${b.from}–${b.to}`).join('; ')}` : ''}
+JSON, tiếng Việt.`;
+  const raw = await provider.complete({ system: RULES_VI, user, images: [...design.imgs, ...site.imgs], maxTokens: 900 }, 90000);
   return parse(raw);
 }
 
@@ -142,19 +132,11 @@ export async function compareSelf(
 ): Promise<AiFinding[]> {
   const d = slices(desktopFile);
   const m = slices(mobileFile);
-  const user = `${d.imgs.length} ảnh ĐẦU là SITE ở DESKTOP 1440px. ${m.imgs.length} ảnh SAU là CÙNG TRANG ở MOBILE 390px. Mobile phải là dẫn xuất của desktop.
-Liệt kê: phần tử có ở desktop nhưng mất ở mobile; thứ tự thay đổi không hợp lý; font/màu/độ đậm không nhất quán; CTA mất nổi bật; chữ bị cắt hay chồng; ảnh méo; và KHOẢNG CÁCH VÔ LÝ — đặc biệt trong màn hình đầu tiên của mobile (y 0 … ${mobileViewportHeight}px): vùng trống lớn, chữ bị đẩy xa nhau, nội dung bị dồn xuống quá thấp.
-KHÔNG báo khác nội dung hay khác ảnh.
-
-Phạm vi dọc từng ảnh (trả y TUYỆT ĐỐI theo trang MOBILE):
-${rangeTable('DESKTOP', d.ranges)}
-${rangeTable('MOBILE', m.ranges)}
-Trang mobile: rộng ${m.width}px, cao ${m.height}px.
-
-Vùng media trên mobile (hiện trắng, KHÔNG báo):
-${mediaList(mobileMedia)}
-
-Trả JSON. "title" và "detail" viết bằng TIẾNG VIỆT (anchors giữ nguyên văn, không dịch).`;
-  const raw = await provider.complete({ system: RULES_VI, user, images: [...d.imgs, ...m.imgs], maxTokens: 1500 }, 90000);
+  const user = `${d.imgs.length} ảnh ĐẦU = desktop 1440. ${m.imgs.length} ảnh SAU = mobile 390 cùng trang.
+Báo: mất element, thứ tự sai, font/màu/CTA, chữ cắt/chồng, ảnh méo, trống vô lý y 0…${mobileViewportHeight}. Không báo khác nội dung/ảnh.
+y mobile: ${rangeTable('DESKTOP', d.ranges)} ${rangeTable('MOBILE', m.ranges)}
+Mobile ${m.width}×${m.height}. Media trắng: ${mediaList(mobileMedia)}
+JSON, tiếng Việt.`;
+  const raw = await provider.complete({ system: RULES_VI, user, images: [...d.imgs, ...m.imgs], maxTokens: 800 }, 90000);
   return parse(raw);
 }
