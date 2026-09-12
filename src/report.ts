@@ -165,6 +165,49 @@ const ACCEPT_SCRIPT = [
   '</script>',
 ].join('\n');
 
+/** Jump links + open a closed <details> when the hash points inside it. Runs on share files too. */
+const TOC_SCRIPT = [
+  '<script>',
+  '(function () {',
+  '  var nav = document.querySelector(".toc");',
+  '  if (!nav) return;',
+  '  function openTarget(id) {',
+  '    var el = id && document.getElementById(id);',
+  '    if (!el) return;',
+  '    if (el.tagName === "DETAILS") el.open = true;',
+  '    var wrap = el.closest && el.closest("details");',
+  '    if (wrap) wrap.open = true;',
+  '  }',
+  '  function fromHash() { openTarget((location.hash || "").replace(/^#/, "")); }',
+  '  fromHash();',
+  '  window.addEventListener("hashchange", fromHash);',
+  '  nav.addEventListener("click", function (ev) {',
+  '    var a = ev.target.closest && ev.target.closest(\'a[href^="#"]\');',
+  '    if (!a) return;',
+  '    openTarget((a.getAttribute("href") || "").slice(1));',
+  '  });',
+  '  var map = {};',
+  '  nav.querySelectorAll(\'a[href^="#"]\').forEach(function (a) {',
+  '    var id = (a.getAttribute("href") || "").slice(1);',
+  '    if (id && document.getElementById(id)) map[id] = a;',
+  '  });',
+  '  var ids = Object.keys(map);',
+  '  if (!ids.length || !("IntersectionObserver" in window)) return;',
+  '  var current = "";',
+  '  var io = new IntersectionObserver(function (entries) {',
+  '    var vis = entries.filter(function (e) { return e.isIntersecting; })',
+  '      .sort(function (a, b) { return a.boundingClientRect.top - b.boundingClientRect.top; });',
+  '    if (!vis.length) return;',
+  '    var id = vis[0].target.id;',
+  '    if (id === current) return;',
+  '    current = id;',
+  '    ids.forEach(function (k) { if (map[k]) map[k].toggleAttribute("aria-current", k === id); });',
+  '  }, { rootMargin: "-20% 0px -60% 0px", threshold: 0 });',
+  '  ids.forEach(function (id) { io.observe(document.getElementById(id)); });',
+  '})();',
+  '</script>',
+].join('\n');
+
 export function renderReport(r: RunReport, stamp?: string): string {
   const host = (() => {
     try {
@@ -237,11 +280,11 @@ export function renderReport(r: RunReport, stamp?: string): string {
       .map(
         (f) => `<tr>
         <td class="c tnum">${f.num}</td>
-        <td><a href="#f${f.num}">${esc(f.title)}</a>${f.isNew === true ? ' <span class="chip new">new</span>' : ''}${
-          f.measured ? ' <span class="chip meas">measured</span>' : ''
+        <td><a href="#f${f.num}">${esc(f.title)}</a>${f.isNew === true ? ' <span class="mark">new</span>' : ''}${
+          f.measured ? ' <span class="tiny">measured</span>' : ''
         }</td>
-        <td><span class="chip ${f.severity}">${SEV[f.severity]}</span></td>
-        <td>${f.scope === 'template' ? '<span class="chip tpl">shared</span>' : '<span class="tiny">page-only</span>'}</td>
+        <td class="${f.severity}">${SEV[f.severity]}</td>
+        <td class="tiny">${f.scope === 'template' ? 'shared' : 'page'}</td>
         ${VP_COLS.map((v) => `<td class="c ${f.viewports.includes(v) ? 'yes' : 'no'}">${f.viewports.includes(v) ? '●' : '·'}</td>`).join('')}
         <td class="c tnum">${f.pages.length}/${r.pages.length}</td>
       </tr>`,
@@ -265,30 +308,16 @@ export function renderReport(r: RunReport, stamp?: string): string {
         <span class="num">${f.num}</span>
         <h3>${esc(f.title)}</h3>
       </div>
-      <div class="acceptbox" data-num="${f.num}">
-        ${
-          f.accepted
-            ? `<p class="accepted"><b>Dismissed — false positive / intentional.</b> ${esc(f.acceptedWhy ?? '')}</p>`
-            : `<p class="acceptlab">Human check</p>`
-        }
-        <div class="acceptedit">
-          <label class="accepthint">${f.accepted ? 'Edit the reason, or undo if this is still a defect.' : 'If this is not a defect: write a reason and click Dismiss. Leave empty if it is a real issue.'}</label>
-          <textarea class="why" rows="2" placeholder="Reason / note, e.g. empty space is the right-column form, not a bug.">${f.accepted ? esc(f.acceptedWhy ?? '') : ''}</textarea>
-          <div class="acceptrow">
-            <button type="button" data-act="save">${f.accepted ? 'Update reason' : 'Dismiss this finding'}</button>
-            ${f.accepted ? `<button type="button" data-act="undo">Undo dismiss</button>` : ''}
-            <span class="acceptstate"></span>
-          </div>
-        </div>
-      </div>
-      <div class="chips">
-        <span class="chip ${f.severity}">${SEV[f.severity]}</span>
-        ${f.measured ? `<span class="chip meas" title="${esc(f.locatedHow ?? '')}">measured</span>` : `<span class="chip quiet">AI comment</span>`}
-        ${f.scope === 'template' ? `<span class="chip tpl">shared component</span>` : ''}
-        ${f.viewports.map((v) => `<span class="chip">${v}</span>`).join('')}
-        ${f.isNew === true ? `<span class="chip new">new</span>` : f.isNew === false ? `<span class="chip">still present</span>` : ''}
-        ${f.merged > 1 ? `<span class="chip quiet">merged from ${f.merged} comments</span>` : ''}
-      </div>
+      <p class="fmeta">${[
+        SEV[f.severity],
+        f.measured ? 'measured' : 'AI',
+        f.scope === 'template' ? 'shared' : null,
+        f.viewports.join(' · '),
+        f.isNew === true ? '<span class="mark">new</span>' : f.isNew === false ? 'still present' : null,
+        f.merged > 1 ? `merged ×${f.merged}` : null,
+      ]
+        .filter(Boolean)
+        .join(' · ')}</p>
       <p>${esc(f.detail)}</p>
       ${
         !f.crop && f.anchors?.length
@@ -300,6 +329,19 @@ export function renderReport(r: RunReport, stamp?: string): string {
           ? `On <b>${f.pages.length}/${r.pages.length} pages</b> — fix once and it is gone everywhere: ${f.pages.map((p) => `<code>${esc(path(p))}</code>`).join(' ')}`
           : `Pages: ${f.pages.map((p) => `<code>${esc(path(p))}</code>`).join(' ')}`
       }</p>
+      <details class="acceptbox" data-num="${f.num}"${f.accepted ? ' open' : ''}>
+        <summary>${f.accepted ? 'Dismissed — not counted' : 'Not a defect?'}</summary>
+        ${f.accepted ? `<p class="accepted">${esc(f.acceptedWhy ?? '')}</p>` : ''}
+        <div class="acceptedit">
+          <label class="accepthint">${f.accepted ? 'Edit the reason, or undo if this is still a defect.' : 'Write why, then dismiss. Leave closed if it is a real issue.'}</label>
+          <textarea class="why" rows="2" placeholder="e.g. empty space is the right-column form, not a bug.">${f.accepted ? esc(f.acceptedWhy ?? '') : ''}</textarea>
+          <div class="acceptrow">
+            <button type="button" data-act="save">${f.accepted ? 'Update reason' : 'Dismiss'}</button>
+            ${f.accepted ? `<button type="button" data-act="undo">Undo</button>` : ''}
+            <span class="acceptstate"></span>
+          </div>
+        </div>
+      </details>
     </div>
     ${
       f.crop
@@ -353,181 +395,203 @@ export function renderReport(r: RunReport, stamp?: string): string {
     </details>`;
   };
 
+  const hasOverflow = (r.sweeps ?? []).some((s) => s.breaks.length);
+  const toc: Array<{ href: string; label: string; count?: number }> = [
+    { href: '#top', label: 'Top' },
+    { href: '#notes', label: 'Notes' },
+  ];
+  if (open.length) toc.push({ href: '#findings', label: 'Index', count: open.length });
+  if (template.length) toc.push({ href: '#shared', label: 'Shared', count: template.length });
+  if (accepted.length) toc.push({ href: '#dismissed', label: 'Dismissed', count: accepted.length });
+  toc.push({ href: '#pages', label: 'Pages', count: r.pages.length });
+  if (hasOverflow) toc.push({ href: '#overflow', label: 'Overflow' });
+  toc.push({ href: '#tech', label: 'Tech' });
+  const tocNav = `<nav class="toc" aria-label="On this page"><span class="toc-label">On this page</span>${toc
+    .map((t) => `<a href="${t.href}">${esc(t.label)}${t.count != null ? ` <span class="n">${t.count}</span>` : ''}</a>`)
+    .join('')}</nav>`;
+
   return `<!doctype html><html lang="en"${stamp ? ` data-stamp="${esc(stamp)}"` : ''}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>QA Visual — ${esc(host)}</title>
 <style>
-/* Light by default, dark when the reader's system says so — a report gets opened at night too. */
+/* Woo 0862: paper, ink, one red mark. Red is the wordmark — not chrome. */
 :root{
-  --bg:#f7f8fa; --card:#fff; --ink:#15181d; --mute:#697280; --faint:#9aa3af;
-  --line:#e4e7ec; --line2:#eef0f4;
-  --bad:#b42318; --bad-bg:#fef3f2; --bad-line:#f6cfca;
-  --warn:#b45309; --warn-bg:#fffaeb; --warn-line:#fedf89;
-  --ok:#067647; --ok-bg:#ecfdf3;
-  --tpl:#6941c6; --link:#1f6feb;
-}
-@media (prefers-color-scheme: dark){
-  :root{
-    --bg:#0f1216; --card:#171b21; --ink:#e6e9ee; --mute:#98a2b3; --faint:#6b7480;
-    --line:#252a32; --line2:#1e232a;
-    --bad:#fda29b; --bad-bg:#2a1614; --bad-line:#5a2521;
-    --warn:#fec84b; --warn-bg:#2a2014; --warn-line:#5a4321;
-    --ok:#6ce9a6; --ok-bg:#0f2a1d;
-    --tpl:#c3b5fd; --link:#84b6ff;
-  }
+  --bg:#fff; --card:#fff; --ink:#111; --mute:#6a6a6a; --faint:#8c8c8c;
+  --line:#e6e6e6; --line2:#f0f0f0; --wash:#fafafa;
+  --red:#ff021f; --gold:#b8924a;
+  --bad:#ff021f; --warn:#8a6a2a;
+  --ok:#111; --link:#111;
+  --font:"Helvetica Neue",Helvetica,Arial,sans-serif;
 }
 *{box-sizing:border-box}
-html{-webkit-text-size-adjust:100%}
+html{-webkit-text-size-adjust:100%;scroll-padding-top:48px}
 body{margin:0;background:var(--bg);color:var(--ink);
-  font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",sans-serif}
-a{color:var(--link)}
-main{max-width:940px;margin:0 auto;padding:0 20px 80px}
+  font:400 15px/1.5 var(--font);-webkit-font-smoothing:antialiased}
+a{color:var(--link);text-decoration-thickness:1px;text-underline-offset:2px}
+a:hover{color:var(--red)}
+main{max-width:960px;margin:0 auto;padding:0 24px 96px}
+header,section,details.tech,.find{scroll-margin-top:56px}
+
+/* Jump list: quiet text. Pills were the AI look. */
+.toc{position:sticky;top:0;z-index:20;display:flex;gap:18px;align-items:center;
+  overflow-x:auto;flex-wrap:nowrap;padding:12px 20px;background:var(--bg);
+  border-bottom:1px solid var(--line);-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.toc::-webkit-scrollbar{display:none}
+.toc .toc-label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+.toc a{flex:0 0 auto;font-size:13px;font-weight:400;line-height:1.4;
+  padding:0;border:0;text-decoration:none;color:var(--faint);white-space:nowrap}
+.toc a .n{margin-left:4px}
+.toc a[aria-current="true"]{color:var(--ink)}
+@media (min-width:1100px){
+  html{scroll-padding-top:16px}
+  header,section,details.tech,.find{scroll-margin-top:16px}
+  body{padding-left:176px}
+  .toc{position:fixed;left:0;top:0;bottom:0;width:176px;flex-direction:column;align-items:flex-start;
+    gap:10px;overflow-x:hidden;overflow-y:auto;padding:40px 28px;
+    border-bottom:0;border-right:1px solid var(--line)}
+  .toc a{font-size:13px}
+}
 
 /* ---------------------------------- head --------------------------------- */
-header{padding:34px 20px 0;max-width:940px;margin:0 auto}
-.brand{font-size:12px;letter-spacing:.10em;text-transform:uppercase;color:var(--faint);font-weight:600}
-h1{font-size:30px;line-height:1.2;margin:14px 0 2px;letter-spacing:-.02em}
-h1.ok{color:var(--ok)} h1.warn{color:var(--warn)} h1.bad{color:var(--bad)}
+header{padding:40px 24px 0;max-width:960px;margin:0 auto}
+.brand{font-size:12px;color:var(--faint);font-weight:400}
+.brand b{color:var(--red);font-weight:500}
+h1{font-size:28px;line-height:1.25;margin:16px 0 6px;letter-spacing:-.02em;font-weight:500;color:var(--ink)}
+h1.ok,h1.warn,h1.bad{color:var(--ink)}
 .verdict-sub{color:var(--mute);font-size:15px}
-.runmeta{color:var(--faint);font-size:13px;margin:16px 0 0;padding-bottom:22px;border-bottom:1px solid var(--line)}
-.runmeta b{color:var(--mute);font-weight:600}
+.runmeta{color:var(--faint);font-size:13px;margin:18px 0 0;padding-bottom:28px;border-bottom:1px solid var(--line)}
+.runmeta b{color:var(--mute);font-weight:500}
 
 /* -------------------------------- sections ------------------------------- */
-section{margin:34px 0 0}
-h2{font-size:17px;margin:0 0 4px;letter-spacing:-.01em}
-h2+.lead{color:var(--mute);font-size:13.5px;margin:0 0 14px}
-h2:not(:has(+.lead)){margin-bottom:14px}
+section{margin:48px 0 0}
+h2{font-size:18px;margin:0 0 6px;letter-spacing:-.015em;font-weight:500}
+h2+.lead{color:var(--mute);font-size:14px;margin:0 0 20px}
+h2:not(:has(+.lead)){margin-bottom:20px}
 
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px}
-.pad{padding:16px 18px}
+.card{background:var(--card);border-top:1px solid var(--line);border-radius:0}
+.pad{padding:16px 0}
 
 /* --------------------------------- banners ------------------------------- */
-.alert,.fatal{border-radius:10px;padding:12px 14px;font-size:13.5px;margin:0 0 12px}
-.alert{background:var(--warn-bg);border:1px solid var(--warn-line);color:var(--warn)}
-.fatal{background:var(--bad-bg);border:1px solid var(--bad-line);color:var(--bad)}
-.alert b,.fatal b{color:inherit}
-.alert ul,.fatal ul{margin:6px 0 0;padding-left:20px}
+.alert,.fatal{border-radius:0;padding:0 0 0 14px;font-size:14px;margin:0 0 16px;
+  border:0;border-left:2px solid var(--line);background:transparent;color:var(--ink)}
+.alert{border-left-color:var(--gold)}
+.fatal{border-left-color:var(--red)}
+.alert b,.fatal b{color:inherit;font-weight:500}
+.alert ul,.fatal ul{margin:6px 0 0;padding-left:18px}
 
-/* ---------------------------------- chips -------------------------------- */
-.chip{display:inline-block;font-size:11.5px;line-height:18px;padding:0 8px;border-radius:999px;
-  border:1px solid var(--line);color:var(--mute);white-space:nowrap;background:var(--card)}
-.chip.major{border-color:var(--bad);color:var(--bad)}
-.chip.minor{border-color:var(--warn);color:var(--warn)}
-.chip.tpl{border-color:var(--tpl);color:var(--tpl);font-weight:600}
-.chip.new{background:var(--ok-bg);border-color:transparent;color:var(--ok);font-weight:600}
-/* Proved by measurement. Deliberately plain: it is a fact about the finding, not a severity. */
-.chip.meas{border-color:var(--ok);color:var(--ok);font-weight:600}
-/* Written by a person, so it must not look like one more generated panel. */
-.humannote{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--ok);
-  border-radius:12px;padding:16px 18px;font-size:14.5px;line-height:1.65;white-space:pre-wrap}
-.chip.quiet{border-style:dashed;color:var(--faint)}
-.chips{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px}
+.mark{color:var(--red);font-size:12px;font-weight:500}
+.humannote{padding:4px 0;font-size:15px;line-height:1.55;white-space:pre-wrap}
 
 /* ---------------------------------- table -------------------------------- */
-.tablewrap{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow-x:auto}
-table.grid{width:100%;min-width:660px;border-collapse:collapse;font-size:13.5px}
-table.grid th{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line);
-  font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);font-weight:600;vertical-align:bottom}
-table.grid td{padding:11px 12px;border-bottom:1px solid var(--line2);vertical-align:middle}
-table.grid tr:last-child td{border-bottom:0}
+.tablewrap{background:var(--card);overflow-x:auto}
+table.grid{width:100%;min-width:660px;border-collapse:collapse;font-size:14px}
+table.grid th{text-align:left;padding:10px 8px;border-bottom:1px solid var(--line);
+  font-size:12px;color:var(--faint);font-weight:400;vertical-align:bottom}
+table.grid td{padding:12px 8px;border-bottom:1px solid var(--line2);vertical-align:middle}
+table.grid tr:last-child td{border-bottom:1px solid var(--line)}
 table.grid th.c,table.grid td.c{text-align:center}
-table.grid td.yes{color:var(--bad);font-size:16px;line-height:1}
-table.grid td.no{color:var(--line);font-size:16px;line-height:1}
-table.grid td.tnum{color:var(--mute);font-variant-numeric:tabular-nums;font-size:12.5px}
-table.grid td a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--line)}
-table.grid td a:hover{color:var(--link);border-bottom-color:var(--link)}
-.note{font-size:12px;color:var(--faint);margin:0;padding:10px 12px;border-top:1px solid var(--line2)}
+table.grid td.yes{color:var(--ink);font-size:14px;line-height:1}
+table.grid td.no{color:var(--line);font-size:14px;line-height:1}
+table.grid td.tnum{color:var(--mute);font-variant-numeric:tabular-nums;font-size:13px}
+table.grid td a{color:var(--ink);text-decoration:none}
+table.grid td a:hover{color:var(--red)}
+table.grid td.major{color:var(--red)}
+table.grid td.minor,table.grid td.note{color:var(--mute)}
+.note{font-size:13px;color:var(--faint);margin:10px 0 0}
 
 /* --------------------------------- findings ------------------------------ */
-.find{background:var(--card);border:1px solid var(--line);border-radius:12px;margin:0 0 12px;
-  overflow:hidden;display:grid;grid-template-columns:1fr;box-shadow:0 1px 2px rgba(16,24,40,.04)}
-@media (min-width:760px){ .find:has(.shot.pic){grid-template-columns:1fr 300px} }
-.find{border-left:3px solid var(--line)}
-.find.major{border-left-color:var(--bad)}
-.find.minor{border-left-color:var(--warn)}
-.fbody{padding:16px 18px;min-width:0}
-.fhead{display:flex;gap:10px;align-items:baseline;margin:0 0 9px}
-.fhead h3{font-size:16px;margin:0;line-height:1.35;letter-spacing:-.01em}
-.num{flex:0 0 auto;font-size:11px;font-weight:700;color:var(--faint);
-  font-variant-numeric:tabular-nums;line-height:22px}
-.find p{margin:0 0 8px;font-size:14px;color:var(--ink)}
-.find p.where{margin:0;font-size:12.5px;color:var(--mute)}
-.shot{position:relative;display:flex;align-items:center;justify-content:center;padding:12px;
-  border-left:1px solid var(--line2);background:var(--bg);max-height:280px;overflow:hidden}
-.shot img{max-width:100%;max-height:256px;width:auto;display:block;border-radius:6px}
-.shot .zoom{position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,.66);color:#fff;
-  font-size:11px;padding:3px 8px;border-radius:999px;opacity:0;transition:opacity .15s}
+.find{background:var(--card);border-top:1px solid var(--line);margin:0 0 28px;
+  display:grid;grid-template-columns:1fr}
+.find .shot{border:0;background:var(--wash);max-height:340px;padding:0;margin:12px 0 0;
+  position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden}
+@media (min-width:800px){
+  .find:has(.shot.pic){grid-template-columns:1fr 400px;gap:32px;align-items:start}
+  .find .shot{max-height:none;margin:20px 0 0;background:var(--wash)}
+}
+.fbody{padding:20px 0 8px;min-width:0}
+.fhead{display:flex;gap:12px;align-items:baseline;margin:0 0 6px}
+.fhead h3{font-size:18px;margin:0;line-height:1.3;letter-spacing:-.015em;font-weight:500}
+.num{flex:0 0 auto;font-size:13px;color:var(--faint);font-variant-numeric:tabular-nums}
+.fmeta{margin:0 0 12px;font-size:13px;color:var(--faint)}
+.find p{margin:0 0 10px;font-size:15px;color:var(--ink)}
+.find p.where{margin:0 0 16px;font-size:13px;color:var(--mute)}
+.shot img{max-width:100%;max-height:340px;width:auto;display:block}
+@media (min-width:800px){ .shot img{max-height:480px} }
+.shot .zoom{position:absolute;bottom:10px;right:10px;color:var(--faint);background:var(--bg);
+  font-size:12px;padding:4px 8px;opacity:0}
 .shot:hover .zoom{opacity:1}
-.find p.noloc{font-size:12.5px;color:var(--faint);margin:0 0 8px}
-/* Signed off as intended: still legible, but visibly not part of the count. */
-.find.ok2{opacity:.72}
-.find p.accepted{font-size:13px;color:var(--ok);margin:0 0 8px}
-.acceptbox{margin:0 0 12px;padding:10px 12px;border:1px solid var(--warn-line);background:var(--warn-bg);border-radius:10px}
-.acceptbox .acceptlab{font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--warn);margin:0 0 6px}
-.acceptbox .accepthint{display:block;font-size:12.5px;color:var(--ink);margin:0 0 6px}
-.acceptbox textarea.why,.notesbox textarea.notes{width:100%;box-sizing:border-box;font:13px/1.45 inherit;padding:8px 10px;
-  border:1px solid var(--line);border-radius:8px;resize:vertical;min-height:56px;background:var(--card);color:inherit}
-.acceptbox .acceptrow,.notesbox .acceptrow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}
-.acceptbox button,.notesbox button{font:12.5px/1 inherit;font-weight:600;padding:7px 12px;border-radius:7px;cursor:pointer;
-  border:1px solid var(--line);background:var(--card);color:inherit}
-.acceptbox button[data-act=save],.notesbox button[data-act=savenote]{background:var(--ok);border-color:var(--ok);color:#fff}
+.find p.noloc{font-size:13px;color:var(--faint);margin:0 0 10px}
+.find.ok2{opacity:.62}
+.find p.accepted{font-size:13px;color:var(--mute);margin:8px 0}
+.acceptbox{margin:8px 0 0;padding:0;border:0;background:transparent}
+.acceptbox>summary{cursor:pointer;font-size:13px;color:var(--faint);list-style:none}
+.acceptbox>summary::-webkit-details-marker{display:none}
+.acceptbox>summary::before{content:'▸ ';color:var(--faint)}
+.acceptbox[open]>summary::before{content:'▾ '}
+.acceptbox>summary:hover{color:var(--ink)}
+.acceptbox .accepthint{display:block;font-size:13px;color:var(--mute);margin:10px 0 8px}
+.acceptbox textarea.why,.notesbox textarea.notes{width:100%;box-sizing:border-box;font:14px/1.45 inherit;padding:10px 0;
+  border:0;border-bottom:1px solid var(--line);border-radius:0;resize:vertical;min-height:48px;background:transparent;color:inherit}
+.acceptbox textarea.why:focus,.notesbox textarea.notes:focus{outline:0;border-bottom-color:var(--ink)}
+.acceptbox .acceptrow,.notesbox .acceptrow{display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin-top:10px}
+.acceptbox button,.notesbox button{font:400 13px/1 inherit;padding:0;border-radius:0;cursor:pointer;
+  border:0;background:transparent;color:var(--ink)}
+.acceptbox button:hover,.notesbox button:hover{color:var(--red)}
 .acceptbox .acceptstate,.notesbox .acceptstate{font-size:12px;color:var(--mute)}
-.acceptbox .acceptstate.bad,.notesbox .acceptstate.bad{color:var(--bad)}
-.notesbox{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--ok);
-  border-radius:12px;padding:16px 18px;margin:0 0 22px}
+.acceptbox .acceptstate.bad,.notesbox .acceptstate.bad{color:var(--red)}
+.notesbox{background:transparent;border:0;padding:0;margin:0 0 8px}
 
 /* ---------------------------------- pages -------------------------------- */
-.page{background:var(--card);border:1px solid var(--line);border-radius:12px;margin:0 0 8px}
-.page>summary{padding:13px 16px;cursor:pointer;display:flex;gap:10px;align-items:center;
+.page{background:transparent;border-top:1px solid var(--line);margin:0}
+.page>summary{padding:14px 0;cursor:pointer;display:flex;gap:10px;align-items:center;
   flex-wrap:wrap;list-style:none}
 .page>summary::-webkit-details-marker{display:none}
-.page>summary::before{content:'▸';color:var(--faint);font-size:11px;flex:0 0 auto}
+.page>summary::before{content:'▸';color:var(--faint);font-size:12px;flex:0 0 auto}
 .page[open]>summary::before{content:'▾'}
-.page[open]>summary{border-bottom:1px solid var(--line2)}
 .page .grow{flex:1}
-.pbody{padding:14px 16px 16px}
-.pbody .find{box-shadow:none}
-.shots{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-top:12px}
+.pbody{padding:0 0 20px}
+.shots{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:16px;margin-top:12px}
 .shots figure{margin:0;min-width:0}
-.shots figcaption{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);
-  font-weight:600;margin:0 0 6px}
-.shots a{display:block;max-height:300px;overflow:auto;border:1px solid var(--line);border-radius:8px;background:var(--card)}
+.shots figcaption{font-size:12px;color:var(--faint);font-weight:400;margin:0 0 6px}
+.shots a{display:block;max-height:300px;overflow:auto;border:1px solid var(--line);background:var(--card)}
 .shots img{width:100%;display:block}
 .shots .tiny{display:block;margin-top:5px}
 
 /* --------------------------------- details ------------------------------- */
 details.tech{margin-top:34px;border-top:1px solid var(--line);padding-top:18px}
-details.tech>summary{cursor:pointer;font-size:14px;font-weight:600;color:var(--mute);list-style:none}
+details.tech>summary{cursor:pointer;font-size:13px;font-weight:500;letter-spacing:-.01em;color:var(--mute);list-style:none}
 details.tech>summary::-webkit-details-marker{display:none}
 details.tech>summary::before{content:'▸ ';color:var(--faint)}
 details.tech[open]>summary::before{content:'▾ '}
-details.tech h3{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);margin:22px 0 8px}
+details.tech h3{font-size:13px;color:var(--mute);font-weight:500;margin:22px 0 8px}
 
 /* ----------------------------------- bits -------------------------------- */
 .tiny{font-size:12px;color:var(--mute)}
 .bad{color:var(--bad)} .ok{color:var(--ok)} .warn{color:var(--warn)}
 .mono{font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}
-code{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--bg);
-  border:1px solid var(--line2);padding:1px 5px;border-radius:5px;color:var(--mute)}
+code{font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace;background:transparent;
+  padding:0;border:0;color:var(--mute)}
 ul.plain{margin:8px 0;padding-left:20px;font-size:13px}
 ul.plain li{margin:3px 0}
 table.plain{width:100%;border-collapse:collapse;font-size:13px}
-table.plain th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;
-  color:var(--faint);padding:8px 10px;border-bottom:1px solid var(--line)}
-table.plain td{padding:8px 10px;border-bottom:1px solid var(--line2);vertical-align:top}
+table.plain th{text-align:left;font-size:12px;
+  color:var(--faint);font-weight:400;padding:8px 0;border-bottom:1px solid var(--line)}
+table.plain td{padding:10px 8px 10px 0;border-bottom:1px solid var(--line2);vertical-align:top}
 table.plain tr:last-child td{border-bottom:0}
 .empty{color:var(--mute);font-size:13.5px}
 footer{max-width:940px;margin:0 auto;padding:22px 20px 50px;border-top:1px solid var(--line);
   color:var(--faint);font-size:12px}
 
 @media print{
-  body{background:#fff}
+  body{background:#fff;padding-left:0}
+  .toc{display:none}
   .find,.page,.card,.tablewrap{break-inside:avoid;box-shadow:none}
   details.tech,.page{display:none}
   .shot{max-height:none}
 }
 </style></head><body>
-<header>
-  <div class="brand">QA Visual · ${esc(host)}</div>
+${tocNav}
+<header id="top">
+  <div class="brand"><b>WOO</b> · QA Visual · ${esc(host)}</div>
   <h1 class="${verdict.tone}">${esc(verdict.line)}</h1>
   <div class="verdict-sub">${esc(verdict.sub)}</div>
   <p class="runmeta">
@@ -573,7 +637,7 @@ ${
     : ''
 }
 
-<section class="notesbox">
+<section class="notesbox" id="notes">
   <h2>Reviewer notes</h2>
   <p class="lead">Things the AI missed, or notes for the next reader.${
     r.humanNotesAt ? ` Written ${esc(formatQaWhen(r.humanNotesAt))}.` : ''
@@ -589,7 +653,7 @@ ${
 
 ${
   open.length
-    ? `<section>
+    ? `<section id="findings">
   <h2>Findings</h2>
   <p class="lead">Click a title to jump to the cropped screenshot.${
     r.drift ? ` vs last run: ${open.filter((f) => f.isNew).length} new · ${open.filter((f) => f.isNew === false).length} still present.` : ''
@@ -601,7 +665,7 @@ ${
 
 ${
   template.length
-    ? `<section>
+    ? `<section id="shared">
   <h2>Shared-component findings</h2>
   <p class="lead">Header / nav / footer — fix once and it is gone on every page. Start here.</p>
   ${template.map(findingBlock).join('')}
@@ -611,7 +675,7 @@ ${
 
 ${
   accepted.length
-    ? `<section>
+    ? `<section id="dismissed">
   <h2>Dismissed as intentional (${accepted.length})</h2>
   <p class="lead">A reviewer marked these as false positives or intentional, so they do not count. Edit the reason or undo on the card — later runs will keep them dismissed.</p>
   ${accepted.map(findingBlock).join('')}
@@ -621,12 +685,12 @@ ${
 
 ${
   perPage.length
-    ? `<section>
+    ? `<section id="pages">
   <h2>Page-only findings</h2>
   <p class="lead">Open a page to see its findings with all 3 viewport screenshots.</p>
   ${r.pages.map(pageRow).join('')}
 </section>`
-    : `<section>
+    : `<section id="pages">
   <h2>Pages</h2>
   <p class="lead">No page-only findings. Open a page to see its screenshots.</p>
   ${r.pages.map(pageRow).join('')}
@@ -635,7 +699,7 @@ ${
 
 ${
   r.sweeps.some((s) => s.breaks.length)
-    ? `<section>
+    ? `<section id="overflow">
   <h2>Horizontal overflow</h2>
   <p class="lead">Width ranges where the page is wider than the viewport — a media query is needed.</p>
   <div class="card pad">${r.sweeps
@@ -651,7 +715,7 @@ ${
     : ''
 }
 
-<details class="tech">
+<details class="tech" id="tech">
   <summary>Technical details</summary>
 
   <h3>URL ↔ design pairing</h3>
@@ -662,7 +726,7 @@ ${
         .map(
           (p) => `<tr>
         <td><a href="${esc(p.url)}" target="_blank">${esc(path(p.url))}</a></td>
-        <td>${p.mapping.frameName ? esc(p.mapping.frameName) + (p.mapping.isTemplate ? ' <span class="chip">template</span>' : '') : '<span class="warn">unpaired</span>'}</td>
+        <td>${p.mapping.frameName ? esc(p.mapping.frameName) + (p.mapping.isTemplate ? ' <span class="tiny">template</span>' : '') : '<span class="warn">unpaired</span>'}</td>
         <td class="tiny">${esc(p.mapping.how)}</td>
       </tr>`,
         )
@@ -704,5 +768,6 @@ ${
   Re-run with <code>--approve</code> to save a new baseline.
 </footer>
 ${ACCEPT_SCRIPT}
+${TOC_SCRIPT}
 </body></html>`;
 }

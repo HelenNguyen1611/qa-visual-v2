@@ -1,1046 +1,1891 @@
 <!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>QA Visual</title>
-<style>
-  :root {
-    --bg: #f6f7f9; --card: #fff; --ink: #16181d; --dim: #6b7280; --line: #e3e6ea;
-    --accent: #1f6feb; --warn: #b45309; --warn-bg: #fef6e7; --bad: #b42318; --bad-bg: #fef3f2;
-    --ok: #067647; --radius: 10px;
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink);
-    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
-  header { background: var(--card); border-bottom: 1px solid var(--line); padding: 14px 24px;
-    display: flex; align-items: baseline; gap: 12px; position: sticky; top: 0; z-index: 5; }
-  header h1 { font-size: 16px; margin: 0; font-weight: 650; letter-spacing: -.01em; }
-  header .meta { color: var(--dim); font-size: 12.5px; }
-  main { max-width: 1180px; margin: 0 auto; padding: 24px; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
-    padding: 20px; margin-bottom: 18px; }
-  h2 { font-size: 14px; margin: 0 0 4px; font-weight: 650; }
-  .sub { color: var(--dim); font-size: 12.5px; margin-bottom: 16px; }
-  label { display: block; font-weight: 600; font-size: 12.5px; margin-bottom: 5px; }
-  input[type=url], input[type=text], input[type=number], select {
-    width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px;
-    font: inherit; background: #fff; color: inherit; }
-  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
-  .field { margin-bottom: 14px; }
-  .row2 { display: grid; grid-template-columns: 1fr 130px; gap: 14px; }
-  button { font: inherit; font-weight: 600; border-radius: 7px; padding: 9px 16px; cursor: pointer;
-    border: 1px solid var(--line); background: #fff; color: var(--ink); }
-  button:hover:not(:disabled) { border-color: #c8cdd4; }
-  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  button.primary:hover:not(:disabled) { background: #1a5fcc; }
-  button:disabled { opacity: .5; cursor: not-allowed; }
-  button.icon { padding: 5px 9px; font-weight: 400; color: var(--dim); }
-  button.icon:hover { color: var(--bad); border-color: #f0c2bd; }
-  .hint { color: var(--dim); font-size: 12px; margin-top: 6px; }
-  .spinner { display: inline-block; width: 13px; height: 13px; border: 2px solid #fff6;
-    border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: -2px; }
-  @keyframes spin { to { transform: rotate(360deg); } }
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>QA Visual</title>
+    <style>
+      /* Woo: paper, ink, one red mark. Red is the wordmark — not chrome. */
+      :root {
+        --bg: #fff;
+        --card: #fff;
+        --ink: #111;
+        --dim: #6a6a6a;
+        --line: #e6e6e6;
+        --accent: #ff021f;
+        --red: #ff021f;
+        --gold: #b8924a;
+        --warn: #8a6a2a;
+        --warn-bg: transparent;
+        --bad: #ff021f;
+        --bad-bg: transparent;
+        --ok: #111;
+        --radius: 0;
+        --font: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font: 400 15px/1.5 var(--font);
+        -webkit-font-smoothing: antialiased;
+      }
+      header {
+        background: var(--card);
+        border-bottom: 1px solid var(--line);
+        padding: 16px 24px;
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+        position: sticky;
+        top: 0;
+        z-index: 5;
+      }
+      header h1 {
+        font-size: 15px;
+        margin: 0;
+        font-weight: 500;
+        letter-spacing: 0;
+      }
+      header h1 em {
+        font-style: normal;
+        color: var(--red);
+      }
+      header .meta {
+        color: var(--dim);
+        font-size: 13px;
+      }
+      main {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 28px 24px 64px;
+      }
+      .card {
+        background: var(--card);
+        border: 0;
+        border-top: 1px solid var(--line);
+        border-radius: 0;
+        padding: 24px 0;
+        margin-bottom: 8px;
+      }
+      h2 {
+        font-size: 20px;
+        margin: 0 0 4px;
+        font-weight: 500;
+        letter-spacing: -0.015em;
+      }
+      .sub {
+        color: var(--dim);
+        font-size: 14px;
+        margin-bottom: 18px;
+      }
+      label {
+        display: block;
+        font-weight: 500;
+        font-size: 13px;
+        margin-bottom: 5px;
+      }
+      input[type='url'],
+      input[type='text'],
+      input[type='number'],
+      input[type='password'],
+      select {
+        width: 100%;
+        padding: 8px 10px;
+        border: 1px solid var(--line);
+        border-radius: 0;
+        font: inherit;
+        background: #fff;
+        color: inherit;
+      }
+      input:focus,
+      select:focus {
+        outline: 0;
+        border-color: var(--ink);
+      }
+      .field {
+        margin-bottom: 14px;
+      }
+      .row2 {
+        display: grid;
+        grid-template-columns: 1fr 130px;
+        gap: 14px;
+      }
+      button {
+        font: inherit;
+        font-weight: 500;
+        border-radius: 0;
+        padding: 8px 0;
+        cursor: pointer;
+        border: 0;
+        background: transparent;
+        color: var(--ink);
+      }
+      button:hover:not(:disabled) {
+        color: var(--red);
+      }
+      button.primary {
+        background: var(--ink);
+        border: 0;
+        color: #fff;
+        padding: 9px 16px;
+      }
+      button.primary:hover:not(:disabled) {
+        background: var(--ink);
+        color: #fff;
+        opacity: 0.86;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      button.icon {
+        padding: 5px 0;
+        font-weight: 400;
+        color: var(--dim);
+      }
+      button.icon:hover {
+        color: var(--ink);
+      }
+      .hint {
+        color: var(--dim);
+        font-size: 12px;
+        margin-top: 6px;
+      }
+      .spinner {
+        display: inline-block;
+        width: 13px;
+        height: 13px;
+        border: 2px solid #fff6;
+        border-top-color: #fff;
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+        vertical-align: -2px;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
 
-  table { width: 100%; border-collapse: collapse; }
-  th { text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em;
-    color: var(--dim); font-weight: 650; padding: 0 10px 8px; border-bottom: 1px solid var(--line); }
-  td { padding: 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
-  tr:last-child td { border-bottom: 0; }
-  td.n { color: var(--dim); font-variant-numeric: tabular-nums; width: 26px; padding-top: 18px; }
-  td.pick { width: 32px; padding-top: 16px; }
-  td.pick input { width: 16px; height: 16px; margin: 0; cursor: pointer; accent-color: var(--accent); }
-  .qa { font-size: 12px; margin-top: 6px; }
-  .qa.new { color: var(--accent); }
-  .qa.old { color: var(--dim); }
-  td.thumb { width: 96px; }
-  td.act { width: 44px; text-align: right; }
-  .thumb img { width: 84px; height: 56px; object-fit: cover; object-position: top;
-    border: 1px solid var(--line); border-radius: 5px; background: #fafbfc; display: block; cursor: zoom-in; }
-  .thumb .none { width: 84px; height: 56px; border: 1px dashed var(--line); border-radius: 5px;
-    display: grid; place-items: center; color: var(--dim); font-size: 11px; }
-  .flag { font-size: 12px; margin-top: 6px; padding: 4px 8px; border-radius: 5px; }
-  .flag.warn { background: var(--warn-bg); color: var(--warn); }
-  .flag.bad { background: var(--bad-bg); color: var(--bad); }
-  .why { font-size: 12px; color: var(--dim); margin-top: 6px; }
-  .paste { margin-top: 7px; display: none; }
-  .paste.on { display: block; }
-  .toolbar { display: flex; align-items: center; gap: 10px; margin-top: 16px;
-    padding-top: 16px; border-top: 1px solid var(--line); flex-wrap: wrap; }
-  .toolbar .grow { flex: 1; }
-  .toolbar .fastlab { display: flex; align-items: center; gap: 8px; font-weight: 600;
-    font-size: 12.5px; cursor: pointer; margin: 0; white-space: nowrap; }
-  .toolbar .fastlab input { width: auto; margin: 0; }
-  .toggle {
-    display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px;
-    border: 1px solid var(--line); border-radius: 8px; margin-bottom: 14px; cursor: pointer;
-    background: #fff; }
-  .toggle input { width: auto; margin: 3px 0 0; flex: 0 0 auto; }
-  .toggle .tlab { font-weight: 600; font-size: 13px; }
-  .toggle .thint { font-weight: 400; color: var(--dim); font-size: 12px; margin: 2px 0 0; }
-  .err { background: var(--bad-bg); color: var(--bad); border: 1px solid #f6cfca;
-    padding: 10px 12px; border-radius: 7px; font-size: 13px; margin-bottom: 14px; }
-  pre.log { background: #0f1115; color: #cbd5e1; border-radius: 8px; padding: 14px;
-    font: 12px/1.65 ui-monospace, SFMono-Regular, Menlo, monospace;
-    max-height: 320px; overflow: auto; white-space: pre-wrap; margin: 0; }
-  .prog { margin: 4px 0 18px; }
-  .prog .bar { height: 8px; background: #e9edf2; border-radius: 99px; overflow: hidden; }
-  .prog .fill { height: 100%; width: 0; background: var(--accent); border-radius: 99px;
-    transition: width .35s ease; }
-  .prog .prow { display: flex; align-items: baseline; gap: 10px; margin-top: 7px;
-    font-size: 12.5px; color: var(--dim); }
-  .prog .prow .grow { flex: 1; }
-  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; }
-  #logbox summary { cursor: pointer; padding: 4px 0; }
-  #logbox[open] summary { margin-bottom: 8px; }
-  .authbox { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 14px;
-    background: #fff; }
-  .authbox > summary { cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--dim); list-style: none; }
-  .authbox > summary::-webkit-details-marker { display: none; }
-  .authbox > summary::before { content: '▸ '; }
-  .authbox[open] > summary::before { content: '▾ '; }
-  .authbox .row2 { grid-template-columns: 1fr 1fr; }
-  .authbox code { background: var(--bg); padding: 1px 4px; border-radius: 4px; font-size: 11.5px; }
-  .saved { background: #ecfdf3; border: 1px solid #abefc6; color: #05603a; border-radius: 8px;
-    padding: 10px 12px; font-size: 13px; margin-bottom: 14px; }
-  .saved b { color: inherit; }
-  .btnrow { display: flex; gap: 10px; align-items: center; }
-  .notes label { display: block; font-weight: 600; margin: 0 0 6px; }
-  .notes #notefor { font-weight: 400; color: var(--dim); }
-  .notes textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px;
-    font: inherit; line-height: 1.6; resize: vertical; min-height: 96px; background: #fff; color: inherit; }
-  .notes textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
-  .notes .noterow { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
-  .notes .noterow .hint { margin: 0; }
-  .notes .ok { color: var(--ok); }
-  .notes .bad { color: var(--bad); }
-  .done { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
-  .done .big { font-size: 15px; font-weight: 650; }
-  .history td { vertical-align: middle; }
-  .history td.host { font-weight: 600; }
-  .history td.when { color: var(--dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .history td.nfind { font-variant-numeric: tabular-nums; width: 72px; }
-  .history .acts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-  .history .acts button { padding: 6px 10px; font-weight: 600; }
-  .history .shareout { font-size: 12px; color: var(--dim); }
-  #historyMoreWrap { margin: 12px 0 0; }
-  [hidden] { display: none !important; }
-  dialog { border: 0; border-radius: 10px; padding: 0; max-width: 92vw; max-height: 92vh;
-    box-shadow: 0 20px 60px #0004; }
-  dialog img { display: block; max-width: 88vw; max-height: 84vh; }
-  dialog::backdrop { background: #0008; }
-  dialog .bar { padding: 8px 12px; font-size: 12.5px; color: var(--dim); display: flex;
-    justify-content: space-between; align-items: center; gap: 16px; border-bottom: 1px solid var(--line); }
-</style>
-</head>
-<body>
-<header>
-  <h1>QA Visual</h1>
-  <span class="meta" id="meta"></span>
-</header>
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th {
+        text-align: left;
+        font-size: 12px;
+        color: var(--dim);
+        font-weight: 400;
+        padding: 0 10px 8px;
+        border-bottom: 1px solid var(--line);
+      }
+      td {
+        padding: 10px;
+        border-bottom: 1px solid var(--line);
+        vertical-align: top;
+      }
+      tr:last-child td {
+        border-bottom: 0;
+      }
+      td.n {
+        color: var(--dim);
+        font-variant-numeric: tabular-nums;
+        width: 26px;
+        padding-top: 18px;
+      }
+      td.pick {
+        width: 32px;
+        padding-top: 16px;
+      }
+      td.pick input {
+        width: 16px;
+        height: 16px;
+        margin: 0;
+        cursor: pointer;
+        accent-color: var(--ink);
+      }
+      .qa {
+        font-size: 12px;
+        margin-top: 6px;
+      }
+      .qa.new {
+        color: var(--red);
+      }
+      .qa.old {
+        color: var(--dim);
+      }
+      td.thumb {
+        width: 96px;
+      }
+      td.act {
+        width: 44px;
+        text-align: right;
+      }
+      .thumb img {
+        width: 84px;
+        height: 56px;
+        object-fit: cover;
+        object-position: top;
+        border: 1px solid var(--line);
+        border-radius: 0;
+        background: #fff;
+        display: block;
+        cursor: zoom-in;
+      }
+      .thumb .none {
+        width: 84px;
+        height: 56px;
+        border: 1px dashed var(--line);
+        border-radius: 0;
+        display: grid;
+        place-items: center;
+        color: var(--dim);
+        font-size: 11px;
+      }
+      .flag {
+        font-size: 12px;
+        font-weight: 400;
+        margin-top: 6px;
+        padding: 0;
+      }
+      .flag.warn {
+        color: var(--warn);
+      }
+      .flag.bad {
+        color: var(--bad);
+      }
+      .why {
+        font-size: 12px;
+        color: var(--dim);
+        margin-top: 6px;
+      }
+      .paste {
+        margin-top: 7px;
+        display: none;
+      }
+      .paste.on {
+        display: block;
+      }
+      .toolbar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 16px;
+        padding-top: 16px;
+        border-top: 1px solid var(--line);
+        flex-wrap: wrap;
+      }
+      .toolbar .grow {
+        flex: 1;
+      }
+      .toolbar .fastlab {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 500;
+        font-size: 12.5px;
+        cursor: pointer;
+        margin: 0;
+        white-space: nowrap;
+      }
+      .toolbar .fastlab input {
+        width: auto;
+        margin: 0;
+      }
+      .toggle {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 10px 0;
+        border: 0;
+        border-radius: 0;
+        margin-bottom: 14px;
+        cursor: pointer;
+        background: transparent;
+      }
+      .toggle input {
+        width: auto;
+        margin: 3px 0 0;
+        flex: 0 0 auto;
+      }
+      .toggle .tlab {
+        font-weight: 500;
+        font-size: 13px;
+        letter-spacing: -0.01em;
+      }
+      .toggle .thint {
+        font-weight: 400;
+        color: var(--dim);
+        font-size: 12px;
+        margin: 2px 0 0;
+      }
+      .err {
+        background: transparent;
+        color: var(--ink);
+        border: 0;
+        border-left: 2px solid var(--red);
+        padding: 0 0 0 12px;
+        border-radius: 0;
+        font-size: 13px;
+        margin-bottom: 14px;
+      }
+      pre.log {
+        background: #fafafa;
+        color: var(--ink);
+        border-radius: 0;
+        padding: 14px 12px;
+        font:
+          12px/1.65 ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+        max-height: 320px;
+        overflow: auto;
+        white-space: pre-wrap;
+        margin: 0;
+      }
+      .prog {
+        margin: 4px 0 18px;
+      }
+      .prog .bar {
+        height: 1px;
+        background: var(--line);
+        border-radius: 0;
+        overflow: hidden;
+      }
+      .prog .fill {
+        height: 100%;
+        width: 0;
+        background: var(--ink);
+        border-radius: 0;
+        transition: width 0.35s ease;
+      }
+      .prog .prow {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        margin-top: 7px;
+        font-size: 12.5px;
+        color: var(--dim);
+      }
+      .prog .prow .grow {
+        flex: 1;
+      }
+      .mono {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-variant-numeric: tabular-nums;
+      }
+      #logbox summary {
+        cursor: pointer;
+        padding: 4px 0;
+      }
+      #logbox[open] summary {
+        margin-bottom: 8px;
+      }
+      .authbox {
+        border: 0;
+        border-radius: 0;
+        padding: 4px 0;
+        margin-bottom: 14px;
+        background: transparent;
+      }
+      .authbox > summary {
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--dim);
+        list-style: none;
+      }
+      .authbox > summary::-webkit-details-marker {
+        display: none;
+      }
+      .authbox > summary::before {
+        content: '▸ ';
+      }
+      .authbox[open] > summary::before {
+        content: '▾ ';
+      }
+      .authbox .row2 {
+        grid-template-columns: 1fr 1fr;
+      }
+      .authbox code {
+        background: var(--bg);
+        padding: 1px 4px;
+        border-radius: 0;
+        font-size: 11.5px;
+      }
+      .saved {
+        background: transparent;
+        border: 0;
+        border-left: 2px solid var(--ink);
+        color: var(--ink);
+        border-radius: 0;
+        padding: 0 0 0 12px;
+        font-size: 13px;
+        margin-bottom: 14px;
+      }
+      .saved b {
+        color: inherit;
+      }
+      .btnrow {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      .notes label {
+        display: block;
+        font-weight: 500;
+        margin: 0 0 6px;
+      }
+      .notes #notefor {
+        font-weight: 400;
+        color: var(--dim);
+      }
+      .notes textarea {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid var(--line);
+        border-radius: 0;
+        font: inherit;
+        line-height: 1.6;
+        resize: vertical;
+        min-height: 96px;
+        background: #fff;
+        color: inherit;
+      }
+      .notes textarea:focus {
+        outline: 0;
+        border-color: var(--ink);
+      }
+      .notes .noterow {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 10px;
+      }
+      .notes .noterow .hint {
+        margin: 0;
+      }
+      .notes .ok {
+        color: var(--ok);
+      }
+      .notes .bad {
+        color: var(--bad);
+      }
+      .done {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        flex-wrap: wrap;
+        margin-bottom: 16px;
+      }
+      .done .big {
+        font-size: 16px;
+        font-weight: 500;
+      }
+      .history td {
+        vertical-align: middle;
+      }
+      .history td.host {
+        font-weight: 500;
+      }
+      .history td.when {
+        color: var(--dim);
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      .history td.nfind {
+        font-variant-numeric: tabular-nums;
+        width: 72px;
+      }
+      .history .acts {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+      .history .acts button {
+        padding: 6px 10px;
+        font-weight: 500;
+      }
+      .history .shareout {
+        font-size: 12px;
+        color: var(--dim);
+      }
+      #historyMoreWrap {
+        margin: 12px 0 0;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      dialog {
+        border: 0;
+        border-radius: 0;
+        padding: 0;
+        max-width: 92vw;
+        max-height: 92vh;
+        box-shadow: 0 20px 60px #0004;
+      }
+      dialog img {
+        display: block;
+        max-width: 88vw;
+        max-height: 84vh;
+      }
+      dialog::backdrop {
+        background: #0008;
+      }
+      dialog .bar {
+        padding: 8px 12px;
+        font-size: 12.5px;
+        color: var(--dim);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        border-bottom: 1px solid var(--line);
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1><em>WOO</em> · QA Visual</h1>
+      <span class="meta" id="meta"></span>
+    </header>
 
-<main>
-  <!-- ============================ 1. input ============================ -->
-  <section class="card" id="s1">
-    <h2>Site and design</h2>
-    <p class="sub">Enter the homepage URL and a Figma file link. The tool will discover pages and guess matching frames — you can fix the pairing in the next step.</p>
-    <div class="field">
-      <label for="site">Homepage URL</label>
-      <input type="url" id="site" placeholder="https://example.com/" autocomplete="url">
-    </div>
-    <div class="field row2">
-      <div>
-        <label for="figma">Figma link <span style="font-weight:400;color:var(--dim)">(or a folder of PNGs · leave empty if there is no design yet)</span></label>
-        <input type="text" id="figma" placeholder="https://www.figma.com/design/…">
-      </div>
-      <div>
-        <label for="max">Max pages</label>
-        <input type="number" id="max" value="8" min="1" max="80">
-      </div>
-    </div>
-    <label class="toggle" for="fast">
-      <input type="checkbox" id="fast">
-      <span>
-        <span class="tlab">Fast mode</span>
-        <span class="thint">Up to 3 AI calls at once — same pages and screenshots, usually ~2.5–3 min / 8 pages. Off = one call at a time. Tokens do not increase unless the API retries.</span>
-      </span>
-    </label>
-    <details class="authbox" id="authbox">
-      <summary>Password-protected site? (staging, Basic auth, or a login page)</summary>
-      <div class="row2" style="margin-top:12px">
-        <div>
-          <label for="auser">User</label>
-          <input type="text" id="auser" autocomplete="off" spellcheck="false" placeholder="username">
+    <main>
+      <!-- ============================ 1. input ============================ -->
+      <section class="card" id="s1">
+        <h2>Site and design</h2>
+        <p class="sub">
+          Enter the homepage URL and a Figma file link. The tool will discover
+          pages and guess matching frames — you can fix the pairing in the next
+          step.
+        </p>
+        <div class="field">
+          <label for="site">Homepage URL</label>
+          <input
+            type="url"
+            id="site"
+            placeholder="https://example.com/"
+            autocomplete="url"
+          />
         </div>
-        <div>
-          <label for="apass">Password</label>
-          <input type="password" id="apass" autocomplete="off" placeholder="••••••••">
+        <div class="field row2">
+          <div>
+            <label for="figma"
+              >Figma link
+              <span style="font-weight: 400; color: var(--dim)"
+                >(or a folder of PNGs · leave empty if there is no design
+                yet)</span
+              ></label
+            >
+            <input
+              type="text"
+              id="figma"
+              placeholder="https://www.figma.com/design/…"
+            />
+          </div>
+          <div>
+            <label for="max">Max pages</label>
+            <input type="number" id="max" value="8" min="1" max="80" />
+          </div>
         </div>
-      </div>
-      <p class="hint">Kept in server memory only — <b>not saved to disk</b>. Reload the page and you will need to enter it again.
-      To skip typing it each time, set <code>QA_HTTP_USER</code> / <code>QA_HTTP_PASS</code> in <code>.env</code>.
-      The tool detects Basic auth (browser popup) vs a login form.</p>
-    </details>
-    <div id="e1"></div>
-    <div class="saved" id="saved" hidden></div>
-    <div class="btnrow">
-      <button class="primary" id="go1">Discover pages</button>
-      <button id="redo" hidden>Discover from scratch</button>
-    </div>
-    <p class="hint" id="hint1">This step takes 15–30 seconds: open a browser, read the sitemap (or homepage links), read the Figma file and render frames.</p>
-  </section>
+        <label class="toggle" for="fast">
+          <input type="checkbox" id="fast" />
+          <span>
+            <span class="tlab">Fast mode</span>
+            <span class="thint"
+              >Up to 3 AI calls at once — same pages and screenshots, usually
+              ~2.5–3 min / 8 pages. Off = one call at a time. Tokens do not
+              increase unless the API retries.</span
+            >
+          </span>
+        </label>
+        <details class="authbox" id="authbox">
+          <summary>
+            Password-protected site? (staging, Basic auth, or a login page)
+          </summary>
+          <div class="row2" style="margin-top: 12px">
+            <div>
+              <label for="auser">User</label>
+              <input
+                type="text"
+                id="auser"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="username"
+              />
+            </div>
+            <div>
+              <label for="apass">Password</label>
+              <input
+                type="password"
+                id="apass"
+                autocomplete="off"
+                placeholder="••••••••"
+              />
+            </div>
+          </div>
+          <p class="hint">
+            Kept in server memory only — <b>not saved to disk</b>. Reload the
+            page and you will need to enter it again. To skip typing it each
+            time, set <code>QA_HTTP_USER</code> / <code>QA_HTTP_PASS</code> in
+            <code>.env</code>. The tool detects Basic auth (browser popup) vs a
+            login form.
+          </p>
+        </details>
+        <div id="e1"></div>
+        <div class="saved" id="saved" hidden></div>
+        <div class="btnrow">
+          <button class="primary" id="go1">Discover pages</button>
+          <button id="redo" hidden>Discover from scratch</button>
+        </div>
+        <p class="hint" id="hint1">
+          This step takes 15–30 seconds: open a browser, read the sitemap (or
+          homepage links), read the Figma file and render frames.
+        </p>
+      </section>
 
-  <!-- ============================ 2. pairing =========================== -->
-  <section class="card" id="s2" hidden>
-    <h2>URL ↔ Figma frame pairing</h2>
-    <p class="sub" id="s2sub"></p>
-    <div id="e2"></div>
-    <table>
-      <thead><tr><th></th><th></th><th>Design</th><th>Page URL</th><th>Figma frame</th><th></th></tr></thead>
-      <tbody id="rows"></tbody>
-    </table>
-    <div class="toolbar">
-      <button id="add">+ Add pair</button>
-      <button id="back2">Change links</button>
-      <button id="picknew">Select unreviewed</button>
-      <button id="pickold">Select already QA’d</button>
-      <button id="pickall">Select all</button>
-      <span class="grow"></span>
-      <label class="fastlab" for="fast2"><input type="checkbox" id="fast2"> Fast mode</label>
-      <span class="hint" id="count"></span>
-      <button class="primary" id="go2">Run QA</button>
-    </div>
-  </section>
+      <!-- ============================ 2. pairing =========================== -->
+      <section class="card" id="s2" hidden>
+        <h2>URL ↔ Figma frame pairing</h2>
+        <p class="sub" id="s2sub"></p>
+        <div id="e2"></div>
+        <table>
+          <thead>
+            <tr>
+              <th></th>
+              <th></th>
+              <th>Design</th>
+              <th>Page URL</th>
+              <th>Figma frame</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+        <div class="toolbar">
+          <button id="add">+ Add pair</button>
+          <button id="back2">Change links</button>
+          <button id="picknew">Select unreviewed</button>
+          <button id="pickold">Select already QA’d</button>
+          <button id="pickall">Select all</button>
+          <span class="grow"></span>
+          <label class="fastlab" for="fast2"
+            ><input type="checkbox" id="fast2" /> Fast mode</label
+          >
+          <span class="hint" id="count"></span>
+          <button class="primary" id="go2">Run QA</button>
+        </div>
+      </section>
 
-  <!-- ============================= 3. run ============================== -->
-  <section class="card" id="s3" hidden>
-    <h2 id="s3title">Running QA…</h2>
-    <p class="sub" id="s3sub">Capture 3 viewports per page, compare with the design, then merge duplicate findings.</p>
-    <div class="prog" id="prog" hidden>
-      <div class="bar"><div class="fill" id="fill"></div></div>
-      <div class="prow">
-        <span id="plabel">starting…</span>
-        <span class="grow"></span>
-        <span class="mono" id="pcount"></span>
-      </div>
-    </div>
-    <div class="done" id="doneBar" hidden></div>
+      <!-- ============================= 3. run ============================== -->
+      <section class="card" id="s3" hidden>
+        <h2 id="s3title">Running QA…</h2>
+        <p class="sub" id="s3sub">
+          Capture 3 viewports per page, compare with the design, then merge
+          duplicate findings.
+        </p>
+        <div class="prog" id="prog" hidden>
+          <div class="bar"><div class="fill" id="fill"></div></div>
+          <div class="prow">
+            <span id="plabel">starting…</span>
+            <span class="grow"></span>
+            <span class="mono" id="pcount"></span>
+          </div>
+        </div>
+        <div class="done" id="doneBar" hidden></div>
 
-    <details id="logbox"><summary class="cap">Show detailed log</summary><pre class="log" id="log"></pre></details>
-  </section>
+        <details id="logbox">
+          <summary class="cap">Show detailed log</summary>
+          <pre class="log" id="log"></pre>
+        </details>
+      </section>
 
-  <!--
+      <!--
     Its own card, not part of the run panel.
 
     A note is written after reading the report, which can be minutes or days after the run — and
     the run panel is gone by then. Keeping the editor inside it meant the note could only ever be
     written in the one moment the run finished, and never corrected afterwards.
   -->
-  <section class="card notes" id="notes" hidden>
-    <h2>Reviewer notes</h2>
-    <p class="sub">Things the AI missed, or notes for whoever reads the report. Saving rebuilds report.html with the note included.</p>
-    <label for="notetext">Notes for run <span id="notefor" class="mono"></span></label>
-    <textarea id="notetext" rows="5" placeholder="For example:&#10;- Hero is a video background; a white screenshot is expected.&#10;- Mobile menu is missing the cart icon — AI did not catch it.&#10;- /journal/ has no design; ignore the design-compare section."></textarea>
-    <div class="noterow">
-      <button class="primary" id="savenote">Save to report</button>
-      <button type="button" id="closenote">Close</button>
-      <span class="hint" id="notestate"></span>
-    </div>
-  </section>
+      <section class="card notes" id="notes" hidden>
+        <h2>Reviewer notes</h2>
+        <p class="sub">
+          Things the AI missed, or notes for whoever reads the report. Saving
+          rebuilds report.html with the note included.
+        </p>
+        <label for="notetext"
+          >Notes for run <span id="notefor" class="mono"></span
+        ></label>
+        <textarea
+          id="notetext"
+          rows="5"
+          placeholder="For example:&#10;- Hero is a video background; a white screenshot is expected.&#10;- Mobile menu is missing the cart icon — AI did not catch it.&#10;- /journal/ has no design; ignore the design-compare section."
+        ></textarea>
+        <div class="noterow">
+          <button class="primary" id="savenote">Save to report</button>
+          <button type="button" id="closenote">Close</button>
+          <span class="hint" id="notestate"></span>
+        </div>
+      </section>
 
-  <section class="card" id="history">
-    <h2>Previous runs</h2>
-    <p class="sub" id="historySub">Each row is a saved report — the host tells you which project, so you do not need to open timestamp folders.</p>
-    <div id="historyBody"><p class="hint">Loading…</p></div>
-    <p class="hint" id="historyMoreWrap" hidden><button type="button" id="histmore">Load more</button></p>
-  </section>
-</main>
+      <section class="card" id="history">
+        <h2>Previous runs</h2>
+        <p class="sub" id="historySub">
+          Each row is a saved report — the host tells you which project, so you
+          do not need to open timestamp folders.
+        </p>
+        <div id="historyBody"><p class="hint">Loading…</p></div>
+        <p class="hint" id="historyMoreWrap" hidden>
+          <button type="button" id="histmore">Load more</button>
+        </p>
+      </section>
+    </main>
 
-<dialog id="zoom"><div class="bar"><span id="zoomName"></span><button onclick="zoom.close()">Close</button></div><img id="zoomImg" alt=""></dialog>
+    <dialog id="zoom">
+      <div class="bar">
+        <span id="zoomName"></span><button onclick="zoom.close()">Close</button>
+      </div>
+      <img id="zoomImg" alt="" />
+    </dialog>
 
-<script>
-'use strict';
-const $ = (id) => document.getElementById(id);
-let FRAMES = [];   // [{id,name,width,height,thumb}]
-let ROWS = [];     // [{url, figmaNodeId, frameName, how, include}]
-let COVERAGE = new Map(); // pageKey -> { when, stamp }
+    <script>
+      'use strict';
+      const $ = (id) => document.getElementById(id);
+      let FRAMES = []; // [{id,name,width,height,thumb}]
+      let ROWS = []; // [{url, figmaNodeId, frameName, how, include}]
+      let COVERAGE = new Map(); // pageKey -> { when, stamp }
 
-/* ------------------------------- helpers -------------------------------- */
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      /* ------------------------------- helpers -------------------------------- */
+      const esc = (s) =>
+        String(s ?? '').replace(
+          /[&<>"']/g,
+          (c) =>
+            ({
+              '&': '&amp;',
+              '<': '&lt;',
+              '>': '&gt;',
+              '"': '&quot;',
+              "'": '&#39;',
+            })[c],
+        );
 
-/**
- * "Failed to fetch" is the browser saying it could not reach the server at all — and on its own it
- * tells the reader nothing about why or what to do. Every time it means the local server is not
- * listening: the Terminal window was closed, or it crashed. So say that, with the fix.
- */
-const DEAD_SERVER =
-  'Could not reach the QA Visual server (it is stopped or crashed).\n' +
-  '1. Re-open "QA Visual.command" — if the old Terminal window is still open, read the last error there first.\n' +
-  '2. This page keeps what you typed; click again to continue.';
+      /**
+       * "Failed to fetch" is the browser saying it could not reach the server at all — and on its own it
+       * tells the reader nothing about why or what to do. Every time it means the local server is not
+       * listening: the Terminal window was closed, or it crashed. So say that, with the fix.
+       */
+      const DEAD_SERVER =
+        'Could not reach the QA Visual server (it is stopped or crashed).\n' +
+        '1. Re-open "QA Visual.command" — if the old Terminal window is still open, read the last error there first.\n' +
+        '2. This page keeps what you typed; click again to continue.';
 
-async function post(path, body) {
-  let res;
-  try {
-    res = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-  } catch {
-    throw new Error(DEAD_SERVER);
-  }
-  const data = await res.json().catch(() => ({ error: 'response was not JSON' }));
-  if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
-  return data;
-}
-function showErr(where, msg) {
-  $(where).innerHTML = msg ? '<div class="err">' + esc(msg).replace(/\n/g, '<br>') + '</div>' : '';
-}
-function busy(btn, on, label) {
-  btn.disabled = on;
-  btn.innerHTML = on ? '<span class="spinner"></span> ' + label : label;
-}
-const pathOf = (u) => { try { return new URL(u).pathname; } catch { return u; } };
-const hostOf = (u) => { try { return new URL(u).host.replace(/^www\./, ''); } catch { return ''; } };
-/** Same rule as slugOf() on the server: the baseline folder is named from the path alone. */
-const slugOf = (u) => {
-  try {
-    const p = (new URL(u).pathname.replace(/\/+$/, '') || 'home').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '');
-    return (p || 'home').slice(0, 60).toLowerCase();
-  } catch { return null; }
-};
-/** Same rule as pageKey() on the server: host + path, no trailing slash, no query. */
-const pageKey = (u) => {
-  try {
-    const x = new URL(u);
-    const host = x.hostname.replace(/^www\./i, '').toLowerCase();
-    if (!host) return '';
-    const port = x.port || (x.protocol === 'https:' ? '443' : '80');
-    const implicit = (x.protocol === 'https:' && port === '443') || (x.protocol === 'http:' && port === '80');
-    const path = x.pathname.replace(/\/+$/, '') || '/';
-    return x.protocol + '//' + host + (implicit ? '' : ':' + port) + path;
-  } catch { return ''; }
-};
-
-/* ------------------------- remembering a session ------------------------- */
-/**
- * Keep the pairing for a (site, design) pair in the browser, so the second run skips discovery.
- *
- * localStorage rather than a cookie: nothing here needs to reach the server on every request, and
- * a pairing with frame names and thumbnails is far past what a cookie holds. Everything is wrapped
- * in try/catch because localStorage throws outright in a few browser configurations, and losing a
- * convenience must never break the tool.
- */
-const LS_PREFIX = 'qav:v1:';
-const LS_LAST = 'qav:v1:last';
-const LS_FAST = 'qav:v1:fast';
-const keyFor = (site, figma) => LS_PREFIX + bareUrl((site || '').trim()).replace(/\/+$/, '') + '|' + (figma || '').trim();
-
-function fastOn() {
-  return Boolean($('fast') && $('fast').checked);
-}
-function setFast(on) {
-  const v = Boolean(on);
-  if ($('fast')) $('fast').checked = v;
-  if ($('fast2')) $('fast2').checked = v;
-  try { localStorage.setItem(LS_FAST, v ? '1' : '0'); } catch {}
-}
-
-/** Strip user:pass@ before anything is written to disk — a saved secret is a leaked secret. */
-function bareUrl(raw) {
-  try {
-    const u = new URL(raw);
-    u.username = '';
-    u.password = '';
-    return u.toString();
-  } catch {
-    return raw;
-  }
-}
-
-function saveSession() {
-  try {
-    const site = bareUrl($('site').value.trim());
-    if (!site) return;
-    const key = keyFor(site, $('figma').value);
-    localStorage.setItem(
-      key,
-      JSON.stringify({
-        siteUrl: site,
-        figmaLink: $('figma').value.trim(),
-        maxPages: Number($('max').value) || 8,
-        fast: fastOn(),
-        rows: ROWS,
-        frames: FRAMES,
-        savedAt: new Date().toISOString(),
-      }),
-    );
-    localStorage.setItem(LS_LAST, key);
-  } catch {
-    /* a full or disabled localStorage costs a convenience, not the run */
-  }
-}
-
-function loadSession(site, figma) {
-  try {
-    const raw = localStorage.getItem(keyFor(site, figma));
-    if (!raw) return null;
-    const d = JSON.parse(raw);
-    return Array.isArray(d?.rows) && d.rows.length ? d : null;
-  } catch {
-    return null;
-  }
-}
-
-/** Prefill the form from the last site worked on, and offer to reuse its pairing. */
-function restoreLast() {
-  let d = null;
-  try {
-    const key = localStorage.getItem(LS_LAST);
-    d = key ? JSON.parse(localStorage.getItem(key) || 'null') : null;
-  } catch {}
-  try {
-    const fromLs = localStorage.getItem(LS_FAST) === '1';
-    const fromSession = typeof d?.fast === 'boolean' ? d.fast : fromLs;
-    setFast(fromSession);
-  } catch {
-    setFast(false);
-  }
-  if (!d?.siteUrl) return;
-  $('site').value = d.siteUrl;
-  $('figma').value = d.figmaLink || '';
-  if (d.maxPages) $('max').value = d.maxPages;
-  offerSaved();
-}
-
-/**
- * Switch the primary button between "discover" and "reuse".
- *
- * The reuse path is offered rather than taken silently: a saved pairing can be stale — pages added
- * to the site, frames renamed in Figma — and a person who cannot see that a shortcut was taken
- * cannot tell a stale table from a fresh one.
- */
-function offerSaved() {
-  const d = loadSession($('site').value, $('figma').value);
-  const has = Boolean(d);
-  $('saved').hidden = !has;
-  $('redo').hidden = !has;
-  $('go1').textContent = has ? 'Open pairing table' : 'Discover pages';
-  $('hint1').textContent = has
-    ? 'Reuse the saved pairing — skip discovery and go straight to QA. Click "Discover from scratch" if the site added pages or Figma changed.'
-    : 'This step takes 15–30 seconds: open a browser, read the sitemap (or homepage links), read the Figma file and render frames.';
-  if (has) {
-    const when = (d.savedAt || '').slice(0, 16).replace('T', ' ');
-    $('saved').innerHTML =
-      '<b>Saved pairing found for this site</b> — ' + d.rows.length + ' pages, ' + (d.frames || []).length + ' frames' +
-      (when ? ', saved ' + when : '') + '.';
-  }
-}
-
-async function loadCoverage(site) {
-  COVERAGE = new Map();
-  if (!site) return;
-  try {
-    const d = await fetch('/api/coverage?site=' + encodeURIComponent(site)).then((r) => r.json());
-    for (const p of d.pages || []) if (p.key) COVERAGE.set(p.key, p);
-  } catch {}
-}
-
-function seenOf(url) {
-  const k = pageKey(url);
-  return k ? COVERAGE.get(k) : undefined;
-}
-
-/** New pages ticked; already-QA'd left off until someone asks to re-check. */
-function applyCoverageDefaults() {
-  const anyNew = ROWS.some((r) => !seenOf(r.url));
-  for (const r of ROWS) r.include = anyNew ? !seenOf(r.url) : false;
-}
-
-async function openPairing() {
-  await loadCoverage($('site').value.trim());
-  applyCoverageDefaults();
-  render();
-  $('s1').hidden = true;
-  $('s2').hidden = false;
-}
-
-/* ------------------------------ 1. discover ------------------------------ */
-$('redo').onclick = () => {
-  try {
-    localStorage.removeItem(keyFor($('site').value, $('figma').value));
-  } catch {}
-  offerSaved();
-  $('go1').click();
-};
-$('site').addEventListener('input', offerSaved);
-$('figma').addEventListener('input', offerSaved);
-
-$('go1').onclick = async () => {
-  const siteUrl = $('site').value.trim();
-  const figmaLink = $('figma').value.trim();
-  showErr('e1', '');
-  if (!/^https?:\/\//i.test(siteUrl)) return showErr('e1', 'Homepage URL must start with http:// or https://');
-  if (figmaLink && !/figma\.com\//.test(figmaLink) && !figmaLink.startsWith('/')) return showErr('e1', 'Design must be a figma.com/… link or an absolute path to a PNG folder');
-
-  // Saved pairing for exactly this (site, design)? Re-arm the server and go straight to the table.
-  const saved = loadSession(siteUrl, figmaLink);
-  if (saved) {
-    busy($('go1'), true, 'Opening pairing…');
-    try {
-      const r = await post('/api/session', { siteUrl, figmaLink, maxPages: Number($('max').value) || 8, frames: saved.frames || [], user: $('auser').value.trim(), pass: $('apass').value });
-      FRAMES = saved.frames || [];
-      ROWS = saved.rows;
-      $('meta').textContent = [hostOf(siteUrl), r.aiModel ? 'AI: ' + r.aiModel : 'AI: off'].join(' · ');
-      $('s2sub').textContent =
-        ROWS.length + ' pages · ' + FRAMES.length + ' Figma frames (saved table, discovery skipped). Tick pages to run — already-QA’d pages are off by default.';
-      await openPairing();
-      return;
-    } catch (e) {
-      showErr('e1', e.message);
-      return;
-    } finally {
-      busy($('go1'), false, 'Open pairing table');
-    }
-  }
-
-  busy($('go1'), true, 'Discovering pages…');
-  try {
-    const d = await post('/api/discover', { siteUrl, figmaLink, maxPages: Number($('max').value) || 8, user: $('auser').value.trim(), pass: $('apass').value });
-    FRAMES = d.frames || [];
-    ROWS = d.pages || [];
-    // The server strips any user:pass@ out of the URL; use its version from here on so the secret
-    // is not what gets shown, remembered, or keyed on.
-    if (d.siteUrl) $('site').value = d.siteUrl;
-    $('meta').textContent = [hostOf(siteUrl), d.aiModel ? 'AI: ' + d.aiModel : 'AI: off'].join(' · ');
-    const bits = [ROWS.length + ' pages (' + d.pagesFrom + ')', FRAMES.length + ' Figma frames'];
-    if (d.authHow) bits.push('signed in via ' + d.authHow);
-    if (/figma\.com\//.test(figmaLink) && !d.hasFigmaToken) bits.push('⚠ FIGMA_TOKEN is missing from .env');
-    $('s2sub').textContent = bits.join(' · ') + '. Tick pages to run — already-QA’d pages are off by default.';
-    await openPairing();
-    saveSession();
-  } catch (e) {
-    showErr('e1', e.message);
-  } finally {
-    busy($('go1'), false, 'Discover pages');
-  }
-};
-$('back2').onclick = () => { $('s2').hidden = true; $('s1').hidden = false; };
-
-/* ------------------------------- 2. table -------------------------------- */
-/**
- * Every problem worth blocking on, worked out from the rows as they stand.
- *
- * The slug clash is the one that matters most and reads as the most obscure: two different URLs
- * whose paths agree share one approved-baseline folder on disk, so each run overwrites the other's
- * reference and the diff silently compares the wrong pages.
- */
-function validate() {
-  const home = hostOf(ROWS[0]?.url || '');
-  // First pass: what each row's identity is. Second pass: who collides with whom.
-  const id = ROWS.map((r) => {
-    const u = (r.url || '').trim();
-    const ok = /^https?:\/\/.+/i.test(u);
-    return ok ? { ok, u, key: hostOf(u) + (pathOf(u).replace(/\/+$/, '') || '/'), slug: slugOf(u) } : { ok: false };
-  });
-  const firstKey = new Map(), firstSlug = new Map();
-  id.forEach((x, i) => {
-    if (!x.ok) return;
-    if (!firstKey.has(x.key)) firstKey.set(x.key, i);
-    if (x.slug && !firstSlug.has(x.slug)) firstSlug.set(x.slug, i);
-  });
-
-  return ROWS.map((r, i) => {
-    const flags = [];
-    const x = id[i];
-    if (!x.ok) flags.push({ level: 'bad', text: 'Invalid URL — must be http:// or https://' });
-    else {
-      if (firstKey.get(x.key) !== i) flags.push({ level: 'bad', text: 'duplicate of row ' + (firstKey.get(x.key) + 1) + ' — same page, would be QA’d twice' });
-      else if (x.slug && firstSlug.get(x.slug) !== i) {
-        flags.push({ level: 'bad', text: 'same folder name "' + x.slug + '" as row ' + (firstSlug.get(x.slug) + 1) + ' — the two pages would overwrite each other’s baseline and diffs would compare the wrong pages. Remove one row.' });
+      async function post(path, body) {
+        let res;
+        try {
+          res = await fetch(path, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+        } catch {
+          throw new Error(DEAD_SERVER);
+        }
+        const data = await res
+          .json()
+          .catch(() => ({ error: 'response was not JSON' }));
+        if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+        return data;
       }
-      if (home && hostOf(x.u) !== home) flags.push({ level: 'warn', text: 'different host from row 1 (' + home + ') — check for a typo' });
-    }
-    if (r.pendingLink) flags.push({ level: 'warn', text: 'Figma link not applied yet — click Fetch frame, or pick another frame' });
-    return flags;
-  });
-}
+      function showErr(where, msg) {
+        $(where).innerHTML = msg
+          ? '<div class="err">' + esc(msg).replace(/\n/g, '<br>') + '</div>'
+          : '';
+      }
+      function busy(btn, on, label) {
+        btn.disabled = on;
+        btn.innerHTML = on ? '<span class="spinner"></span> ' + label : label;
+      }
+      const pathOf = (u) => {
+        try {
+          return new URL(u).pathname;
+        } catch {
+          return u;
+        }
+      };
+      const hostOf = (u) => {
+        try {
+          return new URL(u).host.replace(/^www\./, '');
+        } catch {
+          return '';
+        }
+      };
+      /** Same rule as slugOf() on the server: the baseline folder is named from the path alone. */
+      const slugOf = (u) => {
+        try {
+          const p = (new URL(u).pathname.replace(/\/+$/, '') || 'home')
+            .replace(/[^a-z0-9]+/gi, '-')
+            .replace(/^-|-$/g, '');
+          return (p || 'home').slice(0, 60).toLowerCase();
+        } catch {
+          return null;
+        }
+      };
+      /** Same rule as pageKey() on the server: host + path, no trailing slash, no query. */
+      const pageKey = (u) => {
+        try {
+          const x = new URL(u);
+          const host = x.hostname.replace(/^www\./i, '').toLowerCase();
+          if (!host) return '';
+          const port = x.port || (x.protocol === 'https:' ? '443' : '80');
+          const implicit =
+            (x.protocol === 'https:' && port === '443') ||
+            (x.protocol === 'http:' && port === '80');
+          const path = x.pathname.replace(/\/+$/, '') || '/';
+          return x.protocol + '//' + host + (implicit ? '' : ':' + port) + path;
+        } catch {
+          return '';
+        }
+      };
 
-function frameOptions(sel) {
-  let h = '<option value="">— no design compare</option>';
-  for (const f of FRAMES) h += '<option value="' + esc(f.id) + '"' + (f.id === sel ? ' selected' : '') + '>' + esc(f.name) + ' · ' + f.width + 'px</option>';
-  h += '<option value="__paste"' + (sel === '__paste' ? ' selected' : '') + '>+ paste Figma link…</option>';
-  return h;
-}
+      /* ------------------------- remembering a session ------------------------- */
+      /**
+       * Keep the pairing for a (site, design) pair in the browser, so the second run skips discovery.
+       *
+       * localStorage rather than a cookie: nothing here needs to reach the server on every request, and
+       * a pairing with frame names and thumbnails is far past what a cookie holds. Everything is wrapped
+       * in try/catch because localStorage throws outright in a few browser configurations, and losing a
+       * convenience must never break the tool.
+       */
+      const LS_PREFIX = 'qav:v1:';
+      const LS_LAST = 'qav:v1:last';
+      const LS_FAST = 'qav:v1:fast';
+      const keyFor = (site, figma) =>
+        LS_PREFIX +
+        bareUrl((site || '').trim()).replace(/\/+$/, '') +
+        '|' +
+        (figma || '').trim();
 
-function qaLabel(url) {
-  const seen = seenOf(url);
-  if (!seen) return '<div class="qa new">not QA’d yet</div>';
-  return '<div class="qa old">QA’d · ' + esc(formatWhen(seen.when, seen.stamp)) + '</div>';
-}
+      function fastOn() {
+        return Boolean($('fast') && $('fast').checked);
+      }
+      function setFast(on) {
+        const v = Boolean(on);
+        if ($('fast')) $('fast').checked = v;
+        if ($('fast2')) $('fast2').checked = v;
+        try {
+          localStorage.setItem(LS_FAST, v ? '1' : '0');
+        } catch {}
+      }
 
-function selectedRows() {
-  return ROWS.filter((r) => r.include !== false);
-}
+      /** Strip user:pass@ before anything is written to disk — a saved secret is a leaked secret. */
+      function bareUrl(raw) {
+        try {
+          const u = new URL(raw);
+          u.username = '';
+          u.password = '';
+          return u.toString();
+        } catch {
+          return raw;
+        }
+      }
 
-function updateCount() {
-  const flags = validate();
-  const bad = flags.filter((f) => f.some((x) => x.level === 'bad')).length;
-  const n = selectedRows().length;
-  const seen = ROWS.filter((r) => seenOf(r.url)).length;
-  if (bad) {
-    $('count').textContent = bad + ' rows need fixing before you can run';
-    $('go2').disabled = true;
-    return;
-  }
-  $('count').textContent = n + '/' + ROWS.length + ' pages will run' + (seen ? ' · ' + seen + ' already QA’d' : '');
-  $('go2').disabled = !ROWS.length || n === 0;
-  $('go2').textContent = n ? 'Run QA (' + n + ' pages)' : 'Run QA';
-}
+      function saveSession() {
+        try {
+          const site = bareUrl($('site').value.trim());
+          if (!site) return;
+          const key = keyFor(site, $('figma').value);
+          localStorage.setItem(
+            key,
+            JSON.stringify({
+              siteUrl: site,
+              figmaLink: $('figma').value.trim(),
+              maxPages: Number($('max').value) || 8,
+              fast: fastOn(),
+              rows: ROWS,
+              frames: FRAMES,
+              savedAt: new Date().toISOString(),
+            }),
+          );
+          localStorage.setItem(LS_LAST, key);
+        } catch {
+          /* a full or disabled localStorage costs a convenience, not the run */
+        }
+      }
 
-function render() {
-  const flags = validate();
-  $('rows').innerHTML = ROWS.map((r, i) => {
-    const f = FRAMES.find((x) => x.id === r.figmaNodeId) || (r.frameName ? FRAMES.find((x) => x.name === r.frameName) : null);
-    const thumb = f && f.thumb
-      ? '<img src="/design/' + encodeURIComponent(f.thumb) + '" alt="' + esc(f.name) + '" data-zoom="' + esc(f.name) + '">'
-      : '<div class="none">' + (f ? 'not rendered' : '—') + '</div>';
-    const fl = flags[i].map((x) => '<div class="flag ' + x.level + '">' + esc(x.text) + '</div>').join('');
-    const on = r.include !== false;
-    return '<tr data-i="' + i + '">'
-      + '<td class="pick"><input type="checkbox" class="pick" ' + (on ? 'checked' : '') + ' title="Run QA on this page"></td>'
-      + '<td class="n">' + (i + 1) + '</td>'
-      + '<td class="thumb">' + thumb + '</td>'
-      + '<td class="urlcell"><input type="url" class="url" value="' + esc(r.url || '') + '" placeholder="https://…">'
-      + qaLabel(r.url)
-      + (r.how ? '<div class="why">' + esc(r.how) + '</div>' : '') + fl + '</td>'
-      + '<td><select class="frame">' + frameOptions(r.pendingLink ? '__paste' : (f ? f.id : '')) + '</select>'
-      + '<div class="paste' + (r.pendingLink !== undefined ? ' on' : '') + '">'
-      + '<input type="text" class="link" placeholder="paste Figma frame link, then Enter" value="' + esc(r.pendingLink || '') + '">'
-      + '<button class="getframe" style="margin-top:6px">Fetch frame</button></div></td>'
-      + '<td class="act"><button class="icon del" title="remove row">✕</button></td>'
-      + '</tr>';
-  }).join('');
-  updateCount();
-}
+      function loadSession(site, figma) {
+        try {
+          const raw = localStorage.getItem(keyFor(site, figma));
+          if (!raw) return null;
+          const d = JSON.parse(raw);
+          return Array.isArray(d?.rows) && d.rows.length ? d : null;
+        } catch {
+          return null;
+        }
+      }
 
-$('rows').addEventListener('input', (e) => {
-  const tr = e.target.closest('tr'); if (!tr) return;
-  const i = +tr.dataset.i;
-  if (e.target.classList.contains('url')) {
-    ROWS[i].url = e.target.value;
-    ROWS[i].how = 'edited by hand';
-    // Re-validate without re-rendering, so the caret does not jump while typing.
-    const flags = validate();
-    const cell = tr.querySelector('.urlcell');
-    if (cell) {
-      cell.querySelectorAll('.flag, .why, .qa').forEach((n) => n.remove());
-      cell.insertAdjacentHTML('beforeend',
-        qaLabel(ROWS[i].url)
-        + '<div class="why">' + esc(ROWS[i].how || '') + '</div>'
-        + flags[i].map((x) => '<div class="flag ' + x.level + '">' + esc(x.text) + '</div>').join(''));
-    }
-    updateCount();
-  }
-  if (e.target.classList.contains('link')) ROWS[i].pendingLink = e.target.value;
-});
+      /** Prefill the form from the last site worked on, and offer to reuse its pairing. */
+      function restoreLast() {
+        let d = null;
+        try {
+          const key = localStorage.getItem(LS_LAST);
+          d = key ? JSON.parse(localStorage.getItem(key) || 'null') : null;
+        } catch {}
+        try {
+          const fromLs = localStorage.getItem(LS_FAST) === '1';
+          const fromSession = typeof d?.fast === 'boolean' ? d.fast : fromLs;
+          setFast(fromSession);
+        } catch {
+          setFast(false);
+        }
+        if (!d?.siteUrl) return;
+        $('site').value = d.siteUrl;
+        $('figma').value = d.figmaLink || '';
+        if (d.maxPages) $('max').value = d.maxPages;
+        offerSaved();
+      }
 
-$('rows').addEventListener('change', (e) => {
-  if (e.target.classList.contains('pick')) {
-    const i = +e.target.closest('tr').dataset.i;
-    ROWS[i].include = e.target.checked;
-    updateCount();
-    return;
-  }
-  if (!e.target.classList.contains('frame')) return;
-  const i = +e.target.closest('tr').dataset.i;
-  const v = e.target.value;
-  if (v === '__paste') { ROWS[i].pendingLink = ROWS[i].pendingLink || ''; render(); tryFocus(i); return; }
-  delete ROWS[i].pendingLink;
-  const f = FRAMES.find((x) => x.id === v);
-  ROWS[i].figmaNodeId = f ? f.id : undefined;
-  ROWS[i].frameName = f ? f.name : undefined;
-  ROWS[i].how = f ? 'picked by hand: "' + f.name + '"' : 'no design compare';
-  render();
-});
+      /**
+       * Switch the primary button between "discover" and "reuse".
+       *
+       * The reuse path is offered rather than taken silently: a saved pairing can be stale — pages added
+       * to the site, frames renamed in Figma — and a person who cannot see that a shortcut was taken
+       * cannot tell a stale table from a fresh one.
+       */
+      function offerSaved() {
+        const d = loadSession($('site').value, $('figma').value);
+        const has = Boolean(d);
+        $('saved').hidden = !has;
+        $('redo').hidden = !has;
+        $('go1').textContent = has ? 'Open pairing table' : 'Discover pages';
+        $('hint1').textContent = has
+          ? 'Reuse the saved pairing — skip discovery and go straight to QA. Click "Discover from scratch" if the site added pages or Figma changed.'
+          : 'This step takes 15–30 seconds: open a browser, read the sitemap (or homepage links), read the Figma file and render frames.';
+        if (has) {
+          const when = (d.savedAt || '').slice(0, 16).replace('T', ' ');
+          $('saved').innerHTML =
+            '<b>Saved pairing found for this site</b> — ' +
+            d.rows.length +
+            ' pages, ' +
+            (d.frames || []).length +
+            ' frames' +
+            (when ? ', saved ' + when : '') +
+            '.';
+        }
+      }
 
-function tryFocus(i) {
-  const el = document.querySelector('tr[data-i="' + i + '"] .link');
-  if (el) el.focus();
-}
+      async function loadCoverage(site) {
+        COVERAGE = new Map();
+        if (!site) return;
+        try {
+          const d = await fetch(
+            '/api/coverage?site=' + encodeURIComponent(site),
+          ).then((r) => r.json());
+          for (const p of d.pages || []) if (p.key) COVERAGE.set(p.key, p);
+        } catch {}
+      }
 
-$('rows').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && e.target.classList.contains('link')) { e.preventDefault(); getFrame(+e.target.closest('tr').dataset.i); }
-});
-$('rows').addEventListener('click', async (e) => {
-  const tr = e.target.closest('tr'); if (!tr) return;
-  const i = +tr.dataset.i;
-  if (e.target.classList.contains('del')) { ROWS.splice(i, 1); render(); }
-  if (e.target.classList.contains('getframe')) getFrame(i);
-  if (e.target.dataset.zoom !== undefined) {
-    $('zoomImg').src = e.target.src; $('zoomName').textContent = e.target.dataset.zoom; $('zoom').showModal();
-  }
-});
+      function seenOf(url) {
+        const k = pageKey(url);
+        return k ? COVERAGE.get(k) : undefined;
+      }
 
-async function getFrame(i) {
-  const link = (ROWS[i].pendingLink || '').trim();
-  const btn = document.querySelector('tr[data-i="' + i + '"] .getframe');
-  showErr('e2', '');
-  if (!link) return showErr('e2', 'row ' + (i + 1) + ': no link pasted');
-  if (btn) busy(btn, true, 'Fetching…');
-  try {
-    const f = await post('/api/frame', { link });
-    if (!FRAMES.some((x) => x.id === f.id)) FRAMES.push(f);
-    delete ROWS[i].pendingLink;
-    ROWS[i].figmaNodeId = f.id;
-    ROWS[i].frameName = f.name;
-    ROWS[i].how = 'pasted link: "' + f.name + '"';
-    render();
-  } catch (e) {
-    showErr('e2', 'row ' + (i + 1) + ': ' + e.message);
-    if (btn) busy(btn, false, 'Fetch frame');
-  }
-}
+      /** New pages ticked; already-QA'd left off until someone asks to re-check. */
+      function applyCoverageDefaults() {
+        const anyNew = ROWS.some((r) => !seenOf(r.url));
+        for (const r of ROWS) r.include = anyNew ? !seenOf(r.url) : false;
+      }
 
-$('add').onclick = () => {
-  const base = ROWS[0]?.url || '';
-  let prefix = '';
-  try { prefix = new URL(base).origin + '/'; } catch {}
-  ROWS.push({ url: prefix, how: 'added by hand', include: true });
-  render();
-  const els = document.querySelectorAll('tr .url');
-  const last = els[els.length - 1];
-  if (last) { last.focus(); last.setSelectionRange(last.value.length, last.value.length); }
-};
+      async function openPairing() {
+        await loadCoverage($('site').value.trim());
+        applyCoverageDefaults();
+        render();
+        $('s1').hidden = true;
+        $('s2').hidden = false;
+      }
 
-/* -------------------------------- 3. run --------------------------------- */
-$('picknew').onclick = () => { for (const r of ROWS) r.include = !seenOf(r.url); render(); };
-$('pickold').onclick = () => { for (const r of ROWS) r.include = Boolean(seenOf(r.url)); render(); };
-$('pickall').onclick = () => { for (const r of ROWS) r.include = true; render(); };
+      /* ------------------------------ 1. discover ------------------------------ */
+      $('redo').onclick = () => {
+        try {
+          localStorage.removeItem(keyFor($('site').value, $('figma').value));
+        } catch {}
+        offerSaved();
+        $('go1').click();
+      };
+      $('site').addEventListener('input', offerSaved);
+      $('figma').addEventListener('input', offerSaved);
 
-$('go2').onclick = async () => {
-  showErr('e2', '');
-  const chosen = selectedRows();
-  if (!chosen.length) return showErr('e2', 'no pages ticked — select unreviewed pages, or tick pages you want to re-check');
-  const pages = chosen.map((r) => ({ url: r.url.trim(), figmaNodeId: r.figmaNodeId, frameName: r.frameName, how: r.how }));
-  const catalog = ROWS.map((r) => ({ url: r.url.trim(), figmaNodeId: r.figmaNodeId, frameName: r.frameName, how: r.how }));
-  saveSession();
-  busy($('go2'), true, 'Running…');
-  try {
-    const { runId } = await post('/api/run', { pages, catalog, fast: fastOn() });
-    $('s2').hidden = true; $('s3').hidden = false;
-    $('log').textContent = '';
-    $('doneBar').hidden = true;
-    $('notes').hidden = true;
-    $('s3sub').dataset.plan = '';
-    $('s3sub').textContent = 'Capture 3 viewports per page, compare with the design, then merge duplicate findings.';
-    $('prog').hidden = false;
-    $('fill').style.width = '0%';
-    $('plabel').textContent = 'starting…';
-    $('pcount').textContent = '';
-    $('s3title').textContent = 'Running QA…';
-    watch(runId);
-  } catch (e) {
-    showErr('e2', e.message);
-  } finally {
-    busy($('go2'), false, 'Run QA');
-    updateCount();
-  }
-};
+      $('go1').onclick = async () => {
+        const siteUrl = $('site').value.trim();
+        const figmaLink = $('figma').value.trim();
+        showErr('e1', '');
+        if (!/^https?:\/\//i.test(siteUrl))
+          return showErr(
+            'e1',
+            'Homepage URL must start with http:// or https://',
+          );
+        if (
+          figmaLink &&
+          !/figma\.com\//.test(figmaLink) &&
+          !figmaLink.startsWith('/')
+        )
+          return showErr(
+            'e1',
+            'Design must be a figma.com/… link or an absolute path to a PNG folder',
+          );
 
-async function backToPairing() {
-  $('s3').hidden = true;
-  $('s2').hidden = false;
-  await loadCoverage($('site').value.trim());
-  applyCoverageDefaults();
-  render();
-}
+        // Saved pairing for exactly this (site, design)? Re-arm the server and go straight to the table.
+        const saved = loadSession(siteUrl, figmaLink);
+        if (saved) {
+          busy($('go1'), true, 'Opening pairing…');
+          try {
+            const r = await post('/api/session', {
+              siteUrl,
+              figmaLink,
+              maxPages: Number($('max').value) || 8,
+              frames: saved.frames || [],
+              user: $('auser').value.trim(),
+              pass: $('apass').value,
+            });
+            FRAMES = saved.frames || [];
+            ROWS = saved.rows;
+            $('meta').textContent = [
+              hostOf(siteUrl),
+              r.aiModel ? 'AI: ' + r.aiModel : 'AI: off',
+            ].join(' · ');
+            $('s2sub').textContent =
+              ROWS.length +
+              ' pages · ' +
+              FRAMES.length +
+              ' Figma frames (saved table, discovery skipped). Tick pages to run — already-QA’d pages are off by default.';
+            await openPairing();
+            return;
+          } catch (e) {
+            showErr('e1', e.message);
+            return;
+          } finally {
+            busy($('go1'), false, 'Open pairing table');
+          }
+        }
 
-function watch(runId) {
-  const es = new EventSource('/api/stream/' + runId);
-  const log = $('log');
-  es.addEventListener('log', (ev) => {
-    log.textContent += JSON.parse(ev.data) + '\n';
-    log.scrollTop = log.scrollHeight;
-  });
-  const PHASE = { capture: 'Screenshots', ai: 'AI compare', wrap: 'Wrap-up' };
-  /**
-   * Count within the current phase, not out of the grand total.
-   *
-   * "19/44" on a 7-page run is a number nobody can verify — the reader knows how many pages there
-   * are, not how many screenshots and API calls that adds up to. "shot 19/21" they can check at a
-   * glance, and the plan line above spells out where 44 came from.
-   */
-  es.addEventListener('progress', (ev) => {
-    const p = JSON.parse(ev.data);
-    const pct = p.total ? Math.round((p.done / p.total) * 100) : 0;
-    $('fill').style.width = pct + '%';
-    $('plabel').textContent = (PHASE[p.phase] || '') + ' — ' + p.label;
+        busy($('go1'), true, 'Discovering pages…');
+        try {
+          const d = await post('/api/discover', {
+            siteUrl,
+            figmaLink,
+            maxPages: Number($('max').value) || 8,
+            user: $('auser').value.trim(),
+            pass: $('apass').value,
+          });
+          FRAMES = d.frames || [];
+          ROWS = d.pages || [];
+          // The server strips any user:pass@ out of the URL; use its version from here on so the secret
+          // is not what gets shown, remembered, or keyed on.
+          if (d.siteUrl) $('site').value = d.siteUrl;
+          $('meta').textContent = [
+            hostOf(siteUrl),
+            d.aiModel ? 'AI: ' + d.aiModel : 'AI: off',
+          ].join(' · ');
+          const bits = [
+            ROWS.length + ' pages (' + d.pagesFrom + ')',
+            FRAMES.length + ' Figma frames',
+          ];
+          if (d.authHow) bits.push('signed in via ' + d.authHow);
+          if (/figma\.com\//.test(figmaLink) && !d.hasFigmaToken)
+            bits.push('⚠ FIGMA_TOKEN is missing from .env');
+          $('s2sub').textContent =
+            bits.join(' · ') +
+            '. Tick pages to run — already-QA’d pages are off by default.';
+          await openPairing();
+          saveSession();
+        } catch (e) {
+          showErr('e1', e.message);
+        } finally {
+          busy($('go1'), false, 'Discover pages');
+        }
+      };
+      $('back2').onclick = () => {
+        $('s2').hidden = true;
+        $('s1').hidden = false;
+      };
 
-    const pl = p.plan || { capture: 0, ai: 0, wrap: 0 };
-    let within = '';
-    if (p.phase === 'capture' && pl.capture) within = 'shots ' + Math.min(p.done, pl.capture) + '/' + pl.capture;
-    else if (p.phase === 'ai' && pl.ai) within = 'AI ' + Math.max(0, Math.min(p.done - pl.capture, pl.ai)) + '/' + pl.ai;
-    $('pcount').textContent = pct + '%' + (within ? ' · ' + within : '');
+      /* ------------------------------- 2. table -------------------------------- */
+      /**
+       * Every problem worth blocking on, worked out from the rows as they stand.
+       *
+       * The slug clash is the one that matters most and reads as the most obscure: two different URLs
+       * whose paths agree share one approved-baseline folder on disk, so each run overwrites the other's
+       * reference and the diff silently compares the wrong pages.
+       */
+      function validate() {
+        const home = hostOf(ROWS[0]?.url || '');
+        // First pass: what each row's identity is. Second pass: who collides with whom.
+        const id = ROWS.map((r) => {
+          const u = (r.url || '').trim();
+          const ok = /^https?:\/\/.+/i.test(u);
+          return ok
+            ? {
+                ok,
+                u,
+                key: hostOf(u) + (pathOf(u).replace(/\/+$/, '') || '/'),
+                slug: slugOf(u),
+              }
+            : { ok: false };
+        });
+        const firstKey = new Map(),
+          firstSlug = new Map();
+        id.forEach((x, i) => {
+          if (!x.ok) return;
+          if (!firstKey.has(x.key)) firstKey.set(x.key, i);
+          if (x.slug && !firstSlug.has(x.slug)) firstSlug.set(x.slug, i);
+        });
 
-    if (pl.capture && $('s3sub').dataset.plan !== '1') {
-      const pages = Math.round(pl.capture / 3);
-      $('s3sub').textContent =
-        pages + ' pages × 3 viewports = ' + pl.capture + ' shots · ' + pl.ai + ' AI calls · ' + pl.wrap +
-        ' wrap-up steps = ' + p.total + ' steps';
-      $('s3sub').dataset.plan = '1';
-    }
-  });
-  es.addEventListener('done', (ev) => {
-    const d = JSON.parse(ev.data);
-    es.close();
-    $('fill').style.width = '100%';
-    $('prog').hidden = true;
-    $('s3title').textContent = 'Done';
-    $('s3sub').textContent = d.durationMs ? 'Finished in ' + Math.round(d.durationMs / 1000) + ' seconds.' : '';
-    $('doneBar').hidden = false;
-    const stamp = (d.reportUrl || '').split('/')[2] || '';
-    $('doneBar').innerHTML = '<span class="big">' + d.findings + ' findings</span>'
-      + '<button class="primary" id="open">Open report</button>'
-      + '<button id="share">Export share file</button>'
-      + '<button id="again">Run again</button>'
-      + '<span class="hint" id="shareOut" style="margin:0"></span>';
-    openNotes(stamp, $('site').value.trim());
-    $('open').onclick = () => window.open(d.reportUrl, '_blank');
-    $('again').onclick = () => backToPairing();
-    $('share').onclick = () => makeShare(stamp);
-    window.open(d.reportUrl, '_blank');
-    loadHistory();
-  });
-  es.addEventListener('failed', (ev) => {
-    es.close();
-    $('prog').hidden = true;
-    $('notes').hidden = true;
-    $('s3title').textContent = 'Run failed';
-    $('s3sub').textContent = '';
-    $('doneBar').hidden = false;
-    $('doneBar').innerHTML = '<div class="err" style="margin:0">' + esc(JSON.parse(ev.data).error) + '</div>'
-      + '<button id="again2">Back to pairing</button>';
-    $('again2').onclick = () => backToPairing();
-  });
-  es.onerror = () => { if (es.readyState === 2) es.close(); };
-}
+        return ROWS.map((r, i) => {
+          const flags = [];
+          const x = id[i];
+          if (!x.ok)
+            flags.push({
+              level: 'bad',
+              text: 'Invalid URL — must be http:// or https://',
+            });
+          else {
+            if (firstKey.get(x.key) !== i)
+              flags.push({
+                level: 'bad',
+                text:
+                  'duplicate of row ' +
+                  (firstKey.get(x.key) + 1) +
+                  ' — same page, would be QA’d twice',
+              });
+            else if (x.slug && firstSlug.get(x.slug) !== i) {
+              flags.push({
+                level: 'bad',
+                text:
+                  'same folder name "' +
+                  x.slug +
+                  '" as row ' +
+                  (firstSlug.get(x.slug) + 1) +
+                  ' — the two pages would overwrite each other’s baseline and diffs would compare the wrong pages. Remove one row.',
+              });
+            }
+            if (home && hostOf(x.u) !== home)
+              flags.push({
+                level: 'warn',
+                text:
+                  'different host from row 1 (' + home + ') — check for a typo',
+              });
+          }
+          if (r.pendingLink)
+            flags.push({
+              level: 'warn',
+              text: 'Figma link not applied yet — click Fetch frame, or pick another frame',
+            });
+          return flags;
+        });
+      }
 
-/**
- * The note box, opened once a run has a report to attach the note to.
- *
- * Prefilled with the previous run's note for THIS site, because most of what a person writes here
- * is a standing reminder that is just as true next week. Other projects in reports/ are ignored.
- * Nothing reaches the report until Save is pressed.
- */
-let NOTE_STAMP = '';
-async function openNotes(stamp, label) {
-  NOTE_STAMP = stamp;
-  $('notes').hidden = false;
-  // Which run is being written to has to be on screen: the editor is now reachable from any row
-  // of the history, so "the current one" is no longer a safe assumption.
-  $('notefor').textContent = label ? label + ' · ' + stamp : stamp;
-  $('notetext').value = '';
-  $('notestate').textContent = '';
-  $('notestate').className = 'hint';
-  try {
-    const mine = await fetch('/api/notes?stamp=' + encodeURIComponent(stamp)).then((r) => r.json());
-    if (mine.notes) {
-      $('notetext').value = mine.notes;
-      return;
-    }
-    const site = encodeURIComponent($('site').value.trim());
-    const prev = await fetch('/api/notes/previous?before=' + encodeURIComponent(stamp) + (site ? '&site=' + site : '')).then((r) => r.json());
-    if (prev.notes) {
-      $('notetext').value = prev.notes;
-      $('notestate').textContent = 'showing notes from run ' + prev.from + ' — edit and click Save';
-    }
-  } catch {
-    /* the box still works without a prefill */
-  }
-}
+      function frameOptions(sel) {
+        let h = '<option value="">— no design compare</option>';
+        for (const f of FRAMES)
+          h +=
+            '<option value="' +
+            esc(f.id) +
+            '"' +
+            (f.id === sel ? ' selected' : '') +
+            '>' +
+            esc(f.name) +
+            ' · ' +
+            f.width +
+            'px</option>';
+        h +=
+          '<option value="__paste"' +
+          (sel === '__paste' ? ' selected' : '') +
+          '>+ paste Figma link…</option>';
+        return h;
+      }
 
-$('closenote').onclick = () => { $('notes').hidden = true; };
+      function qaLabel(url) {
+        const seen = seenOf(url);
+        if (!seen) return '<div class="qa new">not QA’d yet</div>';
+        return (
+          '<div class="qa old">QA’d · ' +
+          esc(formatWhen(seen.when, seen.stamp)) +
+          '</div>'
+        );
+      }
 
-$('savenote').onclick = async () => {
-  const btn = $('savenote'), st = $('notestate');
-  st.className = 'hint';
-  st.textContent = '';
-  busy(btn, true, 'Saving…');
-  try {
-    const r = await post('/api/notes', { stamp: NOTE_STAMP, notes: $('notetext').value });
-    st.className = 'hint ok';
-    st.textContent =
-      (r.chars ? 'Saved ' + r.chars + ' characters to the report' : 'Removed notes from the report') +
-      (r.reshared ? ' · share file updated.' : ' — reopen the report to see it.');
-    const noteBtn = document.querySelector('tr[data-stamp="' + NOTE_STAMP + '"] [data-act="note"]');
-    if (noteBtn) noteBtn.textContent = r.chars ? 'Edit notes' : 'Notes';
-  } catch (e) {
-    st.className = 'hint bad';
-    st.innerHTML = esc(e.message).replace(/\n/g, '<br>');
-  } finally {
-    busy(btn, false, 'Save to report');
-  }
-};
+      function selectedRows() {
+        return ROWS.filter((r) => r.include !== false);
+      }
 
-/**
- * One file with every picture inside it, for sending to somebody.
- *
- * The plain report.html is 28 KB of markup pointing at ~20 MB of PNGs next to it, so emailing that
- * file alone gets the recipient broken images. This bakes them in.
- */
-async function makeShare(stamp, btn, out) {
-  btn = btn || $('share');
-  out = out || $('shareOut');
-  if (!btn || !out) return;
-  const label = btn.textContent;
-  out.textContent = '';
-  busy(btn, true, 'Compressing images…');
-  try {
-    const r = await post('/api/share', { stamp });
-    const mb = (r.bytes / 1024 / 1024).toFixed(1);
-    out.innerHTML = r.images + ' images · ' + mb + ' MB · <a href="' + r.url + '" download>download</a>'
-      + (r.skipped ? ' · ⚠ ' + r.skipped + ' images missing' : '');
-    const a = document.createElement('a');
-    a.href = r.url; a.download = '';
-    document.body.appendChild(a);     a.click(); a.remove();
-    btn.textContent = 'Re-export share';
-  } catch (e) {
-    out.innerHTML = '<span style="color:var(--bad)">' + esc(e.message) + '</span>';
-  } finally {
-    busy(btn, false, label || 'Export share file');
-  }
-}
+      function updateCount() {
+        const flags = validate();
+        const bad = flags.filter((f) =>
+          f.some((x) => x.level === 'bad'),
+        ).length;
+        const n = selectedRows().length;
+        const seen = ROWS.filter((r) => seenOf(r.url)).length;
+        if (bad) {
+          $('count').textContent = bad + ' rows need fixing before you can run';
+          $('go2').disabled = true;
+          return;
+        }
+        $('count').textContent =
+          n +
+          '/' +
+          ROWS.length +
+          ' pages will run' +
+          (seen ? ' · ' + seen + ' already QA’d' : '');
+        $('go2').disabled = !ROWS.length || n === 0;
+        $('go2').textContent = n ? 'Run QA (' + n + ' pages)' : 'Run QA';
+      }
 
-function formatWhen(iso, stamp) {
-  const raw = iso || stamp || '';
-  if (/[zZ]$/.test(raw) || /[+-]\d{2}:\d{2}$/.test(raw)) {
-    const d = new Date(raw);
-    if (!Number.isNaN(d.getTime())) {
-      return d.toLocaleString('sv-SE', {
-        timeZone: 'Asia/Ho_Chi_Minh',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        hourCycle: 'h23',
-      }).replace('T', ' ').slice(0, 16);
-    }
-  }
-  const m = raw.replace('T', ' ').match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2})[:\-](\d{2})/);
-  return m ? m[1] + ' ' + m[2] + ':' + m[3] : raw.slice(0, 16);
-}
+      function render() {
+        const flags = validate();
+        $('rows').innerHTML = ROWS.map((r, i) => {
+          const f =
+            FRAMES.find((x) => x.id === r.figmaNodeId) ||
+            (r.frameName ? FRAMES.find((x) => x.name === r.frameName) : null);
+          const thumb =
+            f && f.thumb
+              ? '<img src="/design/' +
+                encodeURIComponent(f.thumb) +
+                '" alt="' +
+                esc(f.name) +
+                '" data-zoom="' +
+                esc(f.name) +
+                '">'
+              : '<div class="none">' + (f ? 'not rendered' : '—') + '</div>';
+          const fl = flags[i]
+            .map(
+              (x) =>
+                '<div class="flag ' + x.level + '">' + esc(x.text) + '</div>',
+            )
+            .join('');
+          const on = r.include !== false;
+          return (
+            '<tr data-i="' +
+            i +
+            '">' +
+            '<td class="pick"><input type="checkbox" class="pick" ' +
+            (on ? 'checked' : '') +
+            ' title="Run QA on this page"></td>' +
+            '<td class="n">' +
+            (i + 1) +
+            '</td>' +
+            '<td class="thumb">' +
+            thumb +
+            '</td>' +
+            '<td class="urlcell"><input type="url" class="url" value="' +
+            esc(r.url || '') +
+            '" placeholder="https://…">' +
+            qaLabel(r.url) +
+            (r.how ? '<div class="why">' + esc(r.how) + '</div>' : '') +
+            fl +
+            '</td>' +
+            '<td><select class="frame">' +
+            frameOptions(r.pendingLink ? '__paste' : f ? f.id : '') +
+            '</select>' +
+            '<div class="paste' +
+            (r.pendingLink !== undefined ? ' on' : '') +
+            '">' +
+            '<input type="text" class="link" placeholder="paste Figma frame link, then Enter" value="' +
+            esc(r.pendingLink || '') +
+            '">' +
+            '<button class="getframe" style="margin-top:6px">Fetch frame</button></div></td>' +
+            '<td class="act"><button class="icon del" title="remove row">✕</button></td>' +
+            '</tr>'
+          );
+        }).join('');
+        updateCount();
+      }
 
-const HIST_PAGE = 12;
-let histOffset = 0;
-let histTotal = 0;
+      $('rows').addEventListener('input', (e) => {
+        const tr = e.target.closest('tr');
+        if (!tr) return;
+        const i = +tr.dataset.i;
+        if (e.target.classList.contains('url')) {
+          ROWS[i].url = e.target.value;
+          ROWS[i].how = 'edited by hand';
+          // Re-validate without re-rendering, so the caret does not jump while typing.
+          const flags = validate();
+          const cell = tr.querySelector('.urlcell');
+          if (cell) {
+            cell
+              .querySelectorAll('.flag, .why, .qa')
+              .forEach((n) => n.remove());
+            cell.insertAdjacentHTML(
+              'beforeend',
+              qaLabel(ROWS[i].url) +
+                '<div class="why">' +
+                esc(ROWS[i].how || '') +
+                '</div>' +
+                flags[i]
+                  .map(
+                    (x) =>
+                      '<div class="flag ' +
+                      x.level +
+                      '">' +
+                      esc(x.text) +
+                      '</div>',
+                  )
+                  .join(''),
+            );
+          }
+          updateCount();
+        }
+        if (e.target.classList.contains('link'))
+          ROWS[i].pendingLink = e.target.value;
+      });
 
-function historyRow(r) {
-  return '<tr data-stamp="' + esc(r.stamp) + '">' +
-    '<td class="host">' + esc(r.host) + '</td>' +
-    '<td class="when">' + esc(formatWhen(r.when, r.stamp)) + '</td>' +
-    '<td class="nfind">' + r.findings + '</td>' +
-    '<td><div class="acts">' +
-      '<button type="button" data-act="open">Open report</button>' +
-      '<button type="button" data-act="note">' + (r.hasNotes ? 'Edit notes' : 'Notes') + '</button>' +
-      '<button type="button" data-act="share">' + (r.hasShare ? 'Re-export share' : 'Export share file') + '</button>' +
-      '<span class="shareout"></span>' +
-    '</div></td>' +
-  '</tr>';
-}
+      $('rows').addEventListener('change', (e) => {
+        if (e.target.classList.contains('pick')) {
+          const i = +e.target.closest('tr').dataset.i;
+          ROWS[i].include = e.target.checked;
+          updateCount();
+          return;
+        }
+        if (!e.target.classList.contains('frame')) return;
+        const i = +e.target.closest('tr').dataset.i;
+        const v = e.target.value;
+        if (v === '__paste') {
+          ROWS[i].pendingLink = ROWS[i].pendingLink || '';
+          render();
+          tryFocus(i);
+          return;
+        }
+        delete ROWS[i].pendingLink;
+        const f = FRAMES.find((x) => x.id === v);
+        ROWS[i].figmaNodeId = f ? f.id : undefined;
+        ROWS[i].frameName = f ? f.name : undefined;
+        ROWS[i].how = f
+          ? 'picked by hand: "' + f.name + '"'
+          : 'no design compare';
+        render();
+      });
 
-function historyMeta() {
-  const sub = $('historySub');
-  const wrap = $('historyMoreWrap');
-  const more = $('histmore');
-  if (!histTotal) {
-    sub.textContent = 'Each row is a saved report — the host tells you which project, so you do not need to open timestamp folders.';
-    wrap.hidden = true;
-    return;
-  }
-  sub.textContent = histOffset + ' / ' + histTotal + ' runs — the host tells you which project, so you do not need to open timestamp folders.';
-  const left = histTotal - histOffset;
-  wrap.hidden = left <= 0;
-  more.textContent = left > 0 ? 'Load more (' + left + ')' : 'Load more';
-}
+      function tryFocus(i) {
+        const el = document.querySelector('tr[data-i="' + i + '"] .link');
+        if (el) el.focus();
+      }
 
-async function fetchRuns(offset) {
-  const d = await fetch('/api/runs?offset=' + offset + '&limit=' + HIST_PAGE).then((r) => r.json());
-  if (!d || !Array.isArray(d.runs)) throw new Error('bad');
-  return d;
-}
+      $('rows').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && e.target.classList.contains('link')) {
+          e.preventDefault();
+          getFrame(+e.target.closest('tr').dataset.i);
+        }
+      });
+      $('rows').addEventListener('click', async (e) => {
+        const tr = e.target.closest('tr');
+        if (!tr) return;
+        const i = +tr.dataset.i;
+        if (e.target.classList.contains('del')) {
+          ROWS.splice(i, 1);
+          render();
+        }
+        if (e.target.classList.contains('getframe')) getFrame(i);
+        if (e.target.dataset.zoom !== undefined) {
+          $('zoomImg').src = e.target.src;
+          $('zoomName').textContent = e.target.dataset.zoom;
+          $('zoom').showModal();
+        }
+      });
 
-async function loadHistory() {
-  const box = $('historyBody');
-  histOffset = 0;
-  histTotal = 0;
-  try {
-    const d = await fetchRuns(0);
-    const rows = d.runs || [];
-    histTotal = d.total || rows.length;
-    histOffset = rows.length;
-    if (!histTotal) {
-      box.innerHTML = '<p class="hint">No runs in reports/ yet.</p>';
-      historyMeta();
-      return;
-    }
-    box.innerHTML =
-      '<table class="history"><thead><tr><th>Site</th><th>When</th><th>Findings</th><th></th></tr></thead><tbody>' +
-      rows.map(historyRow).join('') +
-      '</tbody></table>';
-    historyMeta();
-  } catch {
-    box.innerHTML = '<p class="hint">Could not load the run list — is the server running?</p>';
-    $('historyMoreWrap').hidden = true;
-  }
-}
+      async function getFrame(i) {
+        const link = (ROWS[i].pendingLink || '').trim();
+        const btn = document.querySelector('tr[data-i="' + i + '"] .getframe');
+        showErr('e2', '');
+        if (!link) return showErr('e2', 'row ' + (i + 1) + ': no link pasted');
+        if (btn) busy(btn, true, 'Fetching…');
+        try {
+          const f = await post('/api/frame', { link });
+          if (!FRAMES.some((x) => x.id === f.id)) FRAMES.push(f);
+          delete ROWS[i].pendingLink;
+          ROWS[i].figmaNodeId = f.id;
+          ROWS[i].frameName = f.name;
+          ROWS[i].how = 'pasted link: "' + f.name + '"';
+          render();
+        } catch (e) {
+          showErr('e2', 'row ' + (i + 1) + ': ' + e.message);
+          if (btn) busy(btn, false, 'Fetch frame');
+        }
+      }
 
-async function loadMoreHistory() {
-  const btn = $('histmore');
-  const tb = $('historyBody').querySelector('tbody');
-  if (!tb) return loadHistory();
-  busy(btn, true, 'Loading…');
-  try {
-    const d = await fetchRuns(histOffset);
-    histTotal = d.total || histTotal;
-    for (const r of d.runs || []) tb.insertAdjacentHTML('beforeend', historyRow(r));
-    histOffset += (d.runs || []).length;
-    historyMeta();
-  } catch {
-    btn.textContent = 'Could not load — click again';
-  } finally {
-    if (!$('historyMoreWrap').hidden) busy(btn, false, $('histmore').textContent || 'Load more');
-  }
-}
+      $('add').onclick = () => {
+        const base = ROWS[0]?.url || '';
+        let prefix = '';
+        try {
+          prefix = new URL(base).origin + '/';
+        } catch {}
+        ROWS.push({ url: prefix, how: 'added by hand', include: true });
+        render();
+        const els = document.querySelectorAll('tr .url');
+        const last = els[els.length - 1];
+        if (last) {
+          last.focus();
+          last.setSelectionRange(last.value.length, last.value.length);
+        }
+      };
 
-$('histmore').onclick = () => loadMoreHistory();
+      /* -------------------------------- 3. run --------------------------------- */
+      $('picknew').onclick = () => {
+        for (const r of ROWS) r.include = !seenOf(r.url);
+        render();
+      };
+      $('pickold').onclick = () => {
+        for (const r of ROWS) r.include = Boolean(seenOf(r.url));
+        render();
+      };
+      $('pickall').onclick = () => {
+        for (const r of ROWS) r.include = true;
+        render();
+      };
 
-$('historyBody').onclick = (e) => {
-  const el = e.target.nodeType === 1 ? e.target : e.target.parentElement;
-  const btn = el && el.closest('[data-act]');
-  if (!btn) return;
-  const tr = btn.closest('tr');
-  const stamp = tr && tr.getAttribute('data-stamp');
-  if (!stamp) return;
-  if (btn.getAttribute('data-act') === 'open') {
-    window.open('/reports/' + encodeURIComponent(stamp) + '/report.html', '_blank');
-    return;
-  }
-  if (btn.getAttribute('data-act') === 'note') {
-    const host = tr.querySelector('.host');
-    openNotes(stamp, host ? host.textContent : '');
-    $('notes').scrollIntoView({ behavior: 'smooth', block: 'center' });
-    $('notetext').focus();
-    return;
-  }
-  if (btn.getAttribute('data-act') === 'share') {
-    makeShare(stamp, btn, tr.querySelector('.shareout'));
-  }
-};
+      $('go2').onclick = async () => {
+        showErr('e2', '');
+        const chosen = selectedRows();
+        if (!chosen.length)
+          return showErr(
+            'e2',
+            'no pages ticked — select unreviewed pages, or tick pages you want to re-check',
+          );
+        const pages = chosen.map((r) => ({
+          url: r.url.trim(),
+          figmaNodeId: r.figmaNodeId,
+          frameName: r.frameName,
+          how: r.how,
+        }));
+        const catalog = ROWS.map((r) => ({
+          url: r.url.trim(),
+          figmaNodeId: r.figmaNodeId,
+          frameName: r.frameName,
+          how: r.how,
+        }));
+        saveSession();
+        busy($('go2'), true, 'Running…');
+        try {
+          const { runId } = await post('/api/run', {
+            pages,
+            catalog,
+            fast: fastOn(),
+          });
+          $('s2').hidden = true;
+          $('s3').hidden = false;
+          $('log').textContent = '';
+          $('doneBar').hidden = true;
+          $('notes').hidden = true;
+          $('s3sub').dataset.plan = '';
+          $('s3sub').textContent =
+            'Capture 3 viewports per page, compare with the design, then merge duplicate findings.';
+          $('prog').hidden = false;
+          $('fill').style.width = '0%';
+          $('plabel').textContent = 'starting…';
+          $('pcount').textContent = '';
+          $('s3title').textContent = 'Running QA…';
+          watch(runId);
+        } catch (e) {
+          showErr('e2', e.message);
+        } finally {
+          busy($('go2'), false, 'Run QA');
+          updateCount();
+        }
+      };
 
-restoreLast();
-loadHistory();
-$('fast').onchange = () => setFast($('fast').checked);
-$('fast2').onchange = () => setFast($('fast2').checked);
-$('site').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('go1').click(); });
-$('figma').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('go1').click(); });
-</script>
-</body>
+      async function backToPairing() {
+        $('s3').hidden = true;
+        $('s2').hidden = false;
+        await loadCoverage($('site').value.trim());
+        applyCoverageDefaults();
+        render();
+      }
+
+      function watch(runId) {
+        const es = new EventSource('/api/stream/' + runId);
+        const log = $('log');
+        es.addEventListener('log', (ev) => {
+          log.textContent += JSON.parse(ev.data) + '\n';
+          log.scrollTop = log.scrollHeight;
+        });
+        const PHASE = {
+          capture: 'Screenshots',
+          ai: 'AI compare',
+          wrap: 'Wrap-up',
+        };
+        /**
+         * Count within the current phase, not out of the grand total.
+         *
+         * "19/44" on a 7-page run is a number nobody can verify — the reader knows how many pages there
+         * are, not how many screenshots and API calls that adds up to. "shot 19/21" they can check at a
+         * glance, and the plan line above spells out where 44 came from.
+         */
+        es.addEventListener('progress', (ev) => {
+          const p = JSON.parse(ev.data);
+          const pct = p.total ? Math.round((p.done / p.total) * 100) : 0;
+          $('fill').style.width = pct + '%';
+          $('plabel').textContent = (PHASE[p.phase] || '') + ' — ' + p.label;
+
+          const pl = p.plan || { capture: 0, ai: 0, wrap: 0 };
+          let within = '';
+          if (p.phase === 'capture' && pl.capture)
+            within = 'shots ' + Math.min(p.done, pl.capture) + '/' + pl.capture;
+          else if (p.phase === 'ai' && pl.ai)
+            within =
+              'AI ' +
+              Math.max(0, Math.min(p.done - pl.capture, pl.ai)) +
+              '/' +
+              pl.ai;
+          $('pcount').textContent = pct + '%' + (within ? ' · ' + within : '');
+
+          if (pl.capture && $('s3sub').dataset.plan !== '1') {
+            const pages = Math.round(pl.capture / 3);
+            $('s3sub').textContent =
+              pages +
+              ' pages × 3 viewports = ' +
+              pl.capture +
+              ' shots · ' +
+              pl.ai +
+              ' AI calls · ' +
+              pl.wrap +
+              ' wrap-up steps = ' +
+              p.total +
+              ' steps';
+            $('s3sub').dataset.plan = '1';
+          }
+        });
+        es.addEventListener('done', (ev) => {
+          const d = JSON.parse(ev.data);
+          es.close();
+          $('fill').style.width = '100%';
+          $('prog').hidden = true;
+          $('s3title').textContent = 'Done';
+          $('s3sub').textContent = d.durationMs
+            ? 'Finished in ' + Math.round(d.durationMs / 1000) + ' seconds.'
+            : '';
+          $('doneBar').hidden = false;
+          const stamp = (d.reportUrl || '').split('/')[2] || '';
+          $('doneBar').innerHTML =
+            '<span class="big">' +
+            d.findings +
+            ' findings</span>' +
+            '<button class="primary" id="open">Open report</button>' +
+            '<button id="share">Export share file</button>' +
+            '<button id="again">Run again</button>' +
+            '<span class="hint" id="shareOut" style="margin:0"></span>';
+          openNotes(stamp, $('site').value.trim());
+          $('open').onclick = () => window.open(d.reportUrl, '_blank');
+          $('again').onclick = () => backToPairing();
+          $('share').onclick = () => makeShare(stamp);
+          window.open(d.reportUrl, '_blank');
+          loadHistory();
+        });
+        es.addEventListener('failed', (ev) => {
+          es.close();
+          $('prog').hidden = true;
+          $('notes').hidden = true;
+          $('s3title').textContent = 'Run failed';
+          $('s3sub').textContent = '';
+          $('doneBar').hidden = false;
+          $('doneBar').innerHTML =
+            '<div class="err" style="margin:0">' +
+            esc(JSON.parse(ev.data).error) +
+            '</div>' +
+            '<button id="again2">Back to pairing</button>';
+          $('again2').onclick = () => backToPairing();
+        });
+        es.onerror = () => {
+          if (es.readyState === 2) es.close();
+        };
+      }
+
+      /**
+       * The note box, opened once a run has a report to attach the note to.
+       *
+       * Prefilled with the previous run's note for THIS site, because most of what a person writes here
+       * is a standing reminder that is just as true next week. Other projects in reports/ are ignored.
+       * Nothing reaches the report until Save is pressed.
+       */
+      let NOTE_STAMP = '';
+      async function openNotes(stamp, label) {
+        NOTE_STAMP = stamp;
+        $('notes').hidden = false;
+        // Which run is being written to has to be on screen: the editor is now reachable from any row
+        // of the history, so "the current one" is no longer a safe assumption.
+        $('notefor').textContent = label ? label + ' · ' + stamp : stamp;
+        $('notetext').value = '';
+        $('notestate').textContent = '';
+        $('notestate').className = 'hint';
+        try {
+          const mine = await fetch(
+            '/api/notes?stamp=' + encodeURIComponent(stamp),
+          ).then((r) => r.json());
+          if (mine.notes) {
+            $('notetext').value = mine.notes;
+            return;
+          }
+          const site = encodeURIComponent($('site').value.trim());
+          const prev = await fetch(
+            '/api/notes/previous?before=' +
+              encodeURIComponent(stamp) +
+              (site ? '&site=' + site : ''),
+          ).then((r) => r.json());
+          if (prev.notes) {
+            $('notetext').value = prev.notes;
+            $('notestate').textContent =
+              'showing notes from run ' + prev.from + ' — edit and click Save';
+          }
+        } catch {
+          /* the box still works without a prefill */
+        }
+      }
+
+      $('closenote').onclick = () => {
+        $('notes').hidden = true;
+      };
+
+      $('savenote').onclick = async () => {
+        const btn = $('savenote'),
+          st = $('notestate');
+        st.className = 'hint';
+        st.textContent = '';
+        busy(btn, true, 'Saving…');
+        try {
+          const r = await post('/api/notes', {
+            stamp: NOTE_STAMP,
+            notes: $('notetext').value,
+          });
+          st.className = 'hint ok';
+          st.textContent =
+            (r.chars
+              ? 'Saved ' + r.chars + ' characters to the report'
+              : 'Removed notes from the report') +
+            (r.reshared
+              ? ' · share file updated.'
+              : ' — reopen the report to see it.');
+          const noteBtn = document.querySelector(
+            'tr[data-stamp="' + NOTE_STAMP + '"] [data-act="note"]',
+          );
+          if (noteBtn) noteBtn.textContent = r.chars ? 'Edit notes' : 'Notes';
+        } catch (e) {
+          st.className = 'hint bad';
+          st.innerHTML = esc(e.message).replace(/\n/g, '<br>');
+        } finally {
+          busy(btn, false, 'Save to report');
+        }
+      };
+
+      /**
+       * One file with every picture inside it, for sending to somebody.
+       *
+       * The plain report.html is 28 KB of markup pointing at ~20 MB of PNGs next to it, so emailing that
+       * file alone gets the recipient broken images. This bakes them in.
+       */
+      async function makeShare(stamp, btn, out) {
+        btn = btn || $('share');
+        out = out || $('shareOut');
+        if (!btn || !out) return;
+        const label = btn.textContent;
+        out.textContent = '';
+        busy(btn, true, 'Compressing images…');
+        try {
+          const r = await post('/api/share', { stamp });
+          const mb = (r.bytes / 1024 / 1024).toFixed(1);
+          out.innerHTML =
+            r.images +
+            ' images · ' +
+            mb +
+            ' MB · <a href="' +
+            r.url +
+            '" download>download</a>' +
+            (r.skipped ? ' · ⚠ ' + r.skipped + ' images missing' : '');
+          const a = document.createElement('a');
+          a.href = r.url;
+          a.download = '';
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          btn.textContent = 'Re-export share';
+        } catch (e) {
+          out.innerHTML =
+            '<span style="color:var(--bad)">' + esc(e.message) + '</span>';
+        } finally {
+          busy(btn, false, label || 'Export share file');
+        }
+      }
+
+      function formatWhen(iso, stamp) {
+        const raw = iso || stamp || '';
+        if (/[zZ]$/.test(raw) || /[+-]\d{2}:\d{2}$/.test(raw)) {
+          const d = new Date(raw);
+          if (!Number.isNaN(d.getTime())) {
+            return d
+              .toLocaleString('sv-SE', {
+                timeZone: 'Asia/Ho_Chi_Minh',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                hourCycle: 'h23',
+              })
+              .replace('T', ' ')
+              .slice(0, 16);
+          }
+        }
+        const m = raw
+          .replace('T', ' ')
+          .match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2})[:\-](\d{2})/);
+        return m ? m[1] + ' ' + m[2] + ':' + m[3] : raw.slice(0, 16);
+      }
+
+      const HIST_PAGE = 12;
+      let histOffset = 0;
+      let histTotal = 0;
+
+      function historyRow(r) {
+        return (
+          '<tr data-stamp="' +
+          esc(r.stamp) +
+          '">' +
+          '<td class="host">' +
+          esc(r.host) +
+          '</td>' +
+          '<td class="when">' +
+          esc(formatWhen(r.when, r.stamp)) +
+          '</td>' +
+          '<td class="nfind">' +
+          r.findings +
+          '</td>' +
+          '<td><div class="acts">' +
+          '<button type="button" data-act="open">Open report</button>' +
+          '<button type="button" data-act="note">' +
+          (r.hasNotes ? 'Edit notes' : 'Notes') +
+          '</button>' +
+          '<button type="button" data-act="share">' +
+          (r.hasShare ? 'Re-export share' : 'Export share file') +
+          '</button>' +
+          '<span class="shareout"></span>' +
+          '</div></td>' +
+          '</tr>'
+        );
+      }
+
+      function historyMeta() {
+        const sub = $('historySub');
+        const wrap = $('historyMoreWrap');
+        const more = $('histmore');
+        if (!histTotal) {
+          sub.textContent =
+            'Each row is a saved report — the host tells you which project, so you do not need to open timestamp folders.';
+          wrap.hidden = true;
+          return;
+        }
+        sub.textContent =
+          histOffset +
+          ' / ' +
+          histTotal +
+          ' runs — the host tells you which project, so you do not need to open timestamp folders.';
+        const left = histTotal - histOffset;
+        wrap.hidden = left <= 0;
+        more.textContent = left > 0 ? 'Load more (' + left + ')' : 'Load more';
+      }
+
+      async function fetchRuns(offset) {
+        const d = await fetch(
+          '/api/runs?offset=' + offset + '&limit=' + HIST_PAGE,
+        ).then((r) => r.json());
+        if (!d || !Array.isArray(d.runs)) throw new Error('bad');
+        return d;
+      }
+
+      async function loadHistory() {
+        const box = $('historyBody');
+        histOffset = 0;
+        histTotal = 0;
+        try {
+          const d = await fetchRuns(0);
+          const rows = d.runs || [];
+          histTotal = d.total || rows.length;
+          histOffset = rows.length;
+          if (!histTotal) {
+            box.innerHTML = '<p class="hint">No runs in reports/ yet.</p>';
+            historyMeta();
+            return;
+          }
+          box.innerHTML =
+            '<table class="history"><thead><tr><th>Site</th><th>When</th><th>Findings</th><th></th></tr></thead><tbody>' +
+            rows.map(historyRow).join('') +
+            '</tbody></table>';
+          historyMeta();
+        } catch {
+          box.innerHTML =
+            '<p class="hint">Could not load the run list — is the server running?</p>';
+          $('historyMoreWrap').hidden = true;
+        }
+      }
+
+      async function loadMoreHistory() {
+        const btn = $('histmore');
+        const tb = $('historyBody').querySelector('tbody');
+        if (!tb) return loadHistory();
+        busy(btn, true, 'Loading…');
+        try {
+          const d = await fetchRuns(histOffset);
+          histTotal = d.total || histTotal;
+          for (const r of d.runs || [])
+            tb.insertAdjacentHTML('beforeend', historyRow(r));
+          histOffset += (d.runs || []).length;
+          historyMeta();
+        } catch {
+          btn.textContent = 'Could not load — click again';
+        } finally {
+          if (!$('historyMoreWrap').hidden)
+            busy(btn, false, $('histmore').textContent || 'Load more');
+        }
+      }
+
+      $('histmore').onclick = () => loadMoreHistory();
+
+      $('historyBody').onclick = (e) => {
+        const el = e.target.nodeType === 1 ? e.target : e.target.parentElement;
+        const btn = el && el.closest('[data-act]');
+        if (!btn) return;
+        const tr = btn.closest('tr');
+        const stamp = tr && tr.getAttribute('data-stamp');
+        if (!stamp) return;
+        if (btn.getAttribute('data-act') === 'open') {
+          window.open(
+            '/reports/' + encodeURIComponent(stamp) + '/report.html',
+            '_blank',
+          );
+          return;
+        }
+        if (btn.getAttribute('data-act') === 'note') {
+          const host = tr.querySelector('.host');
+          openNotes(stamp, host ? host.textContent : '');
+          $('notes').scrollIntoView({ behavior: 'smooth', block: 'center' });
+          $('notetext').focus();
+          return;
+        }
+        if (btn.getAttribute('data-act') === 'share') {
+          makeShare(stamp, btn, tr.querySelector('.shareout'));
+        }
+      };
+
+      restoreLast();
+      loadHistory();
+      $('fast').onchange = () => setFast($('fast').checked);
+      $('fast2').onchange = () => setFast($('fast2').checked);
+      $('site').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') $('go1').click();
+      });
+      $('figma').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') $('go1').click();
+      });
+    </script>
+  </body>
 </html>

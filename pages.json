@@ -5,67 +5,67 @@
       "url": "https://aino.energy.wootech.com.au/",
       "figmaNodeId": "116:878",
       "frameName": "01 / Homepage",
-      "how": "name match \"01 / Homepage\" (score 1.00, next 0.00)"
+      "how": "khớp tên \"01 / Homepage\" (điểm 1.00, kế tiếp 0.00)"
     },
     {
       "url": "https://aino.energy.wootech.com.au/aino-os/",
       "figmaNodeId": "2174:4044",
       "frameName": "03 / AinoOS",
-      "how": "picked by hand: \"03 / AinoOS\""
+      "how": "chọn tay: \"03 / AinoOS\""
     },
     {
       "url": "https://aino.energy.wootech.com.au/company/",
       "figmaNodeId": "2006:692",
       "frameName": "06 / Company",
-      "how": "name match \"06 / Company\" (score 1.00, next 0.00)"
+      "how": "khớp tên \"06 / Company\" (điểm 1.00, kế tiếp 0.00)"
     },
     {
       "url": "https://aino.energy.wootech.com.au/contact/",
       "figmaNodeId": "2006:1083",
       "frameName": "13 / Contact",
-      "how": "name match \"13 / Contact\" (score 1.00, next 0.00)"
+      "how": "khớp tên \"13 / Contact\" (điểm 1.00, kế tiếp 0.00)"
     },
     {
       "url": "https://aino.energy.wootech.com.au/faqs/",
       "figmaNodeId": "2006:979",
       "frameName": "12 / FAQs",
-      "how": "name match \"12 / FAQs\" (score 1.00, next 0.00)"
+      "how": "khớp tên \"12 / FAQs\" (điểm 1.00, kế tiếp 0.00)"
     },
     {
       "url": "https://aino.energy.wootech.com.au/industries/",
       "figmaNodeId": "2006:498",
       "frameName": "05 / Industries",
-      "how": "name match \"05 / Industries\" (score 1.00, next 0.00)"
+      "how": "khớp tên \"05 / Industries\" (điểm 1.00, kế tiếp 0.00)"
     },
     {
       "url": "https://aino.energy.wootech.com.au/insights/",
       "figmaNodeId": "2006:1374",
       "frameName": "09 / Insights",
-      "how": "name match \"09 / Insights\" (score 1.00, next 0.85)"
+      "how": "khớp tên \"09 / Insights\" (điểm 1.00, kế tiếp 0.85)"
     },
     {
       "url": "https://aino.energy.wootech.com.au/leadership-and-partners/",
       "figmaNodeId": "2006:811",
       "frameName": "07 / Leadership & Partners",
-      "how": "name match \"07 / Leadership & Partners\" (score 0.67, next 0.00)"
+      "how": "khớp tên \"07 / Leadership & Partners\" (điểm 0.67, kế tiếp 0.00)"
     },
     {
       "url": "https://aino.energy.wootech.com.au/one-aino/",
       "figmaNodeId": "2174:4270",
       "frameName": "02 / OneAino™",
-      "how": "picked by hand: \"02 / OneAino™\""
+      "how": "chọn tay: \"02 / OneAino™\""
     },
     {
       "url": "https://aino.energy.wootech.com.au/products/",
       "figmaNodeId": "2006:324",
       "frameName": "04 / Products",
-      "how": "name match \"04 / Products\" (score 1.00, next 0.00)"
+      "how": "khớp tên \"04 / Products\" (điểm 1.00, kế tiếp 0.00)"
     },
     {
       "url": "https://aino.energy.wootech.com.au/insights/a-guide-to-battery-warranty-terms/",
       "figmaNodeId": "2069:2852",
       "frameName": "11 / Article / Detail",
-      "how": "picked by hand: \"11 / Article / Detail\""
+      "how": "chọn tay: \"11 / Article / Detail\""
     }
   ]
 }
