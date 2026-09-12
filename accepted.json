@@ -10,9 +10,156 @@
       ],
       "detail": "Không có chữ hay media nào trong dải y = 41 … 611 (570px, chiếm 56% màn hình đầu cao 1024px). Đo trên DOM: đã tính cả ảnh, video, ảnh nền CSS, và cả media đang ẩn chờ hiệu ứng, là nội dung.",
       "pages": [
-        "http://new-wooagency:8888/"
+        "https://staging.wootech.com.au/"
       ],
-      "why": "Khoảng trống hero là chủ ý — chỗ này để ảnh chạy theo chuột (div.woo-hero__trail)",
+      "why": "spacing for animation",
+      "at": "2026-09-12"
+    },
+    {
+      "id": "1hjdkyi",
+      "title": "Thiếu ảnh thumbnail cho dự án Hume City Council",
+      "anchors": [
+        "Hume City Council",
+        "Integrity Oversight Victoria"
+      ],
+      "detail": "Tại mục 'Flagship projects', thẻ dự án 'Hume City Council' không hiển thị ảnh thumbnail, để lại khoảng trống màu trắng phía trên tiêu đề.",
+      "pages": [
+        "https://staging.wootech.com.au/"
+      ],
+      "why": "Still image on website",
+      "at": "2026-09-12"
+    },
+    {
+      "id": "094xqhb",
+      "title": "Khoảng trống lớn ở màn hình đầu",
+      "anchors": [
+        "Fill the form",
+        "Submit"
+      ],
+      "detail": "Không có chữ hay media nào trong dải y = 304 … 771 (467px, chiếm 46% màn hình đầu cao 1024px). Đo trên DOM: đã tính cả ảnh, video, ảnh nền CSS, và cả media đang ẩn chờ hiệu ứng, là nội dung.",
+      "pages": [
+        "https://staging.wootech.com.au/contact/"
+      ],
+      "why": "empty cause form input - not real empty",
+      "at": "2026-09-12"
+    },
+    {
+      "id": "0fawfsi",
+      "title": "Khoảng trống lớn ở màn hình đầu",
+      "anchors": [
+        "Provide your details and we’ll come back to you as soon as w",
+        "Submit"
+      ],
+      "detail": "Không có chữ hay media nào trong dải y = 277 … 640 (363px, chiếm 40% màn hình đầu cao 900px). Đo trên DOM: đã tính cả ảnh, video, ảnh nền CSS, và cả media đang ẩn chờ hiệu ứng, là nội dung.",
+      "pages": [
+        "https://staging.wootech.com.au/contact/"
+      ],
+      "why": "same above, empty by design",
+      "at": "2026-09-12"
+    },
+    {
+      "id": "1lwmurd",
+      "title": "Các bài viết cuối bị thiếu ảnh đại diện (thumbnail)",
+      "anchors": [
+        "How we work. The five phases behind",
+        "Built across Melbourne and Vietnam.",
+        "AI agents are changing how marketing"
+      ],
+      "detail": "Trên site, 4 bài viết ở phần dưới cùng không hiển thị ảnh thumbnail như các bài phía trên và trong thiết kế, khiến chiều cao các thẻ bài viết bị hụt và giao diện không đồng nhất.",
+      "pages": [
+        "https://staging.wootech.com.au/journal/"
+      ],
+      "why": "Animation not finish load.",
+      "at": "2026-09-12"
+    },
+    {
+      "id": "02p5qqu",
+      "title": "Nền Hero dính watermark ảnh stock",
+      "anchors": [
+        "Built for how brands",
+        "actually grow today.",
+        "Built for how brands actually grow today.",
+        "Discover"
+      ],
+      "detail": "Phần nền gradient ở màn hình đầu tiên hiển thị rõ watermark 'iStock by Getty Images' chìm phía sau tiêu đề chính, chưa được thay bằng tài nguyên chính thức.",
+      "pages": [
+        "https://staging.wootech.com.au/services/"
+      ],
+      "why": "place holder image, ignore on develop",
+      "at": "2026-09-12"
+    },
+    {
+      "id": "1razqxf",
+      "title": "Khoảng trắng lớn bất thường giữa các khối hình ảnh",
+      "anchors": [
+        "SEASON 2026",
+        "DRIVER",
+        "WELCOME"
+      ],
+      "detail": "Giữa khối hình ảnh thẻ sự kiện (Season 2026) và khối hình ảnh xe đỏ (WELCOME) xuất hiện một khoảng trống màu trắng rất lớn (hơn 1500px), gây đứt quãng trải nghiệm cuộn trang của người dùng.",
+      "pages": [
+        "https://staging.wootech.com.au/projects/ferrari/"
+      ],
+      "why": "image content",
+      "at": "2026-09-12"
+    },
+    {
+      "id": "1gx4cvn",
+      "title": "Watermark iStock hiển thị ở nền khu vực Hero",
+      "anchors": [
+        "Built for how brands",
+        "actually grow today."
+      ],
+      "detail": "Phần nền của tiêu đề Hero trên trang thực tế đang hiển thị chữ chìm / watermark 'iStock', cần kiểm tra và gỡ bỏ watermark.",
+      "pages": [
+        "https://staging.wootech.com.au/services/"
+      ],
+      "why": "place holder",
+      "at": "2026-09-12"
+    },
+    {
+      "id": "1s0e58u",
+      "title": "Thiếu ảnh minh họa ở các mục dịch vụ",
+      "anchors": [
+        "Marketing strategy",
+        "Driven by intelligent systems",
+        "Content",
+        "AI transformation",
+        "Experience"
+      ],
+      "detail": "Trong design, mỗi mục dịch vụ đều có ảnh minh họa ở cột bên trái tương ứng với nội dung bên phải. Trên site chỉ có mục đầu tiên ('Brand') hiển thị ảnh, tất cả các mục còn lại ('Marketing strategy', 'Content', 'Experience', 'Management, monitoring & reporting', 'AI transformation', 'Software development and cyber security') đều bị mất ảnh, khiến toàn bộ nửa bên trái trang bị bỏ trống kéo dài.",
+      "pages": [
+        "https://staging.wootech.com.au/services/"
+      ],
+      "why": "animation sticky images on top for all services",
+      "at": "2026-09-12"
+    },
+    {
+      "id": "1ol25pv",
+      "title": "Cỡ chữ trích dẫn (quote) nhỏ hơn so với thiết kế",
+      "anchors": [
+        "“I consider the team at WOO an extension of my marketing team.",
+        "Tracey Matters"
+      ],
+      "detail": "Đoạn văn trích dẫn ý kiến khách hàng (testimonial) trên site đang hiển thị với cỡ chữ khá nhỏ, trong khi thiết kế sử dụng cỡ chữ lớn nổi bật (display/heading).",
+      "pages": [
+        "https://staging.wootech.com.au/projects/"
+      ],
+      "why": "Need more research, now same 26px both desktop & figma",
+      "at": "2026-09-12"
+    },
+    {
+      "id": "1f02x10",
+      "title": "Thứ tự nội dung bị chèn ảnh ở giữa trong khối OneAino",
+      "anchors": [
+        "One integrated platform.",
+        "Aino delivers a fully integrated ecosystem"
+      ],
+      "detail": "Trong thiết kế, toàn bộ tiêu đề, đoạn văn mô tả và nút CTA nằm chung trong một khối văn bản cạnh ảnh. Trên giao diện tablet, ảnh minh hoạ lại bị chèn vào giữa tiêu đề ('One integrated platform...') và đoạn mô tả ('Aino delivers a fully integrated ecosystem...'), làm ngắt quãng luồng đọc của người dùng.",
+      "pages": [
+        "https://aino.energy.wootech.com.au/"
+      ],
+      "why": "Co y",
       "at": "2026-09-12"
     }
   ]

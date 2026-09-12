@@ -1,7 +1,7 @@
 #!/bin/bash
 # Double-click để mở QA Visual. Giữ cửa sổ Terminal này mở trong lúc dùng.
 cd "$(dirname "$0")"
-[ -d dist ] || npm run build
+npm run build
 
 node dist/server.js &
 SERVER=$!

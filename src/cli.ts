@@ -55,7 +55,7 @@ function acceptCommand(argv: string[]): number {
   markFindingAccepted(f, why);
   const runDir = join(dir, stamp);
   writeFileSync(join(runDir, 'report.json'), JSON.stringify(report, null, 2));
-  writeFileSync(join(runDir, 'report.html'), renderReport(report));
+  writeFileSync(join(runDir, 'report.html'), renderReport(report, stamp));
   console.log(`Đã duyệt “${f.title}” là cố ý — ghi vào report ${stamp} và accepted.json. Lần chạy sau sẽ không tính lỗi này nữa.`);
   return 0;
 }

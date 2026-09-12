@@ -95,21 +95,25 @@ const path = (u: string) => {
 };
 
 /**
- * False-positive sign-off only works when this file is served by the local tool (so /api exists).
- * A downloaded share file hides the editor: there is no server, and the recipient should not
- * rewrite someone else's judgement.
+ * Editors talk to the local tool. Stamp is baked into the HTML so opening the file from Finder
+ * still knows which run this is; the script then posts to 127.0.0.1 if the page is not already
+ * served from there. A share file hides the editors — the recipient should not rewrite judgement.
  */
 const ACCEPT_SCRIPT = [
   '<script>',
   '(function () {',
-  "  var m = location.pathname.match(/\\/reports\\/([^/]+)\\//);",
-  "  var boxes = document.querySelectorAll('.acceptbox');",
-  '  if (!m || /share/i.test(location.pathname)) {',
-  "    boxes.forEach(function (b) { var e = b.querySelector('.acceptedit'); if (e) e.hidden = true; });",
+  "  var stamp = document.documentElement.getAttribute('data-stamp') || ((location.pathname.match(/\\/reports\\/([^/]+)\\//) || [])[1] || '');",
+  "  var local = (location.protocol === 'http:' || location.protocol === 'https:') && (location.hostname === '127.0.0.1' || location.hostname === 'localhost');",
+  "  var api = local ? '' : 'http://127.0.0.1:5173';",
+  '  function post(path, body) {',
+  "    return fetch(api + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })",
+  '      .then(function (res) { return res.json().then(function (d) { return { ok: res.ok, d: d }; }); });',
+  '  }',
+  "  if (/share/i.test(location.pathname)) {",
+  "    document.querySelectorAll('.acceptedit, .notesedit').forEach(function (e) { e.hidden = true; });",
   '    return;',
   '  }',
-  '  var stamp = m[1];',
-  "  boxes.forEach(function (box) {",
+  "  document.querySelectorAll('.acceptbox').forEach(function (box) {",
   "    box.addEventListener('click', function (ev) {",
   "      var btn = ev.target.closest && ev.target.closest('[data-act]');",
   '      if (!btn || !box.contains(btn)) return;',
@@ -118,32 +122,49 @@ const ACCEPT_SCRIPT = [
   "      var st = box.querySelector('.acceptstate');",
   "      var why = ta ? ta.value : '';",
   "      var accepted = act !== 'undo';",
+  "      if (!stamp) { if (st) { st.className = 'acceptstate bad'; st.textContent = 'mở report từ QA Visual (localhost) để lưu'; } return; }",
   "      if (accepted && !why.trim()) {",
   "        if (st) { st.className = 'acceptstate bad'; st.textContent = 'cần lý do — không lưu im lặng'; }",
   '        return;',
   '      }',
-  "      btn.disabled = true;",
+  '      btn.disabled = true;',
   "      if (st) { st.className = 'acceptstate'; st.textContent = 'Đang lưu…'; }",
-  "      fetch('/api/findings/accept', {",
-  "        method: 'POST',",
-  "        headers: { 'content-type': 'application/json' },",
-  "        body: JSON.stringify({ stamp: stamp, num: Number(box.getAttribute('data-num')), why: why, accepted: accepted })",
-  '      }).then(function (res) { return res.json().then(function (d) { return { ok: res.ok, d: d }; }); })',
+  "      post('/api/findings/accept', { stamp: stamp, num: Number(box.getAttribute('data-num')), why: why, accepted: accepted })",
   '        .then(function (x) {',
   "          if (!x.ok) throw new Error(x.d.error || 'không lưu được');",
   '          location.reload();',
   '        })',
   '        .catch(function (e) {',
-  "          btn.disabled = false;",
-  "          if (st) { st.className = 'acceptstate bad'; st.textContent = e.message || String(e); }",
+  '          btn.disabled = false;',
+  "          if (st) { st.className = 'acceptstate bad'; st.textContent = (e.message || String(e)) + ' — mở QA Visual.command rồi tải lại trang.'; }",
   '        });',
   '    });',
   '  });',
+  "  var notes = document.querySelector('.notesbox');",
+  '  if (notes) {',
+  "    var nbtn = notes.querySelector('[data-act=savenote]');",
+  "    var nta = notes.querySelector('textarea.notes');",
+  "    var nst = notes.querySelector('.acceptstate');",
+    "    if (nbtn) nbtn.addEventListener('click', function () {",
+  "      if (!stamp) { if (nst) { nst.className = 'acceptstate bad'; nst.textContent = 'mở report từ QA Visual (localhost) để lưu'; } return; }",
+  '      nbtn.disabled = true;',
+  "      if (nst) { nst.className = 'acceptstate'; nst.textContent = 'Đang lưu…'; }",
+  "      post('/api/notes', { stamp: stamp, notes: nta ? nta.value : '' })",
+  '        .then(function (x) {',
+  "          if (!x.ok) throw new Error(x.d.error || 'không lưu được');",
+  '          location.reload();',
+  '        })',
+  '        .catch(function (e) {',
+  '          nbtn.disabled = false;',
+  "          if (nst) { nst.className = 'acceptstate bad'; nst.textContent = (e.message || String(e)) + ' — mở QA Visual.command rồi tải lại trang.'; }",
+  '        });',
+  '    });',
+  '  }',
   '})();',
   '</script>',
 ].join('\n');
 
-export function renderReport(r: RunReport): string {
+export function renderReport(r: RunReport, stamp?: string): string {
   const host = (() => {
     try {
       return new URL(r.site).host;
@@ -154,8 +175,9 @@ export function renderReport(r: RunReport): string {
 
   // Accepted findings stay in the report but never in a count — a suppression you cannot see is
   // one nobody re-examines when the page changes underneath it.
-  const open = r.findings.filter((f) => !f.accepted);
-  const accepted = r.findings.filter((f) => f.accepted);
+  const findings = r.findings ?? [];
+  const open = findings.filter((f) => !f.accepted);
+  const accepted = findings.filter((f) => f.accepted);
   const template = open.filter((f) => f.scope === 'template');
   const perPage = open.filter((f) => f.scope === 'page');
   const changedPages = r.pages.filter((p) => p.viewports.some((v) => v.diff.changed));
@@ -245,11 +267,12 @@ export function renderReport(r: RunReport): string {
       <div class="acceptbox" data-num="${f.num}">
         ${
           f.accepted
-            ? `<p class="accepted"><b>False positive / chủ ý.</b> ${esc(f.acceptedWhy ?? '')}</p>`
-            : `<p class="acceptcmd">Human check: đây là false positive hoặc chủ ý? Ghi lý do rồi lưu — lần sau vẫn hiện nhưng không tính.</p>`
+            ? `<p class="accepted"><b>Đã bỏ qua — false positive / chủ ý.</b> ${esc(f.acceptedWhy ?? '')}</p>`
+            : `<p class="acceptlab">Human check</p>`
         }
         <div class="acceptedit">
-          <textarea class="why" rows="2" placeholder="Lý do, ví dụ: khoảng trống do form nằm cột phải, không phải lỗi.">${f.accepted ? esc(f.acceptedWhy ?? '') : ''}</textarea>
+          <label class="accepthint">${f.accepted ? 'Sửa lý do, hoặc bỏ xác nhận nếu đây vẫn là lỗi.' : 'Nếu đây không phải lỗi: ghi lý do rồi bấm Bỏ qua. Để trống nếu đây đúng là lỗi.'}</label>
+          <textarea class="why" rows="2" placeholder="Lý do / ghi chú, ví dụ: khoảng trống do form cột phải, không phải lỗi.">${f.accepted ? esc(f.acceptedWhy ?? '') : ''}</textarea>
           <div class="acceptrow">
             <button type="button" data-act="save">${f.accepted ? 'Cập nhật lý do' : 'Bỏ qua lỗi này'}</button>
             ${f.accepted ? `<button type="button" data-act="undo">Bỏ xác nhận</button>` : ''}
@@ -329,7 +352,7 @@ export function renderReport(r: RunReport): string {
     </details>`;
   };
 
-  return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  return `<!doctype html><html lang="vi"${stamp ? ` data-stamp="${esc(stamp)}"` : ''}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>QA Visual — ${esc(host)}</title>
 <style>
 /* Light by default, dark when the reader's system says so — a report gets opened at night too. */
@@ -437,16 +460,19 @@ table.grid td a:hover{color:var(--link);border-bottom-color:var(--link)}
 /* Signed off as intended: still legible, but visibly not part of the count. */
 .find.ok2{opacity:.72}
 .find p.accepted{font-size:13px;color:var(--ok);margin:0 0 8px}
-.find p.acceptcmd{font-size:12px;color:var(--faint);margin:0 0 8px}
-.acceptbox{margin:0 0 10px}
-.acceptbox textarea.why{width:100%;box-sizing:border-box;font:13px/1.45 inherit;padding:8px 10px;
-  border:1px solid var(--line);border-radius:8px;resize:vertical;min-height:52px;background:var(--card);color:inherit}
-.acceptbox .acceptrow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}
-.acceptbox button{font:12.5px/1 inherit;font-weight:600;padding:6px 10px;border-radius:7px;cursor:pointer;
+.acceptbox{margin:0 0 12px;padding:10px 12px;border:1px solid var(--warn-line);background:var(--warn-bg);border-radius:10px}
+.acceptbox .acceptlab{font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--warn);margin:0 0 6px}
+.acceptbox .accepthint{display:block;font-size:12.5px;color:var(--ink);margin:0 0 6px}
+.acceptbox textarea.why,.notesbox textarea.notes{width:100%;box-sizing:border-box;font:13px/1.45 inherit;padding:8px 10px;
+  border:1px solid var(--line);border-radius:8px;resize:vertical;min-height:56px;background:var(--card);color:inherit}
+.acceptbox .acceptrow,.notesbox .acceptrow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}
+.acceptbox button,.notesbox button{font:12.5px/1 inherit;font-weight:600;padding:7px 12px;border-radius:7px;cursor:pointer;
   border:1px solid var(--line);background:var(--card);color:inherit}
-.acceptbox button[data-act=save]{background:var(--ok);border-color:var(--ok);color:#fff}
-.acceptbox .acceptstate{font-size:12px;color:var(--mute)}
-.acceptbox .acceptstate.bad{color:var(--bad)}
+.acceptbox button[data-act=save],.notesbox button[data-act=savenote]{background:var(--ok);border-color:var(--ok);color:#fff}
+.acceptbox .acceptstate,.notesbox .acceptstate{font-size:12px;color:var(--mute)}
+.acceptbox .acceptstate.bad,.notesbox .acceptstate.bad{color:var(--bad)}
+.notesbox{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--ok);
+  border-radius:12px;padding:16px 18px;margin:0 0 22px}
 
 /* ---------------------------------- pages -------------------------------- */
 .page{background:var(--card);border:1px solid var(--line);border-radius:12px;margin:0 0 8px}
@@ -546,17 +572,19 @@ ${
     : ''
 }
 
-${
-  r.humanNotes && r.humanNotes.trim()
-    ? `<section>
+<section class="notesbox">
   <h2>Ghi chú của người kiểm</h2>
-  <p class="lead">Do người viết tay sau khi đọc báo cáo — những gì AI bỏ sót, hoặc lưu ý cho người đọc.${
+  <p class="lead">Những gì AI bỏ sót, hoặc lưu ý cho người đọc lần sau.${
     r.humanNotesAt ? ` Ghi lúc ${esc(r.humanNotesAt.slice(0, 16).replace('T', ' '))}.` : ''
   }</p>
-  <div class="humannote">${esc(r.humanNotes.trim())}</div>
-</section>`
-    : ''
-}
+  <div class="notesedit">
+    <textarea class="notes" rows="4" placeholder="Ghi chú cho lần chạy này…">${esc(r.humanNotes ?? '')}</textarea>
+    <div class="acceptrow">
+      <button type="button" data-act="savenote">Lưu ghi chú</button>
+      <span class="acceptstate"></span>
+    </div>
+  </div>
+</section>
 
 ${
   open.length

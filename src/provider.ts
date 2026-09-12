@@ -61,10 +61,16 @@ let consecutiveFailures = 0;
 let stopped: string | null = null;
 
 export const aiStopped = () => stopped;
-export function resetAiCircuit() {
+export const aiMaxInflight = () => maxInflight;
+
+/** Fast mode: at least 3 in flight. Never lower a higher value already set in the env. */
+const FAST_AI = 3;
+
+export function resetAiCircuit(fast = false) {
   consecutiveFailures = 0;
   stopped = null;
-  maxInflight = Math.max(1, Number(process.env.QA_AI_CONCURRENCY ?? 1));
+  const fromEnv = Math.max(1, Number(process.env.QA_AI_CONCURRENCY ?? 1) || 1);
+  maxInflight = fast ? Math.max(fromEnv, FAST_AI) : fromEnv;
 }
 
 /** The provider says its concurrency budget is exhausted — one at a time is the only answer. */

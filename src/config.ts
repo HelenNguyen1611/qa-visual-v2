@@ -17,6 +17,11 @@ export interface Config {
   site?: string;
   maxPages: number;
   concurrency: number;
+  /**
+   * At least 3 vision requests in flight. Same 24 calls, shorter wall-clock.
+   * Does not change screenshots, viewports, or token count on a clean run.
+   */
+  aiFast?: boolean;
   /** Figma file/frame link, if the design lives in Figma */
   figma?: string;
   /** Folder of design PNGs (desktop.png / tablet.png / mobile.png), if not using Figma */
@@ -62,6 +67,7 @@ qa-visual accept <số lỗi> "lý do"    Đánh dấu một lỗi ở lần ch�
   --site <url>       Quét cả site: danh sách trang lấy từ sitemap.xml
   --pages <n>        Số trang tối đa (mặc định 8)
   --concurrency <n>  Số trang chạy song song (mặc định 2)
+  --fast             AI tối đa 3 lời gọi cùng lúc (cùng số lần gọi, chạy nhanh hơn)
   --figma <link>     Link file / page / frame Figma. Frame được ghép với URL theo tên;
                      kết quả ghép ghi ra pages.json để bạn sửa.
   --design <folder>  Folder with desktop.png / tablet.png / mobile.png (alternative to --figma)
@@ -155,6 +161,7 @@ export function loadConfig(argv: string[], cwd = process.cwd()): Config {
     auth: auth.user || auth.pass ? auth : undefined,
     maxPages: Math.max(1, Number(arg(['--pages'], argv) ?? 8)),
     concurrency: Math.max(1, Math.min(4, Number(arg(['--concurrency'], argv) ?? 2))),
+    aiFast: argv.includes('--fast'),
     figma,
     designDir: arg(['--design'], argv),
     approve: argv.includes('--approve'),

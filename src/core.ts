@@ -11,7 +11,7 @@ import { fromSitemap, fromLinks, browserFetcher, dedupeUrls, slugOf, type PageTa
 import { mapUrlsToFrames, looksMispaired, type Mapped } from './mapping.js';
 import { detectShared } from './shared.js';
 import { groupFindings, markDrift, type Occurrence, type GroupedFinding } from './group.js';
-import { createProvider, aiStopped, resetAiCircuit, preflight, type VisionProvider } from './provider.js';
+import { createProvider, aiStopped, resetAiCircuit, aiMaxInflight, preflight, type VisionProvider } from './provider.js';
 import { detectAll } from './verify.js';
 import { applyAccepted, readAccepted } from './accepted.js';
 import { compareWithDesign, compareSelf, looksNonVietnamese } from './ai.js';
@@ -394,9 +394,10 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
   const rendered = await renderAll(cfg, usedFrames);
 
   const provider = createProvider(cfg);
-  resetAiCircuit();
+  resetAiCircuit(Boolean(cfg.aiFast));
   // Check the key and the model choice before spending a run discovering they cannot work.
   if (provider) await preflight(cfg, (l) => log(l));
+  if (provider && cfg.aiFast) log(`chế độ nhanh: tối đa ${aiMaxInflight()} lời gọi AI cùng lúc (cùng số lần gọi, không thêm token nếu không retry)`);
 
   // Size the bar before starting: 3 screenshots per page, then the model calls that page will
   // actually make (3 when it has a design to compare against, 1 self-check when it does not),
@@ -557,7 +558,7 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
 
   progressSay('Đang dựng report', 'wrap');
   const reportPath = join(runDir, 'report.html');
-  writeFileSync(reportPath, renderReport(report));
+  writeFileSync(reportPath, renderReport(report, stamp));
   const slim = { ...report, pages: report.pages.map((p) => ({ ...p, viewports: p.viewports.map(({ textIndex, reserved, ...rest }) => rest) })) };
   writeFileSync(join(runDir, 'report.json'), JSON.stringify(slim, null, 2));
 

@@ -2,52 +2,70 @@
   "_": "Ghép URL với frame Figma. Tool sinh file này lần đầu; sửa dòng nào sai rồi lần sau tool dùng nguyên file này, không đoán lại. Bỏ figmaNodeId nếu muốn trang đó không so với design.",
   "pages": [
     {
-      "url": "https://staging.wootech.com.au/",
-      "figmaNodeId": "2366:8900",
+      "url": "https://aino.energy.wootech.com.au/",
+      "figmaNodeId": "116:878",
       "frameName": "01 / Homepage",
       "how": "khớp tên \"01 / Homepage\" (điểm 1.00, kế tiếp 0.00)"
     },
     {
-      "url": "https://staging.wootech.com.au/about/",
-      "figmaNodeId": "2430:13484",
-      "frameName": "07 / About us",
-      "how": "khớp tên \"07 / About us\" (điểm 0.85, kế tiếp 0.00)"
+      "url": "https://aino.energy.wootech.com.au/aino-os/",
+      "figmaNodeId": "2174:4044",
+      "frameName": "03 / AinoOS",
+      "how": "chọn tay: \"03 / AinoOS\""
     },
     {
-      "url": "https://staging.wootech.com.au/contact/",
-      "figmaNodeId": "2468:13996",
-      "frameName": "08 / Contact",
-      "how": "khớp tên \"08 / Contact\" (điểm 1.00, kế tiếp 0.00)"
+      "url": "https://aino.energy.wootech.com.au/company/",
+      "figmaNodeId": "2006:692",
+      "frameName": "06 / Company",
+      "how": "khớp tên \"06 / Company\" (điểm 1.00, kế tiếp 0.00)"
     },
     {
-      "url": "https://staging.wootech.com.au/journal/",
-      "figmaNodeId": "2430:11986",
-      "frameName": "05 / Insights",
-      "how": "chọn tay: \"05 / Insights\""
+      "url": "https://aino.energy.wootech.com.au/contact/",
+      "figmaNodeId": "2006:1083",
+      "frameName": "13 / Contact",
+      "how": "khớp tên \"13 / Contact\" (điểm 1.00, kế tiếp 0.00)"
     },
     {
-      "url": "https://staging.wootech.com.au/projects/",
-      "figmaNodeId": "2430:9420",
-      "frameName": "03 / Projects",
-      "how": "khớp tên \"03 / Projects\" (điểm 1.00, kế tiếp 0.85)"
+      "url": "https://aino.energy.wootech.com.au/faqs/",
+      "figmaNodeId": "2006:979",
+      "frameName": "12 / FAQs",
+      "how": "khớp tên \"12 / FAQs\" (điểm 1.00, kế tiếp 0.00)"
     },
     {
-      "url": "https://staging.wootech.com.au/services/",
-      "figmaNodeId": "2417:2710",
-      "frameName": "02 / Services",
-      "how": "khớp tên \"02 / Services\" (điểm 1.00, kế tiếp 0.00)"
+      "url": "https://aino.energy.wootech.com.au/industries/",
+      "figmaNodeId": "2006:498",
+      "frameName": "05 / Industries",
+      "how": "khớp tên \"05 / Industries\" (điểm 1.00, kế tiếp 0.00)"
     },
     {
-      "url": "https://staging.wootech.com.au/projects/ferrari/",
-      "figmaNodeId": "2430:11056",
-      "frameName": "04 / Projects / Inside Page",
-      "how": "chọn tay: \"04 / Projects / Inside Page\""
+      "url": "https://aino.energy.wootech.com.au/insights/",
+      "figmaNodeId": "2006:1374",
+      "frameName": "09 / Insights",
+      "how": "khớp tên \"09 / Insights\" (điểm 1.00, kế tiếp 0.85)"
     },
     {
-      "url": "https://staging.wootech.com.au/when-brand-consistency-becomes-a-reputation-issue/",
-      "figmaNodeId": "2430:12945",
-      "frameName": "06 / Journal / Inside Page",
-      "how": "chọn tay: \"06 / Journal / Inside Page\""
+      "url": "https://aino.energy.wootech.com.au/leadership-and-partners/",
+      "figmaNodeId": "2006:811",
+      "frameName": "07 / Leadership & Partners",
+      "how": "khớp tên \"07 / Leadership & Partners\" (điểm 0.67, kế tiếp 0.00)"
+    },
+    {
+      "url": "https://aino.energy.wootech.com.au/one-aino/",
+      "figmaNodeId": "2174:4270",
+      "frameName": "02 / OneAino™",
+      "how": "chọn tay: \"02 / OneAino™\""
+    },
+    {
+      "url": "https://aino.energy.wootech.com.au/products/",
+      "figmaNodeId": "2006:324",
+      "frameName": "04 / Products",
+      "how": "khớp tên \"04 / Products\" (điểm 1.00, kế tiếp 0.00)"
+    },
+    {
+      "url": "https://aino.energy.wootech.com.au/insights/a-guide-to-battery-warranty-terms/",
+      "figmaNodeId": "2069:2852",
+      "frameName": "11 / Article / Detail",
+      "how": "chọn tay: \"11 / Article / Detail\""
     }
   ]
 }

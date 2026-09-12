@@ -69,7 +69,13 @@ let lastCreds: { user?: string; pass?: string } | undefined;
 
 const json = (res: any, code: number, body: unknown) => {
   const s = JSON.stringify(body);
-  res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+  res.writeHead(code, {
+    'content-type': 'application/json; charset=utf-8',
+    'cache-control': 'no-store',
+    'access-control-allow-origin': '*',
+    'access-control-allow-headers': 'content-type',
+    'access-control-allow-methods': 'GET,POST,OPTIONS',
+  });
   res.end(s);
 };
 
@@ -97,7 +103,11 @@ async function serveFile(res: any, root: string, rel: string) {
     const s = await stat(target);
     if (s.isDirectory()) return json(res, 404, { error: 'không thấy' });
     const body = await readFile(target);
-    res.writeHead(200, { 'content-type': MIME[extname(target).toLowerCase()] ?? 'application/octet-stream' });
+    const headers: Record<string, string> = {
+      'content-type': MIME[extname(target).toLowerCase()] ?? 'application/octet-stream',
+    };
+    if (extname(target).toLowerCase() === '.html') headers['cache-control'] = 'no-store';
+    res.writeHead(200, headers);
     res.end(body);
   } catch {
     json(res, 404, { error: 'không thấy: ' + rel });
@@ -136,6 +146,15 @@ const server = createServer(async (req, res) => {
   const path = url.pathname;
 
   try {
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204, {
+        'access-control-allow-origin': '*',
+        'access-control-allow-headers': 'content-type',
+        'access-control-allow-methods': 'GET,POST,OPTIONS',
+      });
+      res.end();
+      return;
+    }
     /* ---------------------------------- UI ---------------------------------- */
     if (req.method === 'GET' && (path === '/' || path === '/index.html')) return serveFile(res, UI_DIR, 'index.html');
     if (req.method === 'GET' && path.startsWith('/ui/')) return serveFile(res, UI_DIR, path.slice(4));
@@ -162,7 +181,7 @@ const server = createServer(async (req, res) => {
         if (dir && existsSync(join(dir, 'report.json'))) {
           try {
             const report: RunReport = JSON.parse(await readFile(join(dir, 'report.json'), 'utf8'));
-            await writeFile(join(dir, 'report.html'), renderReport(report));
+            await writeFile(join(dir, 'report.html'), renderReport(report, stampMatch[1]));
           } catch (e: any) {
             log(`⚠ không dựng lại được report.html của ${stampMatch[1]}: ${e?.message ?? e}`);
           }
@@ -236,7 +255,7 @@ const server = createServer(async (req, res) => {
       if (!lastConfig) return json(res, 409, { error: 'chưa có lần dò nào — bấm Dò trang trước' });
       if (busy) return json(res, 409, { error: 'đang có một lượt chạy' });
 
-      const cfg = lastConfig;
+      const cfg = { ...lastConfig, aiFast: Boolean(body.fast) };
       const id = Date.now().toString(36);
       const run: Run = { id, lines: [], done: false, clients: new Set() };
       runs.set(id, run);
@@ -467,7 +486,7 @@ const server = createServer(async (req, res) => {
         report.humanNotes = notes;
         report.humanNotesAt = notes.trim() ? new Date().toISOString() : undefined;
         await writeFile(join(dir, 'report.json'), JSON.stringify(report, null, 2));
-        await writeFile(join(dir, 'report.html'), renderReport(report));
+        await writeFile(join(dir, 'report.html'), renderReport(report, stamp));
         // Also as plain text, so the note is findable with grep and readable without the report.
         if (notes.trim()) await writeFile(join(dir, 'notes.md'), notes.trim() + '\n');
 
@@ -509,7 +528,7 @@ const server = createServer(async (req, res) => {
         if (!f) return json(res, 404, { error: 'không có lỗi số ' + num + ' trong report này' });
         markFindingAccepted(f, accepted ? why : null);
         await writeFile(join(dir, 'report.json'), JSON.stringify(report, null, 2));
-        await writeFile(join(dir, 'report.html'), renderReport(report));
+        await writeFile(join(dir, 'report.html'), renderReport(report, stamp));
         let reshared = false;
         if (existsSync(join(dir, 'report-share.html'))) {
           try {
