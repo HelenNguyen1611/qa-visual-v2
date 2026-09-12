@@ -1,0 +1,13 @@
+graph TD
+  IN["URL + Figma + .env"] --> AUTH["Mở cổng auth"]
+  AUTH --> FIND["Tìm trang: sitemap hoặc nav"]
+  FIND --> PAIR["Ghép URL với frame Figma"]
+  PAIR --> EDIT["Người sửa pages.json"]
+  EDIT --> CAP["Chụp 390 / 768 / 1440"]
+  CAP --> DIFF["Diff pixel vs bản duyệt"]
+  CAP --> SHARE["Đếm header/footer dùng chung"]
+  DIFF --> AI["AI so với design"]
+  SHARE --> AI
+  AI --> GROUP["Gộp lỗi + drift lần trước"]
+  GROUP --> SWEEP["Quét điểm vỡ layout"]
+  SWEEP --> OUT["report.html"]

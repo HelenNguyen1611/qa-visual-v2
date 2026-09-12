@@ -26,6 +26,10 @@ export interface Config {
   /** Where runs and the approved baseline live */
   stateDir: string;
   ai: { provider: AiProvider; model: string; apiKey: string; baseUrl: string };
+  /** credentials for a site behind a gate, and how to use them */
+  auth?: import('./auth.js').AuthConfig;
+  /** filled in once the gate is open — every browser context is created with it */
+  authState?: import('./auth.js').AuthState;
   figmaToken: string;
   mask: { mask: string[]; hide: string[] };
   verbose: boolean;
@@ -64,8 +68,38 @@ export const USAGE = `qa-visual <url|--site url> [options]
   --model <id>       Vision model (default: from .env)
   --verbose
 
+Site có user/mật khẩu:
+  Dán URL kèm thông tin đăng nhập:  https://user:matkhau@site.com/
+  hoặc đặt trong .env:              QA_HTTP_USER=... / QA_HTTP_PASS=...
+  Nếu là form đăng nhập (không phải popup của browser), thêm khi cần:
+                                    QA_LOGIN_URL=... (mặc định /wp-login.php)
+                                    QA_LOGIN_USER_SEL / QA_LOGIN_PASS_SEL / QA_LOGIN_SUBMIT_SEL
+
 Output: reports/<timestamp>/report.html
 `;
+
+/**
+ * Take credentials out of a pasted URL.
+ *
+ * `https://user:pass@host/` is the first thing anyone tries, and Chrome strips the credentials and
+ * shows the login popup anyway — so the URL alone does not work. Pulling them out here makes the
+ * paste behave the way people expect, and keeps the secret out of every place the URL is stored:
+ * pages.json, the report, the browser's localStorage.
+ */
+export function stripCredentials(raw: string): { url: string; user?: string; pass?: string } {
+  try {
+    const u = new URL(raw);
+    if (!u.username && !u.password) return { url: raw };
+    const user = decodeURIComponent(u.username);
+    const pass = decodeURIComponent(u.password);
+    u.username = '';
+    u.password = '';
+    return { url: u.toString(), user: user || undefined, pass: pass || undefined };
+  } catch {
+    return { url: raw };
+  }
+}
+
 
 export function loadConfig(argv: string[], cwd = process.cwd()): Config {
   loadDotEnv(cwd);
@@ -99,10 +133,24 @@ export function loadConfig(argv: string[], cwd = process.cwd()): Config {
   const maskPath = resolve(cwd, 'mask.json');
   const mask = existsSync(maskPath) ? JSON.parse(readFileSync(maskPath, 'utf8')) : { mask: [], hide: [] };
 
+  // Credentials may arrive inside the URL (https://user:pass@host/) — take them out so they never
+  // reach pages.json, the report, or the browser's saved session.
   const site = arg(['--site'], argv);
+  const bare = stripCredentials(url ?? site!);
+  const bareSite = site ? stripCredentials(site).url : undefined;
+  const auth = {
+    user: bare.user ?? process.env.QA_HTTP_USER ?? undefined,
+    pass: bare.pass ?? process.env.QA_HTTP_PASS ?? undefined,
+    loginUrl: process.env.QA_LOGIN_URL ?? undefined,
+    userSel: process.env.QA_LOGIN_USER_SEL ?? undefined,
+    passSel: process.env.QA_LOGIN_PASS_SEL ?? undefined,
+    submitSel: process.env.QA_LOGIN_SUBMIT_SEL ?? undefined,
+  };
+
   return {
-    url: url ?? site!,
-    site,
+    url: bare.url,
+    site: bareSite,
+    auth: auth.user || auth.pass ? auth : undefined,
     maxPages: Math.max(1, Number(arg(['--pages'], argv) ?? 8)),
     concurrency: Math.max(1, Math.min(4, Number(arg(['--concurrency'], argv) ?? 2))),
     figma,
@@ -129,12 +177,26 @@ export const setLogSink = (f: ((line: string) => void) | null) => {
 
 /* ------------------------------- progress ------------------------------- */
 
+export interface ProgressPlan {
+  /** screenshots: pages × viewports */
+  capture: number;
+  /** vision calls the run will actually make */
+  ai: number;
+  /** closing steps (sweep, report) */
+  wrap: number;
+}
+
 export interface Progress {
   done: number;
   total: number;
   /** what is happening right now, in the user's language */
   label: string;
   phase: 'capture' | 'ai' | 'wrap';
+  /**
+   * How the total breaks down. Without it "19/44" on a 7-page run reads as a number nobody can
+   * check, and the first thing anyone asks is why 7 pages is 44 of anything.
+   */
+  plan: ProgressPlan;
 }
 
 let progressSink: ((p: Progress) => void) | null = null;
@@ -142,7 +204,7 @@ export const setProgressSink = (f: ((p: Progress) => void) | null) => {
   progressSink = f;
 };
 
-let state: Progress = { done: 0, total: 0, label: '', phase: 'capture' };
+let state: Progress = { done: 0, total: 0, label: '', phase: 'capture', plan: { capture: 0, ai: 0, wrap: 0 } };
 
 /**
  * Declare the size of the job before it starts.
@@ -151,8 +213,8 @@ let state: Progress = { done: 0, total: 0, label: '', phase: 'capture' };
  * three model calls, so counting pages makes the bar sit still for thirty seconds at a time on a
  * job that is actually moving.
  */
-export function progressTotal(total: number) {
-  state = { done: 0, total, label: 'đang bắt đầu…', phase: 'capture' };
+export function progressTotal(plan: ProgressPlan) {
+  state = { done: 0, total: plan.capture + plan.ai + plan.wrap, label: 'đang bắt đầu…', phase: 'capture', plan };
   progressSink?.({ ...state });
 }
 

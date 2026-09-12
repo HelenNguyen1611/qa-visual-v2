@@ -69,6 +69,11 @@ export interface RunReport {
   ai?: { calls: number; failures: number; lastError?: string; stopped?: string; wrongLang?: number; silent?: boolean };
   /** the run this one was compared against, and what it reported that this run did not */
   drift?: { previousRun: string; gone: Array<{ title: string; severity: string; scope: string }> };
+  /** free text a person added after reading the report — what the AI missed, or context for readers */
+  humanNotes?: string;
+  humanNotesAt?: string;
+  /** how the run got past a login gate — the method, never the credentials */
+  authHow?: string;
 }
 
 const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
@@ -305,6 +310,9 @@ h2:not(:has(+.lead)){margin-bottom:14px}
 .chip.minor{border-color:var(--warn);color:var(--warn)}
 .chip.tpl{border-color:var(--tpl);color:var(--tpl);font-weight:600}
 .chip.new{background:var(--ok-bg);border-color:transparent;color:var(--ok);font-weight:600}
+/* Written by a person, so it must not look like one more generated panel. */
+.humannote{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--ok);
+  border-radius:12px;padding:16px 18px;font-size:14.5px;line-height:1.65;white-space:pre-wrap}
 .chip.quiet{border-style:dashed;color:var(--faint)}
 .chips{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px}
 
@@ -402,7 +410,7 @@ footer{max-width:940px;margin:0 auto;padding:22px 20px 50px;border-top:1px solid
   <div class="verdict-sub">${esc(verdict.sub)}</div>
   <p class="runmeta">
     <b>${esc(r.when.slice(0, 16).replace('T', ' '))}</b> · ${r.pages.length} trang · 3 kích thước · ${(r.durationMs / 1000).toFixed(0)}s
-    · ${r.aiModel ? 'AI ' + esc(r.aiModel) : 'AI tắt'}${r.approvedThisRun ? ' · <b>đã chốt làm bản duyệt</b>' : ''}
+    · ${r.aiModel ? 'AI ' + esc(r.aiModel) : 'AI tắt'}${r.authHow ? ' · ' + esc(r.authHow) : ''}${r.approvedThisRun ? ' · <b>đã chốt làm bản duyệt</b>' : ''}
   </p>
 </header>
 <main>
@@ -433,6 +441,18 @@ ${
   r.drift && r.drift.gone.length
     ? `<div class="alert"><b>Lần chạy trước báo, lần này không thấy</b> — cần bạn xác nhận đã sửa hay AI bỏ sót:
        <ul>${r.drift.gone.map((g) => `<li>${esc(g.title)} <span class="tiny" style="color:inherit;opacity:.8">(${esc(SEV[g.severity] ?? g.severity)}${g.scope === 'template' ? ', dùng chung' : ''})</span></li>`).join('')}</ul></div>`
+    : ''
+}
+
+${
+  r.humanNotes && r.humanNotes.trim()
+    ? `<section>
+  <h2>Ghi chú của người kiểm</h2>
+  <p class="lead">Do người viết tay sau khi đọc báo cáo — những gì AI bỏ sót, hoặc lưu ý cho người đọc.${
+    r.humanNotesAt ? ` Ghi lúc ${esc(r.humanNotesAt.slice(0, 16).replace('T', ' '))}.` : ''
+  }</p>
+  <div class="humannote">${esc(r.humanNotes.trim())}</div>
+</section>`
     : ''
 }
 

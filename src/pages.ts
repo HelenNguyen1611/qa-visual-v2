@@ -45,9 +45,10 @@ async function get(url: string, timeoutMs = 15000): Promise<string | null> {
  * and the browser is the thing that proved it can, since it is what takes the screenshots. Node
  * fetch failing then looks exactly like "the site has no sitemap", which is the wrong conclusion.
  */
-export function browserFetcher(browser: import('playwright').Browser): Fetcher {
+export function browserFetcher(browser: import('playwright').Browser, ctxOpts: import('playwright').BrowserContextOptions = {}): Fetcher {
   return async (url: string) => {
-    const page = await browser.newPage();
+    const ctx = await browser.newContext({ ignoreHTTPSErrors: true, ...ctxOpts });
+    const page = await ctx.newPage();
     try {
       const res = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
       if (!res || !res.ok()) return null;
@@ -55,15 +56,21 @@ export function browserFetcher(browser: import('playwright').Browser): Fetcher {
     } catch {
       return null;
     } finally {
-      await page.close().catch(() => {});
+      await ctx.close().catch(() => {});
     }
   };
 }
 
 /** Same-site page links in the DOM, in document order. Used when the site has no sitemap. */
-export async function fromLinks(browser: import('playwright').Browser, siteUrl: string, limit: number): Promise<string[]> {
+export async function fromLinks(
+  browser: import('playwright').Browser,
+  siteUrl: string,
+  limit: number,
+  ctxOpts: import('playwright').BrowserContextOptions = {},
+): Promise<string[]> {
   const base = new URL(siteUrl);
-  const page = await browser.newPage();
+  const ctx = await browser.newContext({ ignoreHTTPSErrors: true, ...ctxOpts });
+  const page = await ctx.newPage();
   let hrefs: string[] = [];
   try {
     await page.goto(siteUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
@@ -72,7 +79,7 @@ export async function fromLinks(browser: import('playwright').Browser, siteUrl: 
   } catch {
     /* fall through with whatever we got */
   } finally {
-    await page.close().catch(() => {});
+    await ctx.close().catch(() => {});
   }
   const keep = normalise(hrefs, base, limit);
   log(keep.length ? `liên kết trên trang chủ → ${keep.length} trang` : 'không thấy liên kết nội bộ nào trên trang chủ');

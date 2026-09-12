@@ -1,0 +1,22 @@
+graph TD
+  USER["Người dùng"]
+  CLI["cli.ts — terminal"]
+  UI["ui/index.html"]
+  SRV["server.ts — 127.0.0.1:5173"]
+  CORE["core.ts — discover + runQa"]
+  SITE["Site cần QA"]
+  FIGMA["Figma API / folder PNG"]
+  CHROME["Playwright Chromium"]
+  VISION["Vision AI"]
+  DISK["reports/ + pages.json"]
+
+  USER --> CLI
+  USER --> UI
+  UI --> SRV
+  CLI --> CORE
+  SRV --> CORE
+  CORE --> SITE
+  CORE --> FIGMA
+  CORE --> CHROME
+  CORE --> VISION
+  CORE --> DISK

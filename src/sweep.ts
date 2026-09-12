@@ -13,8 +13,8 @@ export interface SweepResult {
  * Coarse scan from wide to narrow reading scrollWidth only (no screenshots), then binary-search
  * each good→broken edge to the exact pixel. Answers "layout breaks from 1148px down to 360px".
  */
-export async function sweep(browser: Browser, url: string, minW = 320, maxW = 1600): Promise<SweepResult> {
-  const ctx = await browser.newContext({ viewport: { width: maxW, height: 900 }, deviceScaleFactor: 1, ignoreHTTPSErrors: true, reducedMotion: 'reduce' });
+export async function sweep(browser: Browser, url: string, auth: import('playwright').BrowserContextOptions = {}, minW = 320, maxW = 1600): Promise<SweepResult> {
+  const ctx = await browser.newContext({ ...auth, viewport: { width: maxW, height: 900 }, deviceScaleFactor: 1, ignoreHTTPSErrors: true, reducedMotion: 'reduce' });
   const page = await ctx.newPage();
   const breaks: SweepResult['breaks'] = [];
   let checked = 0;

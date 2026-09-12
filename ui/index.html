@@ -78,6 +78,26 @@
   .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; }
   #logbox summary { cursor: pointer; padding: 4px 0; }
   #logbox[open] summary { margin-bottom: 8px; }
+  .authbox { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 14px;
+    background: #fff; }
+  .authbox > summary { cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--dim); list-style: none; }
+  .authbox > summary::-webkit-details-marker { display: none; }
+  .authbox > summary::before { content: '▸ '; }
+  .authbox[open] > summary::before { content: '▾ '; }
+  .authbox .row2 { grid-template-columns: 1fr 1fr; }
+  .authbox code { background: var(--bg); padding: 1px 4px; border-radius: 4px; font-size: 11.5px; }
+  .saved { background: #ecfdf3; border: 1px solid #abefc6; color: #05603a; border-radius: 8px;
+    padding: 10px 12px; font-size: 13px; margin-bottom: 14px; }
+  .saved b { color: inherit; }
+  .btnrow { display: flex; gap: 10px; align-items: center; }
+  .notes { margin: 4px 0 18px; }
+  .notes textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px;
+    font: inherit; line-height: 1.6; resize: vertical; min-height: 96px; background: #fff; color: inherit; }
+  .notes textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
+  .notes .noterow { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+  .notes .noterow .hint { margin: 0; }
+  .notes .ok { color: var(--ok); }
+  .notes .bad { color: var(--bad); }
   .done { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
   .done .big { font-size: 15px; font-weight: 650; }
   [hidden] { display: none !important; }
@@ -114,9 +134,29 @@
         <input type="number" id="max" value="8" min="1" max="30">
       </div>
     </div>
+    <details class="authbox" id="authbox">
+      <summary>Site có mật khẩu? (staging, Basic auth, hoặc trang login)</summary>
+      <div class="row2" style="margin-top:12px">
+        <div>
+          <label for="auser">User</label>
+          <input type="text" id="auser" autocomplete="off" spellcheck="false" placeholder="tên đăng nhập">
+        </div>
+        <div>
+          <label for="apass">Mật khẩu</label>
+          <input type="password" id="apass" autocomplete="off" placeholder="••••••••">
+        </div>
+      </div>
+      <p class="hint">Chỉ giữ trong bộ nhớ của server, <b>không lưu vào máy</b> — mở lại trang là phải nhập lại.
+      Muốn khỏi nhập mỗi lần thì đặt <code>QA_HTTP_USER</code> / <code>QA_HTTP_PASS</code> trong <code>.env</code>.
+      Tool tự nhận biết là Basic auth (popup của browser) hay form login.</p>
+    </details>
     <div id="e1"></div>
-    <button class="primary" id="go1">Dò trang</button>
-    <p class="hint">Bước này mất 15–30 giây: mở browser, đọc sitemap (hoặc dò link trang chủ), đọc file Figma và render frame.</p>
+    <div class="saved" id="saved" hidden></div>
+    <div class="btnrow">
+      <button class="primary" id="go1">Dò trang</button>
+      <button id="redo" hidden>Dò lại từ đầu</button>
+    </div>
+    <p class="hint" id="hint1">Bước này mất 15–30 giây: mở browser, đọc sitemap (hoặc dò link trang chủ), đọc file Figma và render frame.</p>
   </section>
 
   <!-- ============================ 2. pairing =========================== -->
@@ -150,6 +190,15 @@
       </div>
     </div>
     <div class="done" id="doneBar" hidden></div>
+
+    <div class="notes" id="notes" hidden>
+      <label for="notetext">Ghi chú của bạn <span style="font-weight:400;color:var(--dim)">— lỗi AI bỏ sót, hoặc lưu ý cho người đọc report</span></label>
+      <textarea id="notetext" rows="5" placeholder="Ví dụ:&#10;- Hero là video background, ảnh chụp ra trắng là bình thường.&#10;- Menu mobile thiếu icon giỏ hàng — AI không thấy.&#10;- Trang /journal/ chưa có design, đừng tin phần so design."></textarea>
+      <div class="noterow">
+        <button class="primary" id="savenote">Lưu vào report</button>
+        <span class="hint" id="notestate"></span>
+      </div>
+    </div>
     <details id="logbox"><summary class="cap">Xem log chi tiết</summary><pre class="log" id="log"></pre></details>
   </section>
 </main>
@@ -203,23 +252,158 @@ const slugOf = (u) => {
   } catch { return null; }
 };
 
+/* ------------------------- remembering a session ------------------------- */
+/**
+ * Keep the pairing for a (site, design) pair in the browser, so the second run skips discovery.
+ *
+ * localStorage rather than a cookie: nothing here needs to reach the server on every request, and
+ * a pairing with frame names and thumbnails is far past what a cookie holds. Everything is wrapped
+ * in try/catch because localStorage throws outright in a few browser configurations, and losing a
+ * convenience must never break the tool.
+ */
+const LS_PREFIX = 'qav:v1:';
+const LS_LAST = 'qav:v1:last';
+const keyFor = (site, figma) => LS_PREFIX + bareUrl((site || '').trim()).replace(/\/+$/, '') + '|' + (figma || '').trim();
+
+/** Strip user:pass@ before anything is written to disk — a saved secret is a leaked secret. */
+function bareUrl(raw) {
+  try {
+    const u = new URL(raw);
+    u.username = '';
+    u.password = '';
+    return u.toString();
+  } catch {
+    return raw;
+  }
+}
+
+function saveSession() {
+  try {
+    const site = bareUrl($('site').value.trim());
+    if (!site) return;
+    const key = keyFor(site, $('figma').value);
+    localStorage.setItem(
+      key,
+      JSON.stringify({
+        siteUrl: site,
+        figmaLink: $('figma').value.trim(),
+        maxPages: Number($('max').value) || 8,
+        rows: ROWS,
+        frames: FRAMES,
+        savedAt: new Date().toISOString(),
+      }),
+    );
+    localStorage.setItem(LS_LAST, key);
+  } catch {
+    /* a full or disabled localStorage costs a convenience, not the run */
+  }
+}
+
+function loadSession(site, figma) {
+  try {
+    const raw = localStorage.getItem(keyFor(site, figma));
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    return Array.isArray(d?.rows) && d.rows.length ? d : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Prefill the form from the last site worked on, and offer to reuse its pairing. */
+function restoreLast() {
+  let d = null;
+  try {
+    const key = localStorage.getItem(LS_LAST);
+    d = key ? JSON.parse(localStorage.getItem(key) || 'null') : null;
+  } catch {}
+  if (!d?.siteUrl) return;
+  $('site').value = d.siteUrl;
+  $('figma').value = d.figmaLink || '';
+  if (d.maxPages) $('max').value = d.maxPages;
+  offerSaved();
+}
+
+/**
+ * Switch the primary button between "discover" and "reuse".
+ *
+ * The reuse path is offered rather than taken silently: a saved pairing can be stale — pages added
+ * to the site, frames renamed in Figma — and a person who cannot see that a shortcut was taken
+ * cannot tell a stale table from a fresh one.
+ */
+function offerSaved() {
+  const d = loadSession($('site').value, $('figma').value);
+  const has = Boolean(d);
+  $('saved').hidden = !has;
+  $('redo').hidden = !has;
+  $('go1').textContent = has ? 'Sang bảng ghép' : 'Dò trang';
+  $('hint1').textContent = has
+    ? 'Dùng lại bảng ghép đã lưu — không phải dò lại, sang ngay bước QA. Bấm "Dò lại từ đầu" nếu site đã thêm trang hoặc Figma đã đổi.'
+    : 'Bước này mất 15–30 giây: mở browser, đọc sitemap (hoặc dò link trang chủ), đọc file Figma và render frame.';
+  if (has) {
+    const when = (d.savedAt || '').slice(0, 16).replace('T', ' ');
+    $('saved').innerHTML =
+      '<b>Đã có bảng ghép lưu cho site này</b> — ' + d.rows.length + ' trang, ' + (d.frames || []).length + ' frame' +
+      (when ? ', lưu lúc ' + when : '') + '.';
+  }
+}
+
 /* ------------------------------ 1. discover ------------------------------ */
+$('redo').onclick = () => {
+  try {
+    localStorage.removeItem(keyFor($('site').value, $('figma').value));
+  } catch {}
+  offerSaved();
+  $('go1').click();
+};
+$('site').addEventListener('input', offerSaved);
+$('figma').addEventListener('input', offerSaved);
+
 $('go1').onclick = async () => {
   const siteUrl = $('site').value.trim();
   const figmaLink = $('figma').value.trim();
   showErr('e1', '');
   if (!/^https?:\/\//i.test(siteUrl)) return showErr('e1', 'URL trang chủ phải bắt đầu bằng http:// hoặc https://');
   if (figmaLink && !/figma\.com\//.test(figmaLink) && !figmaLink.startsWith('/')) return showErr('e1', 'phần design phải là link figma.com/… hoặc đường dẫn tuyệt đối tới folder PNG');
+
+  // Saved pairing for exactly this (site, design)? Re-arm the server and go straight to the table.
+  const saved = loadSession(siteUrl, figmaLink);
+  if (saved) {
+    busy($('go1'), true, 'Đang mở bảng ghép…');
+    try {
+      const r = await post('/api/session', { siteUrl, figmaLink, maxPages: Number($('max').value) || 8, frames: saved.frames || [], user: $('auser').value.trim(), pass: $('apass').value });
+      FRAMES = saved.frames || [];
+      ROWS = saved.rows;
+      $('meta').textContent = [hostOf(siteUrl), r.aiModel ? 'AI: ' + r.aiModel : 'AI: tắt'].join(' · ');
+      $('s2sub').textContent =
+        ROWS.length + ' trang · ' + FRAMES.length + ' frame Figma (bảng đã lưu, không dò lại). Sửa URL, đổi frame, thêm hoặc xoá dòng — rồi bấm Chạy QA.';
+      render();
+      $('s1').hidden = true;
+      $('s2').hidden = false;
+      return;
+    } catch (e) {
+      showErr('e1', e.message);
+      return;
+    } finally {
+      busy($('go1'), false, 'Sang bảng ghép');
+    }
+  }
+
   busy($('go1'), true, 'Đang dò trang…');
   try {
-    const d = await post('/api/discover', { siteUrl, figmaLink, maxPages: Number($('max').value) || 8 });
+    const d = await post('/api/discover', { siteUrl, figmaLink, maxPages: Number($('max').value) || 8, user: $('auser').value.trim(), pass: $('apass').value });
     FRAMES = d.frames || [];
     ROWS = d.pages || [];
+    // The server strips any user:pass@ out of the URL; use its version from here on so the secret
+    // is not what gets shown, remembered, or keyed on.
+    if (d.siteUrl) $('site').value = d.siteUrl;
     $('meta').textContent = [hostOf(siteUrl), d.aiModel ? 'AI: ' + d.aiModel : 'AI: tắt'].join(' · ');
     const bits = [ROWS.length + ' trang (' + d.pagesFrom + ')', FRAMES.length + ' frame Figma'];
+    if (d.authHow) bits.push('vào được bằng ' + d.authHow);
     if (/figma\.com\//.test(figmaLink) && !d.hasFigmaToken) bits.push('⚠ chưa có FIGMA_TOKEN trong .env');
     $('s2sub').textContent = bits.join(' · ') + '. Sửa URL, đổi frame, thêm hoặc xoá dòng — rồi bấm Chạy QA.';
     render();
+    saveSession();
     $('s1').hidden = true; $('s2').hidden = false;
   } catch (e) {
     showErr('e1', e.message);
@@ -387,12 +571,16 @@ $('add').onclick = () => {
 $('go2').onclick = async () => {
   showErr('e2', '');
   const pages = ROWS.map((r) => ({ url: r.url.trim(), figmaNodeId: r.figmaNodeId, frameName: r.frameName, how: r.how }));
+  saveSession();
   busy($('go2'), true, 'Đang chạy…');
   try {
     const { runId } = await post('/api/run', { pages });
     $('s2').hidden = true; $('s3').hidden = false;
     $('log').textContent = '';
     $('doneBar').hidden = true;
+    $('notes').hidden = true;
+    $('s3sub').dataset.plan = '';
+    $('s3sub').textContent = 'Chụp 3 kích thước màn hình cho từng trang, so với design, rồi gộp lỗi trùng.';
     $('prog').hidden = false;
     $('fill').style.width = '0%';
     $('plabel').textContent = 'đang bắt đầu…';
@@ -414,12 +602,32 @@ function watch(runId) {
     log.scrollTop = log.scrollHeight;
   });
   const PHASE = { capture: 'Chụp ảnh', ai: 'AI đối chiếu', wrap: 'Tổng hợp' };
+  /**
+   * Count within the current phase, not out of the grand total.
+   *
+   * "19/44" on a 7-page run is a number nobody can verify — the reader knows how many pages there
+   * are, not how many screenshots and API calls that adds up to. "ảnh 19/21" they can check at a
+   * glance, and the plan line above spells out where 44 came from.
+   */
   es.addEventListener('progress', (ev) => {
     const p = JSON.parse(ev.data);
     const pct = p.total ? Math.round((p.done / p.total) * 100) : 0;
     $('fill').style.width = pct + '%';
     $('plabel').textContent = (PHASE[p.phase] || '') + ' — ' + p.label;
-    $('pcount').textContent = pct + '% · ' + p.done + '/' + p.total;
+
+    const pl = p.plan || { capture: 0, ai: 0, wrap: 0 };
+    let within = '';
+    if (p.phase === 'capture' && pl.capture) within = 'ảnh ' + Math.min(p.done, pl.capture) + '/' + pl.capture;
+    else if (p.phase === 'ai' && pl.ai) within = 'lượt AI ' + Math.max(0, Math.min(p.done - pl.capture, pl.ai)) + '/' + pl.ai;
+    $('pcount').textContent = pct + '%' + (within ? ' · ' + within : '');
+
+    if (pl.capture && $('s3sub').dataset.plan !== '1') {
+      const pages = Math.round(pl.capture / 3);
+      $('s3sub').textContent =
+        pages + ' trang × 3 kích thước = ' + pl.capture + ' ảnh chụp · ' + pl.ai + ' lượt gọi AI · ' + pl.wrap +
+        ' bước cuối = ' + p.total + ' bước';
+      $('s3sub').dataset.plan = '1';
+    }
   });
   es.addEventListener('done', (ev) => {
     const d = JSON.parse(ev.data);
@@ -435,6 +643,7 @@ function watch(runId) {
       + '<button id="share">Xuất file chia sẻ</button>'
       + '<button id="again">Chạy lại</button>'
       + '<span class="hint" id="shareOut" style="margin:0"></span>';
+    openNotes(stamp);
     $('open').onclick = () => window.open(d.reportUrl, '_blank');
     $('again').onclick = () => { $('s3').hidden = true; $('s2').hidden = false; };
     $('share').onclick = () => makeShare(stamp);
@@ -443,6 +652,7 @@ function watch(runId) {
   es.addEventListener('failed', (ev) => {
     es.close();
     $('prog').hidden = true;
+    $('notes').hidden = true;
     $('s3title').textContent = 'Lỗi khi chạy';
     $('s3sub').textContent = '';
     $('doneBar').hidden = false;
@@ -452,6 +662,55 @@ function watch(runId) {
   });
   es.onerror = () => { if (es.readyState === 2) es.close(); };
 }
+
+/**
+ * The note box, opened once a run has a report to attach the note to.
+ *
+ * Prefilled with the previous run's note, because most of what a person writes here is a standing
+ * reminder ("the hero is a video, a blank strip in the screenshot is normal") that is just as true
+ * next week. It is only a suggestion in the box — nothing reaches the report until Save is pressed,
+ * so a note always belongs to whoever approved it.
+ */
+let NOTE_STAMP = '';
+async function openNotes(stamp) {
+  NOTE_STAMP = stamp;
+  $('notes').hidden = false;
+  $('notestate').textContent = '';
+  $('notestate').className = 'hint';
+  try {
+    const mine = await fetch('/api/notes?stamp=' + encodeURIComponent(stamp)).then((r) => r.json());
+    if (mine.notes) {
+      $('notetext').value = mine.notes;
+      return;
+    }
+    const prev = await fetch('/api/notes/previous?before=' + encodeURIComponent(stamp)).then((r) => r.json());
+    if (prev.notes) {
+      $('notetext').value = prev.notes;
+      $('notestate').textContent = 'đang hiện ghi chú của lần chạy ' + prev.from + ' — sửa lại rồi bấm Lưu';
+    }
+  } catch {
+    /* the box still works without a prefill */
+  }
+}
+
+$('savenote').onclick = async () => {
+  const btn = $('savenote'), st = $('notestate');
+  st.className = 'hint';
+  st.textContent = '';
+  busy(btn, true, 'Đang lưu…');
+  try {
+    const r = await post('/api/notes', { stamp: NOTE_STAMP, notes: $('notetext').value });
+    st.className = 'hint ok';
+    st.textContent =
+      (r.chars ? 'Đã lưu ' + r.chars + ' ký tự vào report' : 'Đã xoá ghi chú khỏi report') +
+      (r.reshared ? ' · file chia sẻ đã cập nhật theo.' : ' — mở lại report để xem.');
+  } catch (e) {
+    st.className = 'hint bad';
+    st.innerHTML = esc(e.message).replace(/\n/g, '<br>');
+  } finally {
+    busy(btn, false, 'Lưu vào report');
+  }
+};
 
 /**
  * One file with every picture inside it, for sending to somebody.
@@ -478,6 +737,7 @@ async function makeShare(stamp) {
   }
 }
 
+restoreLast();
 $('site').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('go1').click(); });
 $('figma').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('go1').click(); });
 </script>

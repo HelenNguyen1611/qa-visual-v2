@@ -15,6 +15,7 @@ import { createProvider, aiStopped, resetAiCircuit, preflight, type VisionProvid
 import { compareWithDesign, compareSelf, looksNonVietnamese } from './ai.js';
 import { annotateCrop } from './annotate.js';
 import { locate } from './locate.js';
+import { prepareAuth, authOptions } from './auth.js';
 
 /**
  * The engine, with no opinion about how it is driven.
@@ -61,14 +62,27 @@ export interface Discovery {
 }
 
 /** The page list for a site: its sitemap if it has one, else the links on its homepage. */
-export async function findPages(browser: Browser, siteUrl: string, maxPages: number): Promise<{ urls: string[]; from: string }> {
-  let urls = await fromSitemap(siteUrl, maxPages, browserFetcher(browser));
+export async function findPages(browser: Browser, siteUrl: string, maxPages: number, cfg?: Config): Promise<{ urls: string[]; from: string }> {
+  // The sitemap and the homepage's nav are the first two things a login gate hides, so both have
+  // to be fetched as a logged-in visitor — otherwise a protected site looks like a one-page site.
+  const opts = authOptions(cfg?.authState);
+  let urls = await fromSitemap(siteUrl, maxPages, browserFetcher(browser, opts));
   let from = 'sitemap.xml';
   if (!urls.length) {
-    urls = await fromLinks(browser, siteUrl, maxPages);
+    urls = await fromLinks(browser, siteUrl, maxPages, opts);
     from = 'liên kết trên trang chủ';
   }
   urls = dedupeUrls([siteUrl, ...urls]).slice(0, maxPages);
+
+  if (urls.length <= 1) {
+    log('⚠ chỉ dò được 1 trang. Ba nguyên nhân thường gặp, theo thứ tự:');
+    log('  1. Site cần đăng nhập → sitemap trả 401 và trang chủ tải về là trang login. Dán URL kèm user/mật khẩu:');
+    log('     https://user:matkhau@' + new URL(siteUrl).host + '/   (hoặc QA_HTTP_USER / QA_HTTP_PASS trong .env)');
+    log('  2. Menu dựng bằng JS và chưa kịp hiện — thử lại, hoặc thêm URL bằng tay ở bảng ghép.');
+    log('  3. Site thật chỉ có một trang.');
+  } else if (urls.length >= maxPages) {
+    log(`đã đạt giới hạn ${maxPages} trang — tăng "Số trang tối đa" (hoặc --pages) nếu site còn nhiều trang hơn`);
+  }
   return { urls, from };
 }
 
@@ -83,7 +97,8 @@ export async function discover(cfg: Config): Promise<Discovery> {
   const browser = await launch(cfg);
   try {
     const site = cfg.site ?? cfg.url;
-    const { urls, from } = await findPages(browser, site, cfg.maxPages);
+    cfg.authState = await prepareAuth(browser, site, cfg.auth);
+    const { urls, from } = await findPages(browser, site, cfg.maxPages, cfg);
     log(`${urls.length} trang: ${urls.map((u) => new URL(u).pathname).join(', ')}`);
 
     let frames: FigmaFrame[] = [];
@@ -340,11 +355,20 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
   // actually make (3 when it has a design to compare against, 1 self-check when it does not),
   // plus the closing steps.
   const aiPerPage = (m: Mapped) => (provider ? (m.frame && rendered.get(m.frame.id) ? VIEWPORTS.length : 1) : 0);
-  progressTotal(mapped.length * VIEWPORTS.length + mapped.reduce((n, m) => n + aiPerPage(m), 0) + 2);
+  const plan = {
+    capture: mapped.length * VIEWPORTS.length,
+    ai: mapped.reduce((n, m) => n + aiPerPage(m), 0),
+    wrap: 2,
+  };
+  progressTotal(plan);
+  log(`kế hoạch: ${mapped.length} trang × ${VIEWPORTS.length} kích thước = ${plan.capture} ảnh chụp · ${plan.ai} lượt gọi AI · ${plan.wrap} bước cuối = ${plan.capture + plan.ai + plan.wrap} bước`);
 
   mkdirSync(runDir, { recursive: true });
   const browser = await launch(cfg);
   let report: RunReport;
+
+  // The run may start from a saved pairing, with no discover to have opened the gate.
+  if (!cfg.authState) cfg.authState = await prepareAuth(browser, cfg.site ?? cfg.url, cfg.auth);
 
   try {
     // ---- phase 1: capture everything first. The template can only be identified by comparing pages.
@@ -412,7 +436,7 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
     // ---- sweep the homepage for the width where layout breaks
     progressSay('Quét dải chiều rộng để tìm điểm vỡ layout', 'wrap');
     const sweeps: Array<{ url: string } & SweepResult> = [];
-    const s = await sweep(browser, urls[0]).catch(() => null);
+    const s = await sweep(browser, urls[0], authOptions(cfg.authState)).catch(() => null);
     if (s) sweeps.push({ url: urls[0], ...s });
     progressTick('Xong phần quét chiều rộng', 'wrap');
 
@@ -451,6 +475,7 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
           }
         : undefined,
       drift,
+      authHow: cfg.authState?.how,
     };
   } finally {
     await browser.close().catch(() => {});

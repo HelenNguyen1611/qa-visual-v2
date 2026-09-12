@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createServer } from 'node:http';
-import { readFile, stat } from 'node:fs/promises';
+import { readFile, stat, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, extname, resolve, normalize, sep, basename } from 'node:path';
 import { loadConfig, setLogSink, setProgressSink, log, type Config, type Progress } from './config.js';
@@ -8,6 +8,7 @@ import { discover, runQa, designCache, type DiscoveredFrame } from './core.js';
 import { frameFromLink, type FigmaFrame } from './design.js';
 import { writePagesJson, type PageTarget } from './pages.js';
 import { buildShare } from './share.js';
+import { renderReport, type RunReport } from './report.js';
 
 /**
  * The web front end: one page, a few JSON endpoints, and a log stream.
@@ -49,12 +50,20 @@ function push(run: Run, event: string, data: unknown) {
 }
 
 /** Build a Config the same way the CLI does, so both front ends behave identically. */
-function configFor(siteUrl: string, design: string | undefined, maxPages: number): Config {
+function configFor(siteUrl: string, design: string | undefined, maxPages: number, creds?: { user?: string; pass?: string }): Config {
   const argv = [siteUrl, '--site', siteUrl, '--pages', String(maxPages)];
   // One field in the UI takes either: a figma.com link, or a folder of design PNGs.
   if (design) argv.push(/figma\.com\//.test(design) ? '--figma' : '--design', design);
-  return loadConfig(argv);
+  const cfg = loadConfig(argv);
+  // Typed into the form rather than the URL — the form is the place that does not get remembered.
+  if (creds?.user || creds?.pass) {
+    cfg.auth = { ...(cfg.auth ?? {}), user: creds.user || cfg.auth?.user, pass: creds.pass || cfg.auth?.pass };
+  }
+  return cfg;
 }
+
+/** Credentials the browser typed in, kept only in memory for as long as the server runs. */
+let lastCreds: { user?: string; pass?: string } | undefined;
 
 const json = (res: any, code: number, body: unknown) => {
   const s = JSON.stringify(body);
@@ -109,6 +118,17 @@ const readBody = (req: any) =>
     });
   });
 
+const reportsRoot = () => resolve(lastConfig?.stateDir ?? join(process.cwd(), 'reports'));
+
+/** A run folder, only if the stamp really names one inside the reports root. */
+function runDirFor(stamp: string): string | null {
+  if (!/^[\w:.-]{4,40}$/.test(stamp)) return null;
+  const root = reportsRoot();
+  const dir = resolve(root, stamp);
+  if (dir !== root && !dir.startsWith(root + sep)) return null;
+  return existsSync(join(dir, 'report.json')) ? dir : null;
+}
+
 const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', `http://${HOST}:${PORT}`);
   const path = url.pathname;
@@ -150,11 +170,20 @@ const server = createServer(async (req, res) => {
       const lines: string[] = [];
       setLogSink((l) => lines.push(l));
       try {
-        const cfg = configFor(siteUrl, figmaLink, maxPages);
+        lastCreds = { user: String(body.user ?? '').trim() || undefined, pass: String(body.pass ?? '').trim() || undefined };
+        const cfg = configFor(siteUrl, figmaLink, maxPages, lastCreds);
         lastConfig = cfg;
         const d = await discover(cfg);
         lastFrames = d.frames.map((f) => ({ id: f.id, name: f.name, width: f.width, height: f.height, file: f.file }));
-        return json(res, 200, { ...d, log: lines, hasFigmaToken: Boolean(cfg.figmaToken), aiModel: cfg.ai.provider === 'none' ? null : `${cfg.ai.provider}/${cfg.ai.model}` });
+        return json(res, 200, {
+          ...d,
+          log: lines,
+          hasFigmaToken: Boolean(cfg.figmaToken),
+          aiModel: cfg.ai.provider === 'none' ? null : `${cfg.ai.provider}/${cfg.ai.model}`,
+          // The URL with any credentials removed — this is the one the page should show and remember.
+          siteUrl: cfg.site ?? cfg.url,
+          authHow: cfg.authState?.how ?? null,
+        });
       } catch (e: any) {
         return json(res, 500, { error: String(e?.message ?? e), log: lines });
       } finally {
@@ -282,6 +311,119 @@ const server = createServer(async (req, res) => {
         return json(res, 500, { error: String(e?.message ?? e) });
       } finally {
         busy = false;
+      }
+    }
+
+    /* ------------------- restore a session without re-probing ---------------- */
+    /**
+     * Re-arm the server from a pairing the browser had saved, instead of discovering again.
+     *
+     * A run needs two things the server holds in memory: which site and design this is (Config),
+     * and the frame list a row's name resolves against. Discovering supplies both, which is why
+     * skipping it used to make the run fail with "chưa có lần dò nào". This sets both from what
+     * the page already has — no browser, no Figma call, no wait.
+     */
+    if (req.method === 'POST' && path === '/api/session') {
+      const body = await readBody(req);
+      const siteUrl = String(body.siteUrl ?? '').trim();
+      const figmaLink = String(body.figmaLink ?? '').trim() || undefined;
+      const maxPages = Math.max(1, Math.min(30, Number(body.maxPages ?? 8)));
+      if (!/^https?:\/\//i.test(siteUrl)) return json(res, 400, { error: 'URL trang chủ không hợp lệ' });
+
+      const frames: FigmaFrame[] = (Array.isArray(body.frames) ? body.frames : [])
+        .filter((f: any) => f && typeof f.id === 'string' && typeof f.name === 'string')
+        .map((f: any) => ({
+          id: f.id,
+          name: f.name,
+          width: Number(f.width) || 0,
+          height: Number(f.height) || 0,
+          file: typeof f.file === 'string' ? f.file : undefined,
+        }))
+        .slice(0, 200);
+
+      const creds = { user: String(body.user ?? '').trim() || lastCreds?.user, pass: String(body.pass ?? '').trim() || lastCreds?.pass };
+      lastCreds = creds.user || creds.pass ? creds : lastCreds;
+      const cfg = configFor(siteUrl, figmaLink, maxPages, lastCreds);
+      lastConfig = cfg;
+      lastFrames = frames;
+      log(`dùng lại bảng ghép đã lưu (${frames.length} frame) — bỏ qua bước dò`);
+      return json(res, 200, {
+        ok: true,
+        frames: frames.length,
+        hasFigmaToken: Boolean(cfg.figmaToken),
+        aiModel: cfg.ai.provider === 'none' ? null : `${cfg.ai.provider}/${cfg.ai.model}`,
+      });
+    }
+
+    /* ------------------------ human notes on a report ----------------------- */
+    /**
+     * A person's note is written AFTER reading the report, so the report has to be rebuilt to
+     * carry it. Everything needed is already in report.json — the same object the HTML was
+     * rendered from — so this re-renders rather than patching the HTML, and the note therefore
+     * shows up in the shared single-file export too, with no separate code path.
+     */
+    if (req.method === 'GET' && path === '/api/notes') {
+      const stamp = url.searchParams.get('stamp') ?? '';
+      const dir = runDirFor(stamp);
+      if (!dir) return json(res, 400, { error: 'mã lần chạy không hợp lệ' });
+      try {
+        const r = JSON.parse(await readFile(join(dir, 'report.json'), 'utf8'));
+        return json(res, 200, { notes: r.humanNotes ?? '', at: r.humanNotesAt ?? null });
+      } catch {
+        return json(res, 404, { error: 'không thấy report của lần chạy này' });
+      }
+    }
+
+    /** The previous run's note, offered as a starting point — standing reminders usually still apply. */
+    if (req.method === 'GET' && path === '/api/notes/previous') {
+      const before = url.searchParams.get('before') ?? '';
+      const root = reportsRoot();
+      try {
+        const { readdirSync } = await import('node:fs');
+        const stamps = readdirSync(root)
+          .filter((d) => /^\d{4}-/.test(d) && (!before || d < before) && existsSync(join(root, d, 'report.json')))
+          .sort();
+        for (let i = stamps.length - 1; i >= 0; i--) {
+          const r = JSON.parse(await readFile(join(root, stamps[i], 'report.json'), 'utf8'));
+          if (typeof r.humanNotes === 'string' && r.humanNotes.trim()) return json(res, 200, { notes: r.humanNotes, from: stamps[i] });
+        }
+      } catch {}
+      return json(res, 200, { notes: '', from: null });
+    }
+
+    if (req.method === 'POST' && path === '/api/notes') {
+      const body = await readBody(req);
+      const stamp = String(body.stamp ?? '').trim();
+      const notes = String(body.notes ?? '');
+      if (notes.length > 20000) return json(res, 400, { error: 'ghi chú quá dài (tối đa 20.000 ký tự)' });
+      const dir = runDirFor(stamp);
+      if (!dir) return json(res, 400, { error: 'mã lần chạy không hợp lệ' });
+      try {
+        const report: RunReport = JSON.parse(await readFile(join(dir, 'report.json'), 'utf8'));
+        report.humanNotes = notes;
+        report.humanNotesAt = notes.trim() ? new Date().toISOString() : undefined;
+        await writeFile(join(dir, 'report.json'), JSON.stringify(report, null, 2));
+        await writeFile(join(dir, 'report.html'), renderReport(report));
+        // Also as plain text, so the note is findable with grep and readable without the report.
+        if (notes.trim()) await writeFile(join(dir, 'notes.md'), notes.trim() + '\n');
+
+        // If a share file was already exported, it is now missing this note — and it is the copy
+        // that gets sent to somebody. Rebuild it rather than leaving a stale file with the right
+        // name, which is the kind of thing nobody checks before forwarding.
+        let reshared = false;
+        if (existsSync(join(dir, 'report-share.html'))) {
+          try {
+            await buildShare(dir);
+            reshared = true;
+          } catch (e: any) {
+            log(`⚠ không dựng lại được file chia sẻ: ${e?.message ?? e}`);
+          }
+        }
+
+        log(`ghi chú đã lưu vào ${stamp} (${notes.trim().length} ký tự) — report.html đã dựng lại${reshared ? ', file chia sẻ đã dựng lại' : ''}`);
+        return json(res, 200, { ok: true, chars: notes.trim().length, reshared });
+      } catch (e: any) {
+        return json(res, 500, { error: String(e?.message ?? e) });
       }
     }
 

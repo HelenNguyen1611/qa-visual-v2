@@ -3,6 +3,7 @@ import { loadConfig, USAGE, log } from './config.js';
 import { listFigmaFrames, framesFromFolder, type FigmaFrame } from './design.js';
 import { launch } from './capture.js';
 import { findPages, runQa } from './core.js';
+import { prepareAuth } from './auth.js';
 import { readPagesJson, writePagesJson, type PageTarget } from './pages.js';
 
 /**
@@ -34,7 +35,10 @@ async function main() {
     const browser = await launch(cfg);
     let urls: string[];
     try {
-      urls = cfg.site ? (await findPages(browser, cfg.site, cfg.maxPages)).urls : [cfg.url];
+      // Open the login gate BEFORE looking for pages: the sitemap and the homepage nav are the
+      // first two things it hides, and a blocked probe looks exactly like a one-page site.
+      cfg.authState = await prepareAuth(browser, cfg.site ?? cfg.url, cfg.auth);
+      urls = cfg.site ? (await findPages(browser, cfg.site, cfg.maxPages, cfg)).urls : [cfg.url];
     } finally {
       await browser.close().catch(() => {});
     }

@@ -2,6 +2,7 @@ import { chromium, type Browser, type Page } from 'playwright';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { VIEWPORTS, type Config, type ViewportName, log, progressTick } from './config.js';
+import { authOptions } from './auth.js';
 import { FREEZE_CSS, triggerLazyLoad, collectMedia, collectTextIndex, type MediaRegion, type TextItem } from './browser.js';
 
 export interface Capture {
@@ -46,6 +47,7 @@ async function settle(page: Page, cfg: Config) {
 export async function captureAll(browser: Browser, cfg: Config, outDir: string): Promise<Capture[]> {
   mkdirSync(outDir, { recursive: true });
   const ctx = await browser.newContext({
+    ...authOptions(cfg.authState),
     viewport: { width: VIEWPORTS[2].width, height: VIEWPORTS[2].height },
     deviceScaleFactor: 1,
     ignoreHTTPSErrors: true,
