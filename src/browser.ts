@@ -79,10 +79,33 @@ export function collectMedia(): MediaRegion[] {
     const r = el.getBoundingClientRect();
     return { x: Math.round(r.left + scrollX), y: Math.round(r.top + scrollY), w: Math.round(r.width), h: Math.round(r.height) };
   };
+  // Same reasoning as collectTextIndex: opacity does not inherit, so a faded-out slide's image is
+  // still "visible" to a check that only reads the element's own computed style.
+  const painted = (el: Element): boolean => {
+    const anyEl = el as any;
+    if (typeof anyEl.checkVisibility === 'function') {
+      return anyEl.checkVisibility({
+        opacityProperty: true,
+        visibilityProperty: true,
+        contentVisibilityAuto: true,
+        checkOpacity: true,
+        checkVisibilityCSS: true,
+      });
+    }
+    let cur: Element | null = el;
+    let opacity = 1;
+    for (let d = 0; cur && d < 20; d++) {
+      const cs = getComputedStyle(cur);
+      if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+      opacity *= parseFloat(cs.opacity || '1');
+      if (opacity < 0.05) return false;
+      cur = cur.parentElement;
+    }
+    return true;
+  };
   const visible = (el: Element) => {
-    const cs = getComputedStyle(el);
     const r = el.getBoundingClientRect();
-    return cs.display !== 'none' && cs.visibility !== 'hidden' && r.width > 4 && r.height > 4;
+    return r.width > 4 && r.height > 4 && painted(el);
   };
 
   for (const v of Array.from(document.querySelectorAll('video'))) {
@@ -132,6 +155,96 @@ export function collectMedia(): MediaRegion[] {
   return out;
 }
 
+export interface ReservedRegion {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  kind: string;
+  selector: string;
+}
+
+/**
+ * Space that media is holding open without painting anything yet.
+ *
+ * A hero built for an effect — images that follow the cursor, a gallery that fades in on scroll —
+ * has its pictures in the DOM from the start, sized and positioned, but transparent. The
+ * screenshot of it is blank, and a check looking for empty bands reports a hole in the design.
+ * It is not a hole: the space is spoken for, and the DOM says so.
+ *
+ * Deliberately separate from `collectMedia`, which must keep returning only what is painted —
+ * masking a diff or telling the model "there is a video here" on the strength of an invisible
+ * element would break both.
+ */
+export function collectReservedSpace(max = 200): ReservedRegion[] {
+  const out: ReservedRegion[] = [];
+  const painted = (el: Element): boolean => {
+    const anyEl = el as any;
+    if (typeof anyEl.checkVisibility === 'function') {
+      return anyEl.checkVisibility({
+        opacityProperty: true,
+        visibilityProperty: true,
+        contentVisibilityAuto: true,
+        checkOpacity: true,
+        checkVisibilityCSS: true,
+      });
+    }
+    let cur: Element | null = el;
+    let opacity = 1;
+    for (let d = 0; cur && d < 20; d++) {
+      const cs = getComputedStyle(cur);
+      if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+      opacity *= parseFloat(cs.opacity || '1');
+      if (opacity < 0.05) return false;
+      cur = cur.parentElement;
+    }
+    return true;
+  };
+  const label = (el: Element) => {
+    const id = el.id ? '#' + el.id : '';
+    const cls = Array.from(el.classList).slice(0, 2).join('.');
+    return (el.tagName.toLowerCase() + (cls ? '.' + cls : '') + id).slice(0, 80);
+  };
+
+  for (const el of Array.from(document.querySelectorAll('img,video,iframe,canvas,svg,picture'))) {
+    if (out.length >= max) break;
+    const r = el.getBoundingClientRect();
+    // `display:none` gives a 0×0 rect and genuinely reserves nothing, so it drops out here.
+    if (r.width < 8 || r.height < 8) continue;
+    if (painted(el)) continue; // already reported by collectMedia
+    out.push({
+      x: Math.round(r.left + scrollX),
+      y: Math.round(r.top + scrollY),
+      w: Math.round(r.width),
+      h: Math.round(r.height),
+      kind: el.tagName.toLowerCase(),
+      selector: label(el),
+    });
+  }
+
+  // Effect layers: a positioned box with nothing in it yet. A cursor trail, a canvas mount, a
+  // parallax stage — the markup sizes the area up front and JS fills it on an event that a
+  // screenshot never fires. An empty band there is allocated space, not a hole in the design.
+  // Genuine missing content does not look like this: it collapses to zero height or is absent.
+  for (const el of Array.from(document.querySelectorAll('div,section,span'))) {
+    if (out.length >= max) break;
+    if (el.children.length || (el.textContent || '').trim()) continue;
+    const cs = getComputedStyle(el);
+    if (cs.position !== 'absolute' && cs.position !== 'fixed') continue;
+    const r = el.getBoundingClientRect();
+    if (r.width < 40 || r.height < 40) continue;
+    out.push({
+      x: Math.round(r.left + scrollX),
+      y: Math.round(r.top + scrollY),
+      w: Math.round(r.width),
+      h: Math.round(r.height),
+      kind: 'layer',
+      selector: label(el),
+    });
+  }
+  return out;
+}
+
 export interface TextItem {
   text: string;
   x: number;
@@ -139,6 +252,37 @@ export interface TextItem {
   w: number;
   h: number;
   tag: string;
+  /**
+   * The heading level this text sits under (h1…h6), when it has one.
+   *
+   * `tag` alone cannot answer that: `<h1><span>Title</span></h1>` indexes the span, so a check
+   * keyed on `tag === 'h1'` would never see the heading it is meant to measure.
+   */
+  heading?: string;
+  /**
+   * Marked hidden from assistive tech (`aria-hidden` / `inert`) while still being painted.
+   *
+   * Every carousel library flags its inactive slides this way. The text stays in the index —
+   * it IS on the screenshot, so a finding may still need to be located against it — but a check
+   * that reasons about elements colliding has to ignore it, because stacked slides always collide.
+   */
+  ariaHidden?: boolean;
+  /**
+   * One `[x, y, w, h]` per line, present only when the run wraps across more than one.
+   *
+   * `x/y/w/h` above is the union of those lines, which is the right thing for pointing a reader at
+   * the run but the wrong thing for asking whether two runs collide. Two sentences that simply
+   * follow each other in a wrapped paragraph share a line, so their unions overlap by a wide band
+   * while not a single glyph does. Collision has to be judged line by line.
+   */
+  lines?: [number, number, number, number][];
+  /** computed values, so type and colour can be measured instead of guessed from a screenshot */
+  fontSize?: number;
+  fontWeight?: number;
+  fontStyle?: string;
+  fontFamily?: string;
+  color?: string;
+  lineHeight?: number;
 }
 
 /**
@@ -152,6 +296,81 @@ export interface TextItem {
 export function collectTextIndex(max = 800): TextItem[] {
   const out: TextItem[] = [];
   const seen = new Set<string>();
+  /** `font-weight` comes back numeric in Chrome, but the keywords are still legal CSS. */
+  const weightOf = (v: string): number | undefined => {
+    const n = parseInt(v, 10);
+    if (Number.isFinite(n)) return n;
+    if (v === 'bold') return 700;
+    if (v === 'normal') return 400;
+    return undefined;
+  };
+  const headingOf = (el: Element): string | undefined => {
+    let cur: Element | null = el;
+    for (let d = 0; cur && d < 4; d++) {
+      const t = cur.tagName.toLowerCase();
+      if (/^h[1-6]$/.test(t)) return t;
+      cur = cur.parentElement;
+    }
+    return undefined;
+  };
+  /**
+   * Is this text actually painted on the page?
+   *
+   * Reading the text node's own parent is not enough, and the gap it leaves is not academic:
+   * `opacity` does NOT inherit, so a carousel slide set to `opacity: 0` leaves every computed
+   * style inside it reporting opacity 1. The slides then sit stacked at identical coordinates and
+   * every collision check sees a pile of text on top of text. `checkVisibility` walks the whole
+   * ancestor chain, which is exactly the part that was missing.
+   */
+  const painted = (el: Element): boolean => {
+    const anyEl = el as any;
+    if (typeof anyEl.checkVisibility === 'function') {
+      return anyEl.checkVisibility({
+        // Current spec names, then the names Chrome shipped first — unknown keys are ignored.
+        opacityProperty: true,
+        visibilityProperty: true,
+        contentVisibilityAuto: true,
+        checkOpacity: true,
+        checkVisibilityCSS: true,
+      });
+    }
+    let cur: Element | null = el;
+    let opacity = 1;
+    for (let d = 0; cur && d < 20; d++) {
+      const cs = getComputedStyle(cur);
+      if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+      opacity *= parseFloat(cs.opacity || '1');
+      if (opacity < 0.05) return false;
+      cur = cur.parentElement;
+    }
+    return true;
+  };
+  /**
+   * The rectangle beyond which this element cannot paint, from ancestors that clip.
+   *
+   * `checkVisibility` says nothing about clipping, and the most common way to hide text on the web
+   * does exactly that: the screen-reader-only pattern (`position:absolute; width:1px; height:1px;
+   * overflow:hidden; clip-path:inset(50%)`) leaves the text node's own rects at full size. Clamping
+   * to the clip shrinks them to a sliver, which then falls below the size floor on its own.
+   */
+  const clipBox = (el: Element) => {
+    let l = -Infinity, t = -Infinity, r = Infinity, b = Infinity;
+    let cur: Element | null = el;
+    for (let d = 0; cur && d < 20; d++) {
+      const cs = getComputedStyle(cur);
+      // A fixed element is laid out against the viewport and escapes ancestor overflow.
+      if (d > 0 && cs.position === 'fixed') break;
+      if (cs.overflowX !== 'visible' || cs.overflowY !== 'visible' || cs.clipPath !== 'none') {
+        const box = cur.getBoundingClientRect();
+        l = Math.max(l, box.left);
+        t = Math.max(t, box.top);
+        r = Math.min(r, box.right);
+        b = Math.min(b, box.bottom);
+      }
+      cur = cur.parentElement;
+    }
+    return { l, t, r, b };
+  };
   const walker = document.createTreeWalker(document.body ?? document.documentElement, NodeFilter.SHOW_TEXT);
   let n: Node | null;
   while ((n = walker.nextNode()) && out.length < max) {
@@ -160,7 +379,7 @@ export function collectTextIndex(max = 800): TextItem[] {
     const parent = n.parentElement;
     if (!parent) continue;
     const cs = getComputedStyle(parent);
-    if (cs.display === 'none' || cs.visibility === 'hidden' || parseFloat(cs.opacity || '1') < 0.05) continue;
+    if (!painted(parent)) continue;
     let range: Range;
     try {
       range = document.createRange();
@@ -168,8 +387,29 @@ export function collectTextIndex(max = 800): TextItem[] {
     } catch {
       continue;
     }
-    const rects = Array.from(range.getClientRects()).filter((r) => r.width > 0 && r.height > 0);
+    const clip = clipBox(parent);
+    const rects = Array.from(range.getClientRects())
+      .map((r) => ({
+        left: Math.max(r.left, clip.l),
+        top: Math.max(r.top, clip.t),
+        right: Math.min(r.right, clip.r),
+        bottom: Math.min(r.bottom, clip.b),
+      }))
+      .filter((r) => r.right - r.left > 0 && r.bottom - r.top > 0);
     if (!rects.length) continue;
+    // One rect per line, but a line can arrive in fragments; merge those sharing a baseline band.
+    const lines: { left: number; top: number; right: number; bottom: number }[] = [];
+    for (const r of rects.slice().sort((a, b) => a.top - b.top || a.left - b.left)) {
+      const last = lines[lines.length - 1];
+      if (last && r.top < last.bottom - (last.bottom - last.top) * 0.5) {
+        last.left = Math.min(last.left, r.left);
+        last.right = Math.max(last.right, r.right);
+        last.top = Math.min(last.top, r.top);
+        last.bottom = Math.max(last.bottom, r.bottom);
+      } else {
+        lines.push({ ...r });
+      }
+    }
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const r of rects) {
       minX = Math.min(minX, r.left);
@@ -180,6 +420,7 @@ export function collectTextIndex(max = 800): TextItem[] {
     const key = raw.slice(0, 40) + '@' + Math.round(minY);
     if (seen.has(key)) continue;
     seen.add(key);
+    const lh = parseFloat(cs.lineHeight);
     out.push({
       text: raw.slice(0, 120),
       x: Math.round(minX + scrollX),
@@ -187,6 +428,25 @@ export function collectTextIndex(max = 800): TextItem[] {
       w: Math.round(maxX - minX),
       h: Math.round(maxY - minY),
       tag: parent.tagName.toLowerCase(),
+      heading: headingOf(parent),
+      ariaHidden: parent.closest('[aria-hidden="true"],[inert]') ? true : undefined,
+      lines:
+        lines.length > 1
+          ? lines
+              .slice(0, 24)
+              .map((r) => [
+                Math.round(r.left + scrollX),
+                Math.round(r.top + scrollY),
+                Math.round(r.right - r.left),
+                Math.round(r.bottom - r.top),
+              ] as [number, number, number, number])
+          : undefined,
+      fontSize: parseFloat(cs.fontSize) || undefined,
+      fontWeight: weightOf(cs.fontWeight),
+      fontStyle: cs.fontStyle || undefined,
+      fontFamily: (cs.fontFamily || '').slice(0, 120) || undefined,
+      color: cs.color || undefined,
+      lineHeight: Number.isFinite(lh) ? lh : undefined,
     });
   }
   // Images: findable by file name or alt text.

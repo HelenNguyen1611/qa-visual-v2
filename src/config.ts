@@ -56,6 +56,8 @@ function arg(flags: string[], argv: string[]): string | undefined {
 }
 
 export const USAGE = `qa-visual <url|--site url> [options]
+qa-visual accept <số lỗi> "lý do"    Đánh dấu một lỗi ở lần chạy mới nhất là CỐ Ý.
+                                     Ghi vào accepted.json; lần sau vẫn hiện nhưng không tính.
 
   --site <url>       Quét cả site: danh sách trang lấy từ sitemap.xml
   --pages <n>        Số trang tối đa (mặc định 8)

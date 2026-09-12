@@ -4,11 +4,13 @@ import { readFile, stat, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, extname, resolve, normalize, sep, basename } from 'node:path';
 import { loadConfig, setLogSink, setProgressSink, log, type Config, type Progress } from './config.js';
-import { discover, runQa, designCache, type DiscoveredFrame } from './core.js';
+import { discover, runQa, designCache, openFindings, type DiscoveredFrame } from './core.js';
 import { frameFromLink, type FigmaFrame } from './design.js';
 import { writePagesJson, type PageTarget } from './pages.js';
 import { buildShare } from './share.js';
 import { renderReport, type RunReport } from './report.js';
+import { listPageCoverage, listRunSummaries, reportSite, siteKey } from './site.js';
+import { findingByNum, markFindingAccepted } from './accepted.js';
 
 /**
  * The web front end: one page, a few JSON endpoints, and a log stream.
@@ -151,7 +153,22 @@ const server = createServer(async (req, res) => {
     // The report and everything it links to (screenshots, diffs, crops).
     if (req.method === 'GET' && path.startsWith('/reports/')) {
       const root = resolve(lastConfig?.stateDir ?? join(process.cwd(), 'reports'));
-      return serveFile(res, root, decodeURIComponent(path.slice(9)));
+      const rel = decodeURIComponent(path.slice(9));
+      // Rebuild report.html from report.json so a run from last week still gets today's
+      // editor (false-positive box, notes, …). Share files stay frozen snapshots.
+      const stampMatch = rel.match(/^([^/]+)\/report\.html$/);
+      if (stampMatch) {
+        const dir = runDirFor(stampMatch[1]);
+        if (dir && existsSync(join(dir, 'report.json'))) {
+          try {
+            const report: RunReport = JSON.parse(await readFile(join(dir, 'report.json'), 'utf8'));
+            await writeFile(join(dir, 'report.html'), renderReport(report));
+          } catch (e: any) {
+            log(`⚠ không dựng lại được report.html của ${stampMatch[1]}: ${e?.message ?? e}`);
+          }
+        }
+      }
+      return serveFile(res, root, rel);
     }
 
     /* ------------------------------- discover ------------------------------- */
@@ -159,7 +176,7 @@ const server = createServer(async (req, res) => {
       const body = await readBody(req);
       const siteUrl = String(body.siteUrl ?? '').trim();
       const figmaLink = String(body.figmaLink ?? '').trim() || undefined;
-      const maxPages = Math.max(1, Math.min(30, Number(body.maxPages ?? 8)));
+      const maxPages = Math.max(1, Math.min(80, Number(body.maxPages ?? 8)));
       if (!/^https?:\/\//i.test(siteUrl)) return json(res, 400, { error: 'URL trang chủ phải bắt đầu bằng http:// hoặc https://' });
       if (figmaLink && !/figma\.com\//.test(figmaLink) && !figmaLink.startsWith('/')) {
         return json(res, 400, { error: 'phần design phải là link figma.com/… hoặc đường dẫn tuyệt đối tới folder PNG' });
@@ -215,7 +232,7 @@ const server = createServer(async (req, res) => {
     if (req.method === 'POST' && path === '/api/run') {
       const body = await readBody(req);
       const rows: PageTarget[] = Array.isArray(body.pages) ? body.pages : [];
-      if (!rows.length) return json(res, 400, { error: 'bảng ghép đang trống' });
+      if (!rows.length) return json(res, 400, { error: 'chưa chọn trang nào để chạy' });
       if (!lastConfig) return json(res, 409, { error: 'chưa có lần dò nào — bấm Dò trang trước' });
       if (busy) return json(res, 409, { error: 'đang có một lượt chạy' });
 
@@ -225,10 +242,15 @@ const server = createServer(async (req, res) => {
       runs.set(id, run);
       busy = true;
 
-      // The pairing the human just approved becomes pages.json too, so the terminal agrees with
-      // the browser rather than quietly using an older guess.
+      // The full pairing stays on disk even when this run is a subset, so the next session still
+      // has every URL — not only the ones just checked.
+      const catalog: PageTarget[] = Array.isArray(body.catalog) && body.catalog.length ? body.catalog : rows;
       try {
-        writePagesJson(rows.map((r) => ({ url: r.url, figmaNodeId: r.figmaNodeId, frameName: r.frameName, how: r.how ?? 'ghép trên web' })));
+        writePagesJson(
+          catalog
+            .filter((r) => typeof r?.url === 'string' && r.url.trim())
+            .map((r) => ({ url: r.url, figmaNodeId: r.figmaNodeId, frameName: r.frameName, how: r.how ?? 'ghép trên web' })),
+        );
       } catch {}
 
       setLogSink((l) => {
@@ -246,7 +268,7 @@ const server = createServer(async (req, res) => {
         try {
           const out = await runQa(cfg, rows, lastFrames);
           run.reportUrl = '/reports/' + out.stamp + '/report.html';
-          run.findings = out.report.findings.length;
+          run.findings = openFindings(out.report).length;
           push(run, 'done', { reportUrl: run.reportUrl, findings: run.findings, durationMs: out.report.durationMs });
         } catch (e: any) {
           run.error = String(e?.message ?? e);
@@ -294,6 +316,34 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    /* ----------------------------- past runs -------------------------------- */
+    /**
+     * A flat reports/ folder is timestamp-only, so the UI lists host + time here instead of
+     * making someone open each report.json. Optional ?site= keeps the list on one project.
+     */
+    if (req.method === 'GET' && path === '/api/runs') {
+      const root = reportsRoot();
+      const site = url.searchParams.get('site') ?? '';
+      const offset = Math.max(0, Math.floor(Number(url.searchParams.get('offset') ?? 0) || 0));
+      const limit = Math.min(50, Math.max(1, Math.floor(Number(url.searchParams.get('limit') ?? 12) || 12)));
+      const rows = listRunSummaries(root, { site: site || undefined }).reverse();
+      return json(res, 200, {
+        runs: rows.slice(offset, offset + limit).map((r) => ({
+          ...r,
+          reportUrl: '/reports/' + r.stamp + '/report.html',
+        })),
+        total: rows.length,
+        offset,
+        limit,
+      });
+    }
+
+    if (req.method === 'GET' && path === '/api/coverage') {
+      const site = url.searchParams.get('site') ?? '';
+      if (!siteKey(site)) return json(res, 200, { pages: [] });
+      return json(res, 200, { pages: listPageCoverage(reportsRoot(), site) });
+    }
+
     /* ---------------------------- share one file ---------------------------- */
     if (req.method === 'POST' && path === '/api/share') {
       const body = await readBody(req);
@@ -327,7 +377,7 @@ const server = createServer(async (req, res) => {
       const body = await readBody(req);
       const siteUrl = String(body.siteUrl ?? '').trim();
       const figmaLink = String(body.figmaLink ?? '').trim() || undefined;
-      const maxPages = Math.max(1, Math.min(30, Number(body.maxPages ?? 8)));
+      const maxPages = Math.max(1, Math.min(80, Number(body.maxPages ?? 8)));
       if (!/^https?:\/\//i.test(siteUrl)) return json(res, 400, { error: 'URL trang chủ không hợp lệ' });
 
       const frames: FigmaFrame[] = (Array.isArray(body.frames) ? body.frames : [])
@@ -374,18 +424,32 @@ const server = createServer(async (req, res) => {
       }
     }
 
-    /** The previous run's note, offered as a starting point — standing reminders usually still apply. */
+    /**
+     * The previous run's note, offered as a starting point — standing reminders usually still apply.
+     *
+     * Only the same site: a note about one client's hero video must not land on another client's
+     * report just because that run happened to be the most recent one with a note.
+     */
     if (req.method === 'GET' && path === '/api/notes/previous') {
       const before = url.searchParams.get('before') ?? '';
       const root = reportsRoot();
+      let site = url.searchParams.get('site') ?? '';
+      const fromStamp = runDirFor(before);
+      if (fromStamp) {
+        try {
+          const current = JSON.parse(await readFile(join(fromStamp, 'report.json'), 'utf8'));
+          site = reportSite(current) || site;
+        } catch {}
+      }
+      if (!siteKey(site)) return json(res, 200, { notes: '', from: null });
       try {
-        const { readdirSync } = await import('node:fs');
-        const stamps = readdirSync(root)
-          .filter((d) => /^\d{4}-/.test(d) && (!before || d < before) && existsSync(join(root, d, 'report.json')))
-          .sort();
-        for (let i = stamps.length - 1; i >= 0; i--) {
-          const r = JSON.parse(await readFile(join(root, stamps[i], 'report.json'), 'utf8'));
-          if (typeof r.humanNotes === 'string' && r.humanNotes.trim()) return json(res, 200, { notes: r.humanNotes, from: stamps[i] });
+        const rows = listRunSummaries(root, { before: before || undefined, site });
+        for (let i = rows.length - 1; i >= 0; i--) {
+          if (!rows[i].hasNotes) continue;
+          const r = JSON.parse(await readFile(join(root, rows[i].stamp, 'report.json'), 'utf8'));
+          if (typeof r.humanNotes === 'string' && r.humanNotes.trim()) {
+            return json(res, 200, { notes: r.humanNotes, from: rows[i].stamp });
+          }
         }
       } catch {}
       return json(res, 200, { notes: '', from: null });
@@ -422,6 +486,45 @@ const server = createServer(async (req, res) => {
 
         log(`ghi chú đã lưu vào ${stamp} (${notes.trim().length} ký tự) — report.html đã dựng lại${reshared ? ', file chia sẻ đã dựng lại' : ''}`);
         return json(res, 200, { ok: true, chars: notes.trim().length, reshared });
+      } catch (e: any) {
+        return json(res, 500, { error: String(e?.message ?? e) });
+      }
+    }
+
+    /* -------------- sign off a finding as false positive / intended --------- */
+    if (req.method === 'POST' && path === '/api/findings/accept') {
+      const body = await readBody(req);
+      const stamp = String(body.stamp ?? '').trim();
+      const num = Number(body.num);
+      const accepted = body.accepted !== false;
+      const why = String(body.why ?? '');
+      if (!Number.isInteger(num) || num < 1) return json(res, 400, { error: 'thiếu số lỗi' });
+      if (accepted && !why.trim()) return json(res, 400, { error: 'cần lý do — không lưu im lặng' });
+      if (why.length > 2000) return json(res, 400, { error: 'lý do quá dài (tối đa 2.000 ký tự)' });
+      const dir = runDirFor(stamp);
+      if (!dir) return json(res, 400, { error: 'mã lần chạy không hợp lệ' });
+      try {
+        const report: RunReport = JSON.parse(await readFile(join(dir, 'report.json'), 'utf8'));
+        const f = findingByNum(report, num);
+        if (!f) return json(res, 404, { error: 'không có lỗi số ' + num + ' trong report này' });
+        markFindingAccepted(f, accepted ? why : null);
+        await writeFile(join(dir, 'report.json'), JSON.stringify(report, null, 2));
+        await writeFile(join(dir, 'report.html'), renderReport(report));
+        let reshared = false;
+        if (existsSync(join(dir, 'report-share.html'))) {
+          try {
+            await buildShare(dir);
+            reshared = true;
+          } catch (e: any) {
+            log(`⚠ không dựng lại được file chia sẻ: ${e?.message ?? e}`);
+          }
+        }
+        log(
+          accepted
+            ? `đã duyệt lỗi #${num} “${f.title}” là false positive — report.html đã dựng lại`
+            : `đã bỏ xác nhận lỗi #${num} “${f.title}” — report.html đã dựng lại`,
+        );
+        return json(res, 200, { ok: true, num, accepted, reshared });
       } catch (e: any) {
         return json(res, 500, { error: String(e?.message ?? e) });
       }

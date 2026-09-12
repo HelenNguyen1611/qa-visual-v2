@@ -37,8 +37,15 @@ export interface GroupedFinding {
   /** how many raw findings were folded into this one */
   merged: number;
   num?: number;
+  /** at least one occurrence was proved by measurement, not asserted by a model */
+  measured?: boolean;
+  /** the crop shown came from a measured box, not from matching quoted text */
+  measuredCrop?: boolean;
   /** true when the previous run did not report this defect */
   isNew?: boolean;
+  /** a human looked at this and signed off that it is intended — see accepted.json */
+  accepted?: boolean;
+  acceptedWhy?: string;
 }
 
 /* ------------------------- same defect, or not? ------------------------- */
@@ -122,6 +129,19 @@ function sameDefect(a: AiFinding, b: AiFinding, aa: string[], ba: string[]): boo
   return titleSim(a.title, b.title) >= 0.7;
 }
 
+/**
+ * Do these two describe the same defect?
+ *
+ * Exported so the accept-list decides sameness the same way drift does. An accepted finding has to
+ * survive the model rewording its own title next run, which is exactly the problem `sameDefect`
+ * already solves — an id hashed from the wording would quietly un-accept itself.
+ */
+export function sameGroupedDefect(a: Pick<GroupedFinding, 'title' | 'detail' | 'anchors'>, b: Pick<GroupedFinding, 'title' | 'detail' | 'anchors'>): boolean {
+  const A = { title: a.title, detail: a.detail, anchors: a.anchors } as AiFinding;
+  const B = { title: b.title, detail: b.detail, anchors: b.anchors } as AiFinding;
+  return sameDefect(A, B, normAnchors(A), normAnchors(B));
+}
+
 const SEV_RANK: Record<AiFinding['severity'], number> = { major: 0, minor: 1, note: 2 };
 
 /**
@@ -192,10 +212,14 @@ export function groupFindings(occurrences: Occurrence[], shared: SharedInfo): Gr
     const best = idx
       .map((i) => occurrences[i].finding)
       .sort((a, b) => SEV_RANK[a.severity] - SEV_RANK[b.severity] || a.title.length - b.title.length)[0];
+    // A measured occurrence describes the same defect with the actual numbers in it, so its wording
+    // wins over the model's. The severity does not: the worst one in the group still stands.
+    const proof = idx.map((i) => occurrences[i].finding).find((f) => f.measured);
     const g: GroupedFinding = {
-      title: best.title,
-      detail: idx.map((i) => occurrences[i].finding.detail).sort((a, b) => b.length - a.length)[0] ?? first.detail,
+      title: proof?.title ?? best.title,
+      detail: proof?.detail ?? idx.map((i) => occurrences[i].finding.detail).sort((a, b) => b.length - a.length)[0] ?? first.detail,
       severity: best.severity,
+      measured: Boolean(proof),
       // Keep every anchor the group mentioned: it is what the next run has to match against.
       anchors: Array.from(new Set(idx.flatMap((i) => occurrences[i].finding.anchors ?? []))).slice(0, 6),
       scope: 'page',
@@ -207,9 +231,11 @@ export function groupFindings(occurrences: Occurrence[], shared: SharedInfo): Gr
       const oc = occurrences[i];
       if (!g.pages.includes(oc.url)) g.pages.push(oc.url);
       if (!g.viewports.includes(oc.viewport)) g.viewports.push(oc.viewport);
-      if (!g.crop && oc.finding.crop) {
+      // A measured box beats a box resolved from quoted text, so it may replace one already taken.
+      if (oc.finding.crop && (!g.crop || (oc.finding.measured && !g.measuredCrop))) {
         g.crop = oc.finding.crop;
         g.locatedHow = oc.finding.locatedHow;
+        if (oc.finding.measured) g.measuredCrop = true;
       }
     }
     g.scope = isTemplateFinding(g.anchors, shared) ? 'template' : 'page';

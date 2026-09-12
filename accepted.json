@@ -1,0 +1,19 @@
+{
+  "_": "Những lỗi đã được người xem xác nhận là cố ý. Vẫn hiện trong báo cáo nhưng làm mờ, không tính vào số lỗi. Thêm bằng: qa-visual accept <số lỗi> \"lý do\".",
+  "accepted": [
+    {
+      "id": "0j3je3r",
+      "title": "Khoảng trống lớn ở màn hình đầu",
+      "anchors": [
+        "Services",
+        "Where imagination and intelligence work as one."
+      ],
+      "detail": "Không có chữ hay media nào trong dải y = 41 … 611 (570px, chiếm 56% màn hình đầu cao 1024px). Đo trên DOM: đã tính cả ảnh, video, ảnh nền CSS, và cả media đang ẩn chờ hiệu ứng, là nội dung.",
+      "pages": [
+        "http://new-wooagency:8888/"
+      ],
+      "why": "Khoảng trống hero là chủ ý — chỗ này để ảnh chạy theo chuột (div.woo-hero__trail)",
+      "at": "2026-09-12"
+    }
+  ]
+}

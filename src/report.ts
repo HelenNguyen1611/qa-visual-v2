@@ -1,6 +1,6 @@
 import type { DiffResult } from './compare.js';
 import type { SweepResult } from './sweep.js';
-import type { MediaRegion, TextItem } from './browser.js';
+import type { MediaRegion, TextItem, ReservedRegion } from './browser.js';
 import type { GroupedFinding } from './group.js';
 
 export interface AiFinding {
@@ -15,6 +15,8 @@ export interface AiFinding {
   locatedHow?: string;
   crop?: string;
   num?: number;
+  /** proved by the browser's own measurements rather than reported by a model */
+  measured?: boolean;
 }
 
 export interface DesignRef {
@@ -35,6 +37,8 @@ export interface ViewportReport {
   distortedImages: MediaRegion[];
   failedBackgrounds: Array<MediaRegion & { why: string }>;
   mediaRegions: MediaRegion[];
+  /** kept for the measured checks; stripped before the JSON dump */
+  reserved: ReservedRegion[];
   /** kept for locating findings; stripped before the JSON dump */
   textIndex: TextItem[];
 }
@@ -65,6 +69,8 @@ export interface RunReport {
   sharedTextCount: number;
   aiModel?: string;
   rawFindingCount: number;
+  /** of those raw findings, how many came from measurement rather than from the model */
+  measuredFindingCount?: number;
   /** vision calls attempted and how many never answered — a partial run must not read as a clean one */
   ai?: { calls: number; failures: number; lastError?: string; stopped?: string; wrongLang?: number; silent?: boolean };
   /** the run this one was compared against, and what it reported that this run did not */
@@ -74,6 +80,8 @@ export interface RunReport {
   humanNotesAt?: string;
   /** how the run got past a login gate — the method, never the credentials */
   authHow?: string;
+  /** this batch vs every URL of the same site that has appeared in any run */
+  coverage?: { ran: number; seen: number };
 }
 
 const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
@@ -86,6 +94,55 @@ const path = (u: string) => {
   }
 };
 
+/**
+ * False-positive sign-off only works when this file is served by the local tool (so /api exists).
+ * A downloaded share file hides the editor: there is no server, and the recipient should not
+ * rewrite someone else's judgement.
+ */
+const ACCEPT_SCRIPT = [
+  '<script>',
+  '(function () {',
+  "  var m = location.pathname.match(/\\/reports\\/([^/]+)\\//);",
+  "  var boxes = document.querySelectorAll('.acceptbox');",
+  '  if (!m || /share/i.test(location.pathname)) {',
+  "    boxes.forEach(function (b) { var e = b.querySelector('.acceptedit'); if (e) e.hidden = true; });",
+  '    return;',
+  '  }',
+  '  var stamp = m[1];',
+  "  boxes.forEach(function (box) {",
+  "    box.addEventListener('click', function (ev) {",
+  "      var btn = ev.target.closest && ev.target.closest('[data-act]');",
+  '      if (!btn || !box.contains(btn)) return;',
+  "      var act = btn.getAttribute('data-act');",
+  "      var ta = box.querySelector('textarea.why');",
+  "      var st = box.querySelector('.acceptstate');",
+  "      var why = ta ? ta.value : '';",
+  "      var accepted = act !== 'undo';",
+  "      if (accepted && !why.trim()) {",
+  "        if (st) { st.className = 'acceptstate bad'; st.textContent = 'cần lý do — không lưu im lặng'; }",
+  '        return;',
+  '      }',
+  "      btn.disabled = true;",
+  "      if (st) { st.className = 'acceptstate'; st.textContent = 'Đang lưu…'; }",
+  "      fetch('/api/findings/accept', {",
+  "        method: 'POST',",
+  "        headers: { 'content-type': 'application/json' },",
+  "        body: JSON.stringify({ stamp: stamp, num: Number(box.getAttribute('data-num')), why: why, accepted: accepted })",
+  '      }).then(function (res) { return res.json().then(function (d) { return { ok: res.ok, d: d }; }); })',
+  '        .then(function (x) {',
+  "          if (!x.ok) throw new Error(x.d.error || 'không lưu được');",
+  '          location.reload();',
+  '        })',
+  '        .catch(function (e) {',
+  "          btn.disabled = false;",
+  "          if (st) { st.className = 'acceptstate bad'; st.textContent = e.message || String(e); }",
+  '        });',
+  '    });',
+  '  });',
+  '})();',
+  '</script>',
+].join('\n');
+
 export function renderReport(r: RunReport): string {
   const host = (() => {
     try {
@@ -95,8 +152,12 @@ export function renderReport(r: RunReport): string {
     }
   })();
 
-  const template = r.findings.filter((f) => f.scope === 'template');
-  const perPage = r.findings.filter((f) => f.scope === 'page');
+  // Accepted findings stay in the report but never in a count — a suppression you cannot see is
+  // one nobody re-examines when the page changes underneath it.
+  const open = r.findings.filter((f) => !f.accepted);
+  const accepted = r.findings.filter((f) => f.accepted);
+  const template = open.filter((f) => f.scope === 'template');
+  const perPage = open.filter((f) => f.scope === 'page');
   const changedPages = r.pages.filter((p) => p.viewports.some((v) => v.diff.changed));
   const brokenAssets = new Set(
     r.pages.flatMap((p) => p.viewports.flatMap((v) => [...v.brokenImages, ...v.failedBackgrounds].map((m) => (m.src ?? '').split('?')[0]))),
@@ -105,7 +166,7 @@ export function renderReport(r: RunReport): string {
   const criticalReq = Array.from(new Set(r.pages.flatMap((p) => p.failedRequests))).filter((f) => /\b(script|stylesheet|font|document)\b/.test(f));
   const unmapped = r.pages.filter((p) => !p.mapping.frameName);
   const mispaired = r.pages.filter((p) => p.mispaired);
-  const majors = r.findings.filter((f) => f.severity === 'major').length;
+  const majors = open.filter((f) => f.severity === 'major').length;
   const SEV = { major: 'nặng', minor: 'vừa', note: 'nhẹ' } as Record<string, string>;
   const VP_COLS = ['mobile', 'tablet', 'desktop'] as const;
   const VP_W = { mobile: 390, tablet: 768, desktop: 1440 } as const;
@@ -118,21 +179,21 @@ export function renderReport(r: RunReport): string {
    */
   const verdict = (() => {
     if (r.ai?.failures && r.ai.failures >= r.ai.calls) return { tone: 'bad', line: 'Chưa kiểm được', sub: 'Toàn bộ lời gọi AI thất bại — chưa có kết luận nào về site.' };
-    if (!r.findings.length && r.ai?.silent)
+    if (!open.length && r.ai?.silent)
       return {
         tone: 'warn',
         line: 'Không có kết quả — nghi model quá yếu',
         sub: `${r.ai.calls}/${r.ai.calls} lời gọi AI thành công nhưng model không nêu một lỗi nào. Đây không phải kết luận "site sạch".`,
       };
     // Zero findings right after a run that found several, with no errors, is a red flag not a pass.
-    if (!r.findings.length && (r.drift?.gone.length ?? 0) >= 3)
+    if (!open.length && (r.drift?.gone.length ?? 0) >= 3)
       return {
         tone: 'warn',
         line: 'Không tìm thấy lỗi nào — đáng ngờ',
         sub: `Lần chạy trước báo ${r.drift!.gone.length} lỗi trên cùng site này. Kiểm tra danh sách bên dưới trước khi coi là đã sửa hết.`,
       };
-    if (!r.findings.length) return { tone: 'ok', line: 'Không tìm thấy lỗi nào', sub: `Đã đối chiếu ${r.pages.length} trang ở 3 kích thước màn hình.` };
-    const parts = [`${r.findings.length} lỗi`];
+    if (!open.length) return { tone: 'ok', line: 'Không tìm thấy lỗi nào', sub: `Đã đối chiếu ${r.pages.length} trang ở 3 kích thước màn hình.` };
+    const parts = [`${open.length} lỗi`];
     if (template.length) parts.push(`${template.length} ở component dùng chung`);
     if (majors) parts.push(`${majors} mức nặng`);
     return { tone: majors ? 'bad' : 'warn', line: parts[0], sub: parts.slice(1).join(' · ') || `Trên ${r.pages.length} trang.` };
@@ -140,7 +201,7 @@ export function renderReport(r: RunReport): string {
 
   /** Index of findings — the fast scan, with a column per screen size. Cards below are the detail. */
   const indexTable = () =>
-    !r.findings.length
+    !open.length
       ? ''
       : `<div class="tablewrap">
   <table class="grid">
@@ -149,11 +210,13 @@ export function renderReport(r: RunReport): string {
       ${VP_COLS.map((v) => `<th class="c">${v[0].toUpperCase() + v.slice(1)}<br><span class="tiny">${VP_W[v]}px</span></th>`).join('')}
       <th class="c">Trang</th>
     </tr></thead>
-    <tbody>${r.findings
+    <tbody>${open
       .map(
         (f) => `<tr>
         <td class="c tnum">${f.num}</td>
-        <td><a href="#f${f.num}">${esc(f.title)}</a>${f.isNew === true ? ' <span class="chip new">mới</span>' : ''}</td>
+        <td><a href="#f${f.num}">${esc(f.title)}</a>${f.isNew === true ? ' <span class="chip new">mới</span>' : ''}${
+          f.measured ? ' <span class="chip meas">đo được</span>' : ''
+        }</td>
         <td><span class="chip ${f.severity}">${SEV[f.severity]}</span></td>
         <td>${f.scope === 'template' ? '<span class="chip tpl">dùng chung</span>' : '<span class="tiny">riêng trang</span>'}</td>
         ${VP_COLS.map((v) => `<td class="c ${f.viewports.includes(v) ? 'yes' : 'no'}">${f.viewports.includes(v) ? '●' : '·'}</td>`).join('')}
@@ -162,7 +225,8 @@ export function renderReport(r: RunReport): string {
       )
       .join('')}</tbody>
   </table>
-  <p class="note">● = AI báo lỗi ở kích thước đó. Ô trống nghĩa là <b>không được báo</b> ở kích thước đó — chưa chắc là không có lỗi.</p>
+  <p class="note">● = lỗi được báo ở kích thước đó. Ô trống nghĩa là <b>không được báo</b> ở kích thước đó — chưa chắc là không có lỗi.
+  <b>đo được</b> = tool đo trên DOM (box chồng nhau, cỡ chữ, khoảng trống) nên đúng sai không phụ thuộc model; không có nhãn đó là nhận xét của AI.</p>
 </div>`;
 
   /**
@@ -172,14 +236,30 @@ export function renderReport(r: RunReport): string {
    * prose that used to sit above it made every card look the same until you read it.
    */
   const findingBlock = (f: GroupedFinding) => `
-  <article class="find ${f.severity}" id="f${f.num}">
+  <article class="find ${f.severity}${f.accepted ? ' ok2' : ''}" id="f${f.num}">
     <div class="fbody">
       <div class="fhead">
         <span class="num">${f.num}</span>
         <h3>${esc(f.title)}</h3>
       </div>
+      <div class="acceptbox" data-num="${f.num}">
+        ${
+          f.accepted
+            ? `<p class="accepted"><b>False positive / chủ ý.</b> ${esc(f.acceptedWhy ?? '')}</p>`
+            : `<p class="acceptcmd">Human check: đây là false positive hoặc chủ ý? Ghi lý do rồi lưu — lần sau vẫn hiện nhưng không tính.</p>`
+        }
+        <div class="acceptedit">
+          <textarea class="why" rows="2" placeholder="Lý do, ví dụ: khoảng trống do form nằm cột phải, không phải lỗi.">${f.accepted ? esc(f.acceptedWhy ?? '') : ''}</textarea>
+          <div class="acceptrow">
+            <button type="button" data-act="save">${f.accepted ? 'Cập nhật lý do' : 'Bỏ qua lỗi này'}</button>
+            ${f.accepted ? `<button type="button" data-act="undo">Bỏ xác nhận</button>` : ''}
+            <span class="acceptstate"></span>
+          </div>
+        </div>
+      </div>
       <div class="chips">
         <span class="chip ${f.severity}">${SEV[f.severity]}</span>
+        ${f.measured ? `<span class="chip meas" title="${esc(f.locatedHow ?? '')}">đo được</span>` : `<span class="chip quiet">AI nhận xét</span>`}
         ${f.scope === 'template' ? `<span class="chip tpl">component dùng chung</span>` : ''}
         ${f.viewports.map((v) => `<span class="chip">${v}</span>`).join('')}
         ${f.isNew === true ? `<span class="chip new">mới</span>` : f.isNew === false ? `<span class="chip">vẫn còn từ lần trước</span>` : ''}
@@ -310,6 +390,8 @@ h2:not(:has(+.lead)){margin-bottom:14px}
 .chip.minor{border-color:var(--warn);color:var(--warn)}
 .chip.tpl{border-color:var(--tpl);color:var(--tpl);font-weight:600}
 .chip.new{background:var(--ok-bg);border-color:transparent;color:var(--ok);font-weight:600}
+/* Proved by measurement. Deliberately plain: it is a fact about the finding, not a severity. */
+.chip.meas{border-color:var(--ok);color:var(--ok);font-weight:600}
 /* Written by a person, so it must not look like one more generated panel. */
 .humannote{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--ok);
   border-radius:12px;padding:16px 18px;font-size:14.5px;line-height:1.65;white-space:pre-wrap}
@@ -352,6 +434,19 @@ table.grid td a:hover{color:var(--link);border-bottom-color:var(--link)}
   font-size:11px;padding:3px 8px;border-radius:999px;opacity:0;transition:opacity .15s}
 .shot:hover .zoom{opacity:1}
 .find p.noloc{font-size:12.5px;color:var(--faint);margin:0 0 8px}
+/* Signed off as intended: still legible, but visibly not part of the count. */
+.find.ok2{opacity:.72}
+.find p.accepted{font-size:13px;color:var(--ok);margin:0 0 8px}
+.find p.acceptcmd{font-size:12px;color:var(--faint);margin:0 0 8px}
+.acceptbox{margin:0 0 10px}
+.acceptbox textarea.why{width:100%;box-sizing:border-box;font:13px/1.45 inherit;padding:8px 10px;
+  border:1px solid var(--line);border-radius:8px;resize:vertical;min-height:52px;background:var(--card);color:inherit}
+.acceptbox .acceptrow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}
+.acceptbox button{font:12.5px/1 inherit;font-weight:600;padding:6px 10px;border-radius:7px;cursor:pointer;
+  border:1px solid var(--line);background:var(--card);color:inherit}
+.acceptbox button[data-act=save]{background:var(--ok);border-color:var(--ok);color:#fff}
+.acceptbox .acceptstate{font-size:12px;color:var(--mute)}
+.acceptbox .acceptstate.bad{color:var(--bad)}
 
 /* ---------------------------------- pages -------------------------------- */
 .page{background:var(--card);border:1px solid var(--line);border-radius:12px;margin:0 0 8px}
@@ -409,12 +504,19 @@ footer{max-width:940px;margin:0 auto;padding:22px 20px 50px;border-top:1px solid
   <h1 class="${verdict.tone}">${esc(verdict.line)}</h1>
   <div class="verdict-sub">${esc(verdict.sub)}</div>
   <p class="runmeta">
-    <b>${esc(r.when.slice(0, 16).replace('T', ' '))}</b> · ${r.pages.length} trang · 3 kích thước · ${(r.durationMs / 1000).toFixed(0)}s
+    <b>${esc(r.when.slice(0, 16).replace('T', ' '))}</b> · ${r.pages.length} trang${
+      r.coverage && r.coverage.seen > r.coverage.ran ? ` / ${r.coverage.seen} URL đã QA` : ''
+    } · 3 kích thước · ${(r.durationMs / 1000).toFixed(0)}s
     · ${r.aiModel ? 'AI ' + esc(r.aiModel) : 'AI tắt'}${r.authHow ? ' · ' + esc(r.authHow) : ''}${r.approvedThisRun ? ' · <b>đã chốt làm bản duyệt</b>' : ''}
   </p>
 </header>
 <main>
 
+${
+  r.coverage && r.coverage.seen > r.coverage.ran
+    ? `<div class="alert"><b>Chỉ kiểm ${r.coverage.ran} trang lần này.</b> Site này đã từng QA ${r.coverage.seen} URL qua các lần chạy. Trang không nằm trong đợt này không được soi — đừng đọc là sạch.</div>`
+    : ''
+}
 ${
   r.ai && r.ai.failures
     ? `<div class="fatal"><b>⚠ Báo cáo chưa đầy đủ.</b> ${r.ai.failures}/${r.ai.calls} lời gọi AI thất bại, nên những vùng đó <b>chưa được kiểm</b> — danh sách dưới đây thiếu, không phải site sạch.
@@ -457,12 +559,12 @@ ${
 }
 
 ${
-  r.findings.length
+  open.length
     ? `<section>
   <h2>Danh sách lỗi</h2>
   <p class="lead">Bấm tên lỗi để xem ảnh khoanh vùng.${
-    r.drift ? ` So với lần chạy trước: ${r.findings.filter((f) => f.isNew).length} mới · ${r.findings.filter((f) => f.isNew === false).length} vẫn còn.` : ''
-  }${r.rawFindingCount > r.findings.length ? ` Đã gộp ${r.rawFindingCount} nhận xét thô thành ${r.findings.length} lỗi.` : ''}</p>
+    r.drift ? ` So với lần chạy trước: ${open.filter((f) => f.isNew).length} mới · ${open.filter((f) => f.isNew === false).length} vẫn còn.` : ''
+  }${r.rawFindingCount > open.length ? ` Đã gộp ${r.rawFindingCount} nhận xét thô thành ${open.length} lỗi.` : ''}</p>
   ${indexTable()}
 </section>`
     : ''
@@ -474,6 +576,16 @@ ${
   <h2>Lỗi ở component dùng chung</h2>
   <p class="lead">Header / nav / footer — sửa một lần là hết ở mọi trang. Đây là chỗ đáng sửa trước.</p>
   ${template.map(findingBlock).join('')}
+</section>`
+    : ''
+}
+
+${
+  accepted.length
+    ? `<section>
+  <h2>Đã duyệt là cố ý (${accepted.length})</h2>
+  <p class="lead">Người xem đã xác nhận những chỗ này là false positive hoặc chủ ý, nên không tính vào số lỗi. Sửa lý do hoặc bỏ xác nhận ngay trên thẻ — lần chạy sau cũng không tính lại.</p>
+  ${accepted.map(findingBlock).join('')}
 </section>`
     : ''
 }
@@ -543,6 +655,7 @@ ${
         <tr><td>Nhận xét thô từ AI</td><td>${r.rawFindingCount}</td></tr>
         <tr><td>Chuỗi chữ nhận là component dùng chung</td><td>${r.sharedTextCount}</td></tr>
         ${r.ai ? `<tr><td>Lời gọi AI</td><td>${r.ai.calls - r.ai.failures}/${r.ai.calls} thành công</td></tr>` : ''}
+        ${r.coverage && r.coverage.seen > r.coverage.ran ? `<tr><td>Đợt này / URL đã từng QA</td><td>${r.coverage.ran}/${r.coverage.seen}</td></tr>` : ''}
         ${r.drift ? `<tr><td>Đối chiếu với lần chạy</td><td class="mono">${esc(r.drift.previousRun)}</td></tr>` : ''}
       </tbody>
     </table>
@@ -561,5 +674,6 @@ ${
   Vùng lỗi được khoanh bằng cách tra chữ AI trích dẫn vào DOM, không dùng toạ độ AI đoán.
   Chạy lại với <code>--approve</code> để chốt bản duyệt mới.
 </footer>
+${ACCEPT_SCRIPT}
 </body></html>`;
 }

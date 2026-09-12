@@ -36,8 +36,12 @@ footer{padding:24px;border-top:1px solid #ddd;font-size:10px;color:#666}
 /* Case: empty gap that only appears on mobile */
 .gapblock{margin-bottom:20px}
 @media (max-width:600px){ .gapblock{margin-bottom:400px} }
+/* Case: heading scale inverted — the h2 renders bigger than the h1 above it (real type bug).
+   index.html keeps the correct h1 > h2 > h3 order, so the pair covers both outcomes. */
+h1{font-size:20px}
+.section-title{font-size:34px}
 </style></head><body>
 <a class="skip-link screen-reader-text" href="#main">Skip to content</a><header><strong>Buggy Co</strong><nav><a href="/index.html">Home</a><a href="/about.html">About</a><a href="/services.html">Services</a><a href="/pricing.html">Pricing</a><a href="/contact.html">Contact</a><a href="/blog.html">Blog</a></nav></header>
-<main><h1>About us</h1><p>We build things.</p><div class="hero"><div class="card">A</div><div class="card">B</div><div class="card">C</div></div></main>
+<main><h1>About us</h1><h2 class="section-title">Our story so far</h2><p>We build things.</p><div class="hero"><div class="card">A</div><div class="card">B</div><div class="card">C</div></div></main>
 <footer>© Buggy Co. Tiny footer text that is hard to read on mobile phones because it is only ten pixels tall.</footer>
 </body></html>

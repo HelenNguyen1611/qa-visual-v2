@@ -1,4 +1,4 @@
-import { mkdirSync, copyFileSync, existsSync, writeFileSync, readdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, copyFileSync, existsSync, writeFileSync, readFileSync } from 'node:fs';
 import { join, relative, basename } from 'node:path';
 import type { Browser } from 'playwright';
 import { log, VIEWPORTS, progressTotal, progressTick, progressSay, type Config } from './config.js';
@@ -12,10 +12,13 @@ import { mapUrlsToFrames, looksMispaired, type Mapped } from './mapping.js';
 import { detectShared } from './shared.js';
 import { groupFindings, markDrift, type Occurrence, type GroupedFinding } from './group.js';
 import { createProvider, aiStopped, resetAiCircuit, preflight, type VisionProvider } from './provider.js';
+import { detectAll } from './verify.js';
+import { applyAccepted, readAccepted } from './accepted.js';
 import { compareWithDesign, compareSelf, looksNonVietnamese } from './ai.js';
 import { annotateCrop } from './annotate.js';
 import { locate } from './locate.js';
 import { prepareAuth, authOptions } from './auth.js';
+import { listPageCoverage, listRunStamps, pageKey, reportPageUrls, reportSite, sameSite, siteKey } from './site.js';
 
 /**
  * The engine, with no opinion about how it is driven.
@@ -152,24 +155,46 @@ const shortPath = (u: string) => {
   }
 };
 
+/** Findings that still count. Anything signed off in accepted.json is reported but not counted. */
+export const openFindings = (r: Pick<RunReport, 'findings'>) => r.findings.filter((f) => !f.accepted);
+
 /**
- * The most recent completed run before this one, to compare against.
+ * The most recent completed run of the SAME site that shares at least one URL with this batch.
  *
+ * Folder names are just timestamps, so two clients share one reports/ tree. Matching on site
+ * (host + port) is what stops a Woo Agency run being told that Example.com's bugs "vanished".
+ * A later batch of different pages is skipped too — otherwise every unchecked page looks "fixed".
  * Runs whose AI calls all failed are skipped: comparing against a run that never got an answer
  * would report every real defect as "new", which is the opposite of useful.
  */
-function previousRun(cfg: Config, currentStamp: string): { stamp: string; findings: GroupedFinding[] } | null {
+function previousRun(
+  cfg: Config,
+  currentStamp: string,
+  currentUrls: string[],
+): { stamp: string; findings: GroupedFinding[] } | null {
+  const want = siteKey(cfg.site ?? cfg.url);
+  if (!want) return null;
+  const currentKeys = new Set(currentUrls.map(pageKey).filter(Boolean));
   try {
-    const stamps = readdirSync(cfg.stateDir)
-      .filter((d) => /^\d{4}-/.test(d) && d < currentStamp && existsSync(join(cfg.stateDir, d, 'report.json')))
-      .sort();
+    const stamps = listRunStamps(cfg.stateDir, currentStamp);
     for (let i = stamps.length - 1; i >= 0; i--) {
       const r = JSON.parse(readFileSync(join(cfg.stateDir, stamps[i], 'report.json'), 'utf8'));
+      if (!sameSite(reportSite(r), cfg.site ?? cfg.url)) continue;
       const usable = !r.ai || r.ai.failures < r.ai.calls;
-      if (usable && Array.isArray(r.findings)) return { stamp: stamps[i], findings: r.findings };
+      if (!usable || !Array.isArray(r.findings)) continue;
+      // A disjoint batch is not "last time" — comparing against it marks every skipped page's
+      // bugs as vanished. Skip until a run that actually shares a URL with this one.
+      const prevKeys = reportPageUrls(r).map(pageKey).filter(Boolean);
+      if (currentKeys.size && prevKeys.length && !prevKeys.some((k) => currentKeys.has(k))) continue;
+      return { stamp: stamps[i], findings: r.findings };
     }
   } catch {}
   return null;
+}
+
+function findingTouchesBatch(g: GroupedFinding, batch: Set<string>): boolean {
+  if (!g.pages?.length) return true;
+  return g.pages.some((u) => batch.has(pageKey(u)));
 }
 
 /* ================================== run =================================== */
@@ -212,6 +237,7 @@ async function capturePage(
           return { ...m, why };
         }),
       mediaRegions: cap.media,
+      reserved: cap.reserved,
       textIndex: cap.textIndex,
     });
   }
@@ -231,6 +257,27 @@ async function capturePage(
     caps,
     pageDir,
   };
+}
+
+/**
+ * The measured pass for one URL: defects the browser's own numbers prove.
+ *
+ * Runs on every page whether or not there is a model, a design, or an API key — which is the
+ * point. These findings carry their own box, so they never depend on `locate` matching quoted
+ * text, and they are the part of the report that reads the same on every run.
+ */
+function measurePage(runDir: string, pageDir: string, page: PageReport): Occurrence[] {
+  const out: Occurrence[] = [];
+  for (const v of page.viewports) {
+    const vpH = VIEWPORTS.find((x) => x.name === v.name)?.height ?? 900;
+    for (const m of detectAll(v.textIndex, v.mediaRegions, v.reserved, v.width, vpH)) {
+      const n = out.length + 1;
+      const res = annotateCrop(join(runDir, v.shot), m.box, n, join(pageDir, `${v.name}.m${n}.png`));
+      if (res) m.finding.crop = relative(runDir, res.file);
+      out.push({ url: page.url, viewport: v.name, finding: m.finding });
+    }
+  }
+  return out;
 }
 
 /**
@@ -386,9 +433,15 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
     );
     if (shared.texts.size) log(`vùng dùng chung: ${shared.texts.size} chuỗi chữ có mặt ở ≥60% trang`);
 
+    const allOccurrences: Occurrence[] = [];
+
+    // ---- the measured pass: what the browser's numbers prove, with or without a model
+    for (const r of captured) allOccurrences.push(...measurePage(runDir, r.pageDir, r.page));
+    const measuredCount = allOccurrences.length;
+    if (measuredCount) log(`đo trên DOM: ${measuredCount} nhận xét có bằng chứng số (chồng chữ, phân cấp cỡ chữ, khoảng trống màn hình đầu)`);
+
     // ---- phase 2: the AI pass. The first page reviews the whole thing; later pages are told to
     // skip the shared header/footer, so the same component is not described over and over.
-    const allOccurrences: Occurrence[] = [];
     if (provider) {
       let reviewedTemplate = false;
       await pool(captured, cfg.concurrency, async (r, i) => {
@@ -407,31 +460,43 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
     // 12 calls, 0 failures, 0 findings, on a site the previous run found 8 real defects on. The
     // API said yes to everything and the model said nothing every time — which reads in the
     // report as good news and is the opposite. Successful calls are not the same as a real answer.
-    const silentModel = Boolean(provider) && provider!.calls >= 3 && provider!.failures === 0 && allOccurrences.length === 0;
+    // Measured findings are not evidence the model said anything, so they must not count here —
+    // otherwise one DOM-proved overlap hides the fact that the model answered nothing, all run.
+    const aiFindingCount = allOccurrences.length - measuredCount;
+    const silentModel = Boolean(provider) && provider!.calls >= 3 && provider!.failures === 0 && aiFindingCount === 0;
     if (silentModel) {
       log(`⚠ ${provider!.calls}/${provider!.calls} lời gọi AI THÀNH CÔNG nhưng model không nêu một lỗi nào.`);
       log(`  Rất có thể model "${provider!.model}" quá yếu cho việc so ảnh — không phải site sạch. Đổi QA_AI_MODEL và chạy lại.`);
     }
 
     // ---- did the model answer in the language it was told to?
-    const wrongLang = allOccurrences.filter((o) => looksNonVietnamese(o.finding)).length;
-    if (wrongLang) log(`⚠ ${wrongLang}/${allOccurrences.length} nhận xét KHÔNG phải tiếng Việt — model đang bỏ qua yêu cầu ngôn ngữ. Nội dung vẫn giữ, nhưng nên đổi model.`);
+    const wrongLang = allOccurrences.filter((o) => !o.finding.measured && looksNonVietnamese(o.finding)).length;
+    if (wrongLang) log(`⚠ ${wrongLang}/${aiFindingCount} nhận xét KHÔNG phải tiếng Việt — model đang bỏ qua yêu cầu ngôn ngữ. Nội dung vẫn giữ, nhưng nên đổi model.`);
 
     // ---- one finding per defect
     const grouped = groupFindings(allOccurrences, shared);
 
+    // ---- deviations a human has already ruled intended, greyed out rather than hidden
+    const acceptedCount = applyAccepted(grouped, readAccepted());
+    if (acceptedCount) log(`accepted.json: ${acceptedCount} lỗi đã được duyệt là cố ý — vẫn hiện trong báo cáo nhưng không tính`);
+
     // ---- what changed since last time. A model does not answer identically twice, so a defect can
     // vanish from the list with nothing having changed on the site. Say so instead of hiding it.
-    const prev = previousRun(cfg, stamp);
+    const prev = previousRun(cfg, stamp, urls);
     let drift: RunReport['drift'];
     if (prev) {
-      const { gone } = markDrift(grouped, prev.findings);
+      const batch = new Set(urls.map(pageKey).filter(Boolean));
+      const comparable = prev.findings.filter((g) => findingTouchesBatch(g, batch));
+      const { gone } = markDrift(grouped, comparable);
       drift = { previousRun: prev.stamp, gone: gone.map((g) => ({ title: g.title, severity: g.severity, scope: g.scope })) };
       const fresh = grouped.filter((g) => g.isNew).length;
-      log(`so với lần chạy ${prev.stamp}: ${fresh} lỗi mới, ${grouped.length - fresh} vẫn còn, ${gone.length} lần trước có mà lần này không thấy`);
+      log(`so với lần chạy ${prev.stamp} (trang trùng đợt này): ${fresh} lỗi mới, ${grouped.length - fresh} vẫn còn, ${gone.length} lần trước có mà lần này không thấy`);
     }
     const templateCount = grouped.filter((g) => g.scope === 'template').length;
-    log(`gộp: ${allOccurrences.length} nhận xét thô → ${grouped.length} lỗi (${templateCount} ở component dùng chung)`);
+    const measuredGroups = grouped.filter((g) => g.measured).length;
+    log(
+      `gộp: ${allOccurrences.length} nhận xét thô → ${grouped.length} lỗi (${templateCount} ở component dùng chung, ${measuredGroups} có bằng chứng đo được)`,
+    );
 
     // ---- sweep the homepage for the width where layout breaks
     progressSay('Quét dải chiều rộng để tìm điểm vỡ layout', 'wrap');
@@ -453,6 +518,13 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
       log(firstEver ? 'lần chạy đầu → đã lưu làm bản duyệt' : 'đã chốt lần chạy này làm bản duyệt mới');
     }
 
+    const prior = listPageCoverage(cfg.stateDir, cfg.site ?? cfg.url);
+    const seenKeys = new Set(prior.map((p) => p.key));
+    for (const u of urls) {
+      const k = pageKey(u);
+      if (k) seenKeys.add(k);
+    }
+
     report = {
       site: cfg.site ?? cfg.url,
       when: new Date().toISOString(),
@@ -464,6 +536,7 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
       sharedTextCount: shared.texts.size,
       aiModel: provider ? `${provider.name}/${provider.model}` : undefined,
       rawFindingCount: allOccurrences.length,
+      measuredFindingCount: measuredCount,
       ai: provider
         ? {
             calls: provider.calls,
@@ -476,6 +549,7 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
         : undefined,
       drift,
       authHow: cfg.authState?.how,
+      coverage: { ran: urls.length, seen: seenKeys.size },
     };
   } finally {
     await browser.close().catch(() => {});
@@ -484,7 +558,7 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
   progressSay('Đang dựng report', 'wrap');
   const reportPath = join(runDir, 'report.html');
   writeFileSync(reportPath, renderReport(report));
-  const slim = { ...report, pages: report.pages.map((p) => ({ ...p, viewports: p.viewports.map(({ textIndex, ...rest }) => rest) })) };
+  const slim = { ...report, pages: report.pages.map((p) => ({ ...p, viewports: p.viewports.map(({ textIndex, reserved, ...rest }) => rest) })) };
   writeFileSync(join(runDir, 'report.json'), JSON.stringify(slim, null, 2));
 
   progressTick('Xong', 'wrap');
@@ -495,7 +569,7 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
     else log(`  ${report.ai.lastError ?? ''}`);
   }
   log(
-    `xong trong ${((Date.now() - t0) / 1000).toFixed(0)}s — ${report.pages.length} trang, ${report.findings.length} lỗi (${report.findings.filter((f) => f.scope === 'template').length} dùng chung), ${changed} trang khác bản duyệt`,
+    `xong trong ${((Date.now() - t0) / 1000).toFixed(0)}s — ${report.pages.length} trang, ${openFindings(report).length} lỗi (${openFindings(report).filter((f) => f.scope === 'template').length} dùng chung), ${changed} trang khác bản duyệt`,
   );
   return { runDir, reportPath, stamp, report };
 }

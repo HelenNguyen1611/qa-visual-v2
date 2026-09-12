@@ -3,7 +3,16 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { VIEWPORTS, type Config, type ViewportName, log, progressTick } from './config.js';
 import { authOptions } from './auth.js';
-import { FREEZE_CSS, triggerLazyLoad, collectMedia, collectTextIndex, type MediaRegion, type TextItem } from './browser.js';
+import {
+  FREEZE_CSS,
+  triggerLazyLoad,
+  collectMedia,
+  collectTextIndex,
+  collectReservedSpace,
+  type MediaRegion,
+  type TextItem,
+  type ReservedRegion,
+} from './browser.js';
 
 export interface Capture {
   viewport: ViewportName;
@@ -12,6 +21,8 @@ export interface Capture {
   file: string;
   pageHeight: number;
   media: MediaRegion[];
+  /** boxes media is holding open without painting yet — an empty band there is not a hole */
+  reserved: ReservedRegion[];
   /** every visible text run with its real box — used to locate AI findings precisely */
   textIndex: TextItem[];
   failedRequests: string[];
@@ -72,11 +83,12 @@ export async function captureAll(browser: Browser, cfg: Config, outDir: string):
       await page.setViewportSize({ width: vp.width, height: vp.height });
       await settle(page, cfg);
       const media = await page.evaluate(collectMedia).catch(() => [] as MediaRegion[]);
+      const reserved = await page.evaluate(collectReservedSpace, 200).catch(() => [] as ReservedRegion[]);
       const textIndex = await page.evaluate(collectTextIndex, 800).catch(() => [] as TextItem[]);
       const pageHeight = await page.evaluate(() => document.documentElement.scrollHeight);
       const file = join(outDir, `${vp.name}.png`);
       await page.screenshot({ path: file, fullPage: true, animations: 'disabled', caret: 'hide', timeout: 20000 });
-      out.push({ viewport: vp.name, width: vp.width, file, pageHeight, media, textIndex, failedRequests: dedupe(failed), jsErrors: dedupe(jsErrors), title });
+      out.push({ viewport: vp.name, width: vp.width, file, pageHeight, media, reserved, textIndex, failedRequests: dedupe(failed), jsErrors: dedupe(jsErrors), title });
       const nAv = media.filter((m) => m.kind === 'video' || m.kind === 'iframe' || m.kind === 'canvas').length;
       const nImg = media.filter((m) => m.kind === 'img').length;
       const nBg = media.filter((m) => m.kind === 'background').length;
