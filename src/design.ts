@@ -22,7 +22,7 @@ export interface DesignImage {
 export function parseFigmaLink(link: string): { fileKey: string; nodeId?: string } {
   const u = new URL(link);
   const m = u.pathname.match(/\/(?:design|file|proto|board)\/([A-Za-z0-9]+)/);
-  if (!m) throw new Error(`không đọc được file key từ link Figma: ${link}`);
+  if (!m) throw new Error(`could not read a file key from the Figma link: ${link}`);
   const raw = u.searchParams.get('node-id');
   return { fileKey: m[1], nodeId: raw ? raw.replace(/-/g, ':') : undefined };
 }
@@ -37,7 +37,7 @@ interface FigmaNode {
 
 async function figmaGet(path: string, token: string) {
   const res = await fetch(`https://api.figma.com/v1${path}`, { headers: { 'X-Figma-Token': token } });
-  if (!res.ok) throw new Error(`Figma API ${res.status} tại ${path}: ${(await res.text()).slice(0, 200)}`);
+  if (!res.ok) throw new Error(`Figma API ${res.status} at ${path}: ${(await res.text()).slice(0, 200)}`);
   return res.json() as Promise<any>;
 }
 
@@ -88,7 +88,7 @@ export async function fetchFigmaOverlay(link: string, nodeId: string, token: str
   const { fileKey } = parseFigmaLink(link);
   const j = await figmaGet(`/files/${fileKey}/nodes?ids=${encodeURIComponent(nodeId)}&depth=8`, token);
   const doc: OverlayNode | undefined = j.nodes?.[nodeId]?.document;
-  if (!doc) throw new Error(`không thấy node ${nodeId} trong file ${fileKey}`);
+  if (!doc) throw new Error(`node ${nodeId} not found in file ${fileKey}`);
   return flattenFigmaOverlay(doc);
 }
 
@@ -100,14 +100,14 @@ export async function fetchFigmaOverlay(link: string, nodeId: string, token: str
  * the page designs all share one width (the design's canvas width), and archive sections are named.
  */
 export async function listFigmaFrames(link: string, token: string): Promise<FigmaFrame[]> {
-  if (!token) throw new Error('FIGMA_TOKEN chưa được đặt trong .env');
+  if (!token) throw new Error('FIGMA_TOKEN is not set in .env');
   const { fileKey, nodeId } = parseFigmaLink(link);
 
   let roots: FigmaNode[] = [];
   if (nodeId) {
     const j = await figmaGet(`/files/${fileKey}/nodes?ids=${encodeURIComponent(nodeId)}&depth=2`, token);
     const doc = j.nodes?.[nodeId]?.document;
-    if (!doc) throw new Error(`không thấy node ${nodeId} trong file ${fileKey}`);
+    if (!doc) throw new Error(`node ${nodeId} not found in file ${fileKey}`);
     // A link to one frame → that frame. A link to a page/section → its children.
     roots = doc.type === 'CANVAS' || doc.type === 'SECTION' ? (doc.children ?? []) : [doc];
     // If the link pointed at a single frame, also pull its siblings so other pages can be mapped.
@@ -136,7 +136,7 @@ export async function listFigmaFrames(link: string, token: string): Promise<Figm
   const candidates = roots.filter(
     (n) => (n.type === 'FRAME' || n.type === 'COMPONENT') && (n.absoluteBoundingBox?.width ?? 0) >= 300 && (n.absoluteBoundingBox?.height ?? 0) >= 300,
   );
-  if (!candidates.length) throw new Error('không tìm thấy frame nào ở vị trí Figma đã cho');
+  if (!candidates.length) throw new Error('no frames found at the given Figma location');
 
   // The page designs share one width; component libraries and stray art do not.
   const byWidth = new Map<number, FigmaNode[]>();
@@ -154,7 +154,7 @@ export async function listFigmaFrames(link: string, token: string): Promise<Figm
     }
   }
   const chosen = dominantCount >= 2 ? byWidth.get(dominant)! : candidates;
-  log(`Figma: ${candidates.length} frame ứng viên, chiều rộng trội ${dominant}px → giữ ${chosen.length} frame`);
+  log(`Figma: ${candidates.length} candidate frames, dominant width ${dominant}px → keeping ${chosen.length} frames`);
 
   return chosen.map((c) => ({
     id: c.id,
@@ -172,15 +172,15 @@ export async function listFigmaFrames(link: string, token: string): Promise<Figm
  * link has to work, or the pairing table is capped by what the tool managed to guess.
  */
 export async function frameFromLink(link: string, token: string): Promise<FigmaFrame> {
-  if (!token) throw new Error('FIGMA_TOKEN chưa được đặt trong .env');
+  if (!token) throw new Error('FIGMA_TOKEN is not set in .env');
   const { nodeId } = parseFigmaLink(link);
-  if (!nodeId) throw new Error('link không trỏ vào frame nào — mở frame trong Figma rồi Copy link to selection');
+  if (!nodeId) throw new Error('link does not point at a frame — open the frame in Figma then Copy link to selection');
   const { fileKey } = parseFigmaLink(link);
   const j = await figmaGet(`/files/${fileKey}/nodes?ids=${encodeURIComponent(nodeId)}&depth=1`, token);
   const doc: FigmaNode | undefined = j.nodes?.[nodeId]?.document;
-  if (!doc) throw new Error(`không thấy node ${nodeId} trong file ${fileKey}`);
+  if (!doc) throw new Error(`node ${nodeId} not found in file ${fileKey}`);
   const box = doc.absoluteBoundingBox;
-  if (!box) throw new Error(`node "${doc.name}" không có kích thước — chọn một frame, không phải page hay group rỗng`);
+  if (!box) throw new Error(`node "${doc.name}" has no size — pick a frame, not a page or empty group`);
   return { id: doc.id, name: doc.name, width: Math.round(box.width), height: Math.round(box.height) };
 }
 
@@ -223,7 +223,7 @@ function pngSize(file: string) {
 
 /** PNGs in a folder, matched by pixel width — file names do not matter. */
 export function framesFromFolder(dir: string): FigmaFrame[] {
-  if (!existsSync(dir)) throw new Error(`không thấy thư mục design: ${dir}`);
+  if (!existsSync(dir)) throw new Error(`design folder not found: ${dir}`);
   return readdirSync(dir)
     .filter((f) => extname(f).toLowerCase() === '.png')
     .map((f) => {

@@ -63,7 +63,7 @@ export function locate(anchors: string[] | undefined, index: TextItem[], yHint?:
   if (perAnchor.length === 1) {
     const hits = perAnchor[0].hits;
     const pick = yHint !== undefined ? [...hits].sort((a, b) => Math.abs(a.y - yHint) - Math.abs(b.y - yHint))[0] : hits[0];
-    return { box: { x: pick.x, y: pick.y, w: pick.w, h: pick.h }, how: `khớp chữ "${pick.text.slice(0, 40)}"`, matched: [pick.text.slice(0, 40)] };
+    return { box: { x: pick.x, y: pick.y, w: pick.w, h: pick.h }, how: `text match "${pick.text.slice(0, 40)}"`, matched: [pick.text.slice(0, 40)] };
   }
 
   // Several anchors: choose the combination that sits closest together — the elements of one
@@ -87,7 +87,7 @@ export function locate(anchors: string[] | undefined, index: TextItem[], yHint?:
   const chosen = (best as { items: TextItem[]; score: number }).items;
   return {
     box: union(chosen),
-    how: `khớp ${chosen.length} chuỗi chữ: ${chosen.map((c) => `"${c.text.slice(0, 24)}"`).join(', ')}`,
+    how: `matched ${chosen.length} strings: ${chosen.map((c) => `"${c.text.slice(0, 24)}"`).join(', ')}`,
     matched: chosen.map((c) => c.text.slice(0, 40)),
   };
 }

@@ -109,13 +109,13 @@ export function mapUrlsToFrames(urls: string[], frames: FigmaFrame[]): Mapped[] 
     const isTemplate = c.frame ? TEMPLATE_HINT.test(c.frame.name) : false;
     let how: string;
     if (c.frame) {
-      how = `khớp tên "${c.frame.name}" (điểm ${c.s.toFixed(2)}, kế tiếp ${c.runnerUp.toFixed(2)})${isTemplate ? ' — frame dạng template, dùng chung cho nhiều trang' : ''}`;
+      how = `name match "${c.frame.name}" (score ${c.s.toFixed(2)}, next ${c.runnerUp.toFixed(2)})${isTemplate ? ' — template-style frame, shared across pages' : ''}`;
     } else if (!usable.length) {
-      how = 'chưa có design để so — chỉ chụp và kiểm responsive';
+      how = 'no design to compare — capture and responsive checks only';
     } else if (c.s < MIN_SCORE) {
-      how = `không frame nào đủ giống (cao nhất ${c.s.toFixed(2)} < ${MIN_SCORE}) — bỏ phần so design`;
+      how = `no frame similar enough (best ${c.s.toFixed(2)} < ${MIN_SCORE}) — skip design compare`;
     } else {
-      how = `mơ hồ: hai frame giống nhau xấp xỉ (${c.s.toFixed(2)} vs ${c.runnerUp.toFixed(2)}) — bỏ phần so design để tránh ghép sai`;
+      how = `ambiguous: two frames nearly tied (${c.s.toFixed(2)} vs ${c.runnerUp.toFixed(2)}) — skip design compare to avoid a wrong pair`;
     }
     out.push({
       url,
@@ -138,6 +138,6 @@ export function mapUrlsToFrames(urls: string[], frames: FigmaFrame[]): Mapped[] 
  */
 export function looksMispaired(titles: string[]): boolean {
   if (titles.length < 5) return false;
-  const structural = titles.filter((t) => /thiếu|không có|mất|thứ tự|khác hoàn toàn|sai bố cục|không xuất hiện/i.test(t)).length;
+  const structural = titles.filter((t) => /missing|absent|wrong order|completely different|broken layout|does not appear|thiếu|không có|mất|thứ tự|khác hoàn toàn|sai bố cục|không xuất hiện/i.test(t)).length;
   return structural >= 4 && structural / titles.length >= 0.6;
 }

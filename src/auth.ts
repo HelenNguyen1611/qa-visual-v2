@@ -96,7 +96,7 @@ async function formLogin(browser: Browser, cfg: AuthConfig, siteUrl: string): Pr
 
     const userSel = cfg.userSel || (await firstVisible(page, USER_SELECTORS));
     const passSel = cfg.passSel || (await firstVisible(page, PASS_SELECTORS));
-    if (!passSel) throw new Error(`không thấy ô mật khẩu ở ${loginUrl} — đặt QA_LOGIN_URL / QA_LOGIN_PASS_SEL trong .env`);
+    if (!passSel) throw new Error(`no password field at ${loginUrl} — set QA_LOGIN_URL / QA_LOGIN_PASS_SEL in .env`);
 
     // A "coming soon" gate often has only a password box, so the user field is optional.
     if (userSel && cfg.user) await page.fill(userSel, cfg.user);
@@ -111,14 +111,14 @@ async function formLogin(browser: Browser, cfg: AuthConfig, siteUrl: string): Pr
 
     const state = await ctx.storageState();
     const cookies = state.cookies?.length ?? 0;
-    if (!cookies) throw new Error(`đăng nhập ở ${loginUrl} không tạo được cookie nào — kiểm tra lại user/mật khẩu`);
+    if (!cookies) throw new Error(`login at ${loginUrl} set no cookies — check the user/password`);
 
     // Still on a login form? Then the credentials were rejected, whatever the HTTP status said.
     const stillLogin = await page.locator(PASS_SELECTORS.join(',')).count().catch(() => 0);
-    if (stillLogin) log(`⚠ sau khi submit vẫn thấy ô mật khẩu ở ${page.url()} — có thể user/mật khẩu sai; vẫn thử chạy tiếp`);
+    if (stillLogin) log(`⚠ still seeing a password field at ${page.url()} after submit — credentials may be wrong; continuing anyway`);
 
-    log(`đăng nhập bằng form tại ${loginUrl} — giữ ${cookies} cookie cho cả lượt chạy`);
-    return { storageState: state, how: `đăng nhập form tại ${loginUrl}` };
+    log(`form login at ${loginUrl} — keeping ${cookies} cookies for the run`);
+    return { storageState: state, how: `form login at ${loginUrl}` };
   } finally {
     await ctx.close().catch(() => {});
   }
@@ -162,9 +162,9 @@ export async function prepareAuth(browser: Browser, siteUrl: string, cfg: AuthCo
     // Say precisely what is missing, rather than failing later with a screenshot of a login box.
     if (await needsBasic(browser, siteUrl)) {
       throw new Error(
-        `site này cần HTTP Basic auth (popup user/mật khẩu của trình duyệt) nhưng chưa có thông tin đăng nhập.\n` +
-          `Cách 1: dán URL kèm user/mật khẩu — https://user:matkhau@${new URL(siteUrl).host}/\n` +
-          `Cách 2: đặt trong .env — QA_HTTP_USER=... và QA_HTTP_PASS=...`,
+        `this site needs HTTP Basic auth (the browser user/password popup) but no credentials were given.\n` +
+          `Option 1: paste a URL with user/password — https://user:password@${new URL(siteUrl).host}/\n` +
+          `Option 2: set in .env — QA_HTTP_USER=... and QA_HTTP_PASS=...`,
       );
     }
     return {};
@@ -180,18 +180,18 @@ export async function prepareAuth(browser: Browser, siteUrl: string, cfg: AuthCo
   // Do the credentials actually open it? The same error means "rejected" once we are sending them.
   if (await needsBasic(browser, siteUrl, basic.httpCredentials)) {
     throw new Error(
-      `user/mật khẩu bị site từ chối (HTTP Basic auth ở ${new URL(siteUrl).host}).\n` +
-        `Kiểm tra lại, chú ý khoảng trắng đầu/cuối khi copy. Nếu mật khẩu có ký tự @ : / ? # thì đừng dán vào URL — ` +
-        `nhập vào ô User / Mật khẩu, hoặc đặt QA_HTTP_USER / QA_HTTP_PASS trong .env.`,
+      `user/password rejected by the site (HTTP Basic auth at ${new URL(siteUrl).host}).\n` +
+        `Check for leading/trailing spaces when pasting. If the password contains @ : / ? # do not put it in the URL — ` +
+        `use the User / Password fields, or set QA_HTTP_USER / QA_HTTP_PASS in .env.`,
     );
   }
 
   if (await looksLikeLoginPage(browser, siteUrl, basic)) {
-    log('vẫn thấy ô mật khẩu sau khi thử Basic auth — chuyển sang đăng nhập bằng form');
+    log('still seeing a password field after Basic auth — switching to form login');
     return formLogin(browser, cfg!, siteUrl);
   }
 
-  log('dùng HTTP Basic auth — gửi kèm user/mật khẩu ở mọi request (kể cả ảnh, CSS, font)');
+  log('using HTTP Basic auth — sending user/password on every request (including images, CSS, fonts)');
   return basic;
 }
 

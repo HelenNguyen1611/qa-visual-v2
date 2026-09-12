@@ -1,14 +1,14 @@
 {
-  "_": "Những lỗi đã được người xem xác nhận là cố ý. Vẫn hiện trong báo cáo nhưng làm mờ, không tính vào số lỗi. Thêm bằng: qa-visual accept <số lỗi> \"lý do\".",
+  "_": "Findings a reviewer signed off as intended. They still appear in the report, greyed out, and are not counted. Add with: qa-visual accept <finding#> \"reason\".",
   "accepted": [
     {
       "id": "0j3je3r",
-      "title": "Khoảng trống lớn ở màn hình đầu",
+      "title": "Large empty band on the first screen",
       "anchors": [
         "Services",
         "Where imagination and intelligence work as one."
       ],
-      "detail": "Không có chữ hay media nào trong dải y = 41 … 611 (570px, chiếm 56% màn hình đầu cao 1024px). Đo trên DOM: đã tính cả ảnh, video, ảnh nền CSS, và cả media đang ẩn chờ hiệu ứng, là nội dung.",
+      "detail": "No text or media in y = 41 … 611 (570px, 56% of the 1024px first screen). Measured on the DOM: images, video, CSS backgrounds, and media reserved for effects all count as content.",
       "pages": [
         "https://staging.wootech.com.au/"
       ],
@@ -31,12 +31,12 @@
     },
     {
       "id": "094xqhb",
-      "title": "Khoảng trống lớn ở màn hình đầu",
+      "title": "Large empty band on the first screen",
       "anchors": [
         "Fill the form",
         "Submit"
       ],
-      "detail": "Không có chữ hay media nào trong dải y = 304 … 771 (467px, chiếm 46% màn hình đầu cao 1024px). Đo trên DOM: đã tính cả ảnh, video, ảnh nền CSS, và cả media đang ẩn chờ hiệu ứng, là nội dung.",
+      "detail": "No text or media in y = 304 … 771 (467px, 46% of the 1024px first screen). Measured on the DOM: images, video, CSS backgrounds, and media reserved for effects all count as content.",
       "pages": [
         "https://staging.wootech.com.au/contact/"
       ],
@@ -45,12 +45,12 @@
     },
     {
       "id": "0fawfsi",
-      "title": "Khoảng trống lớn ở màn hình đầu",
+      "title": "Large empty band on the first screen",
       "anchors": [
         "Provide your details and we’ll come back to you as soon as w",
         "Submit"
       ],
-      "detail": "Không có chữ hay media nào trong dải y = 277 … 640 (363px, chiếm 40% màn hình đầu cao 900px). Đo trên DOM: đã tính cả ảnh, video, ảnh nền CSS, và cả media đang ẩn chờ hiệu ứng, là nội dung.",
+      "detail": "No text or media in y = 277 … 640 (363px, 40% of the 900px first screen). Measured on the DOM: images, video, CSS backgrounds, and media reserved for effects all count as content.",
       "pages": [
         "https://staging.wootech.com.au/contact/"
       ],

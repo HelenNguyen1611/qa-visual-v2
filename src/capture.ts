@@ -92,8 +92,8 @@ export async function captureAll(browser: Browser, cfg: Config, outDir: string):
       const nAv = media.filter((m) => m.kind === 'video' || m.kind === 'iframe' || m.kind === 'canvas').length;
       const nImg = media.filter((m) => m.kind === 'img').length;
       const nBg = media.filter((m) => m.kind === 'background').length;
-      log(`captured ${vp.name} ${vp.width}px — trang cao ${pageHeight}px · ${nImg} ảnh, ${nBg} ảnh nền CSS, ${nAv} video/iframe/canvas`);
-      progressTick(`Chụp ${vp.name} · ${shortUrl(cfg.url)}`, 'capture');
+      log(`captured ${vp.name} ${vp.width}px — page ${pageHeight}px tall · ${nImg} images, ${nBg} CSS backgrounds, ${nAv} video/iframe/canvas`);
+      progressTick(`Capture ${vp.name} · ${shortUrl(cfg.url)}`, 'capture');
     }
   } finally {
     await ctx.close().catch(() => {});

@@ -41,14 +41,14 @@ export function readAccepted(cwd = process.cwd()): AcceptedEntry[] {
     const arr = Array.isArray(d) ? d : d.accepted;
     return Array.isArray(arr) ? arr.filter((x: any) => typeof x?.title === 'string' && typeof x?.why === 'string') : [];
   } catch (e: any) {
-    log(`accepted.json không đọc được: ${e?.message ?? e}`);
+    log(`accepted.json could not be read: ${e?.message ?? e}`);
     return [];
   }
 }
 
 export function writeAccepted(entries: AcceptedEntry[], cwd = process.cwd()) {
   const body = {
-    _: 'Những lỗi đã được người xem xác nhận là cố ý. Vẫn hiện trong báo cáo nhưng làm mờ, không tính vào số lỗi. Thêm bằng: qa-visual accept <số lỗi> "lý do".',
+    _: 'Findings a reviewer signed off as intended. They still appear in the report, greyed out, and are not counted. Add with: qa-visual accept <finding#> "reason".',
     accepted: entries,
   };
   writeFileSync(acceptedJsonPath(cwd), JSON.stringify(body, null, 2));

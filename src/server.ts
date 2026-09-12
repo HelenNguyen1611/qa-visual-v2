@@ -99,10 +99,10 @@ const MIME: Record<string, string> = {
  */
 async function serveFile(res: any, root: string, rel: string) {
   const target = resolve(root, normalize(rel).replace(/^(\.\.(\/|\\|$))+/, ''));
-  if (target !== root && !target.startsWith(root + sep)) return json(res, 403, { error: 'ngoài phạm vi' });
+  if (target !== root && !target.startsWith(root + sep)) return json(res, 403, { error: 'out of scope' });
   try {
     const s = await stat(target);
-    if (s.isDirectory()) return json(res, 404, { error: 'không thấy' });
+    if (s.isDirectory()) return json(res, 404, { error: 'not found' });
     const body = await readFile(target);
     const headers: Record<string, string> = {
       'content-type': MIME[extname(target).toLowerCase()] ?? 'application/octet-stream',
@@ -111,7 +111,7 @@ async function serveFile(res: any, root: string, rel: string) {
     res.writeHead(200, headers);
     res.end(body);
   } catch {
-    json(res, 404, { error: 'không thấy: ' + rel });
+    json(res, 404, { error: 'not found: ' + rel });
   }
 }
 
@@ -120,13 +120,13 @@ const readBody = (req: any) =>
     let s = '';
     req.on('data', (c: any) => {
       s += c;
-      if (s.length > 2_000_000) bad(new Error('body quá lớn'));
+      if (s.length > 2_000_000) bad(new Error('body too large'));
     });
     req.on('end', () => {
       try {
         ok(s ? JSON.parse(s) : {});
       } catch (e) {
-        bad(new Error('JSON không hợp lệ'));
+        bad(new Error('invalid JSON'));
       }
     });
   });
@@ -163,7 +163,7 @@ const server = createServer(async (req, res) => {
     /* ------------------------------- pictures ------------------------------- */
     // Rendered Figma frames, for the pairing table's thumbnails.
     if (req.method === 'GET' && path.startsWith('/design/')) {
-      if (!lastConfig) return json(res, 409, { error: 'chưa có lần dò nào' });
+      if (!lastConfig) return json(res, 409, { error: 'no discover yet' });
       const name = decodeURIComponent(path.slice(8));
       // Two possible homes: rendered Figma frames in the cache, or PNGs in the design folder.
       const roots = [resolve(designCache(lastConfig)), lastConfig.designDir ? resolve(lastConfig.designDir) : null].filter(Boolean) as string[];
@@ -184,7 +184,7 @@ const server = createServer(async (req, res) => {
             const report: RunReport = JSON.parse(await readFile(join(dir, 'report.json'), 'utf8'));
             await writeFile(join(dir, 'report.html'), renderReport(report, stampMatch[1]));
           } catch (e: any) {
-            log(`⚠ không dựng lại được report.html của ${stampMatch[1]}: ${e?.message ?? e}`);
+            log(`⚠ could not rebuild report.html for ${stampMatch[1]}: ${e?.message ?? e}`);
           }
         }
       }
@@ -197,11 +197,11 @@ const server = createServer(async (req, res) => {
       const siteUrl = String(body.siteUrl ?? '').trim();
       const figmaLink = String(body.figmaLink ?? '').trim() || undefined;
       const maxPages = Math.max(1, Math.min(80, Number(body.maxPages ?? 8)));
-      if (!/^https?:\/\//i.test(siteUrl)) return json(res, 400, { error: 'URL trang chủ phải bắt đầu bằng http:// hoặc https://' });
+      if (!/^https?:\/\//i.test(siteUrl)) return json(res, 400, { error: 'homepage URL must start with http:// or https://' });
       if (figmaLink && !/figma\.com\//.test(figmaLink) && !figmaLink.startsWith('/')) {
-        return json(res, 400, { error: 'phần design phải là link figma.com/… hoặc đường dẫn tuyệt đối tới folder PNG' });
+        return json(res, 400, { error: 'design must be a figma.com/… link or an absolute path to a PNG folder' });
       }
-      if (busy) return json(res, 409, { error: 'đang có một lượt chạy — đợi nó xong đã' });
+      if (busy) return json(res, 409, { error: 'a run is already in progress — wait for it to finish' });
 
       busy = true;
       const lines: string[] = [];
@@ -233,7 +233,7 @@ const server = createServer(async (req, res) => {
     if (req.method === 'POST' && path === '/api/frame') {
       const body = await readBody(req);
       const link = String(body.link ?? '').trim();
-      if (!lastConfig) return json(res, 409, { error: 'chưa có lần dò nào' });
+      if (!lastConfig) return json(res, 409, { error: 'no discover yet' });
       try {
         const f = await frameFromLink(link, lastConfig.figmaToken);
         // Render it so the row can show a thumbnail like every other row.
@@ -252,9 +252,9 @@ const server = createServer(async (req, res) => {
     if (req.method === 'POST' && path === '/api/run') {
       const body = await readBody(req);
       const rows: PageTarget[] = Array.isArray(body.pages) ? body.pages : [];
-      if (!rows.length) return json(res, 400, { error: 'chưa chọn trang nào để chạy' });
-      if (!lastConfig) return json(res, 409, { error: 'chưa có lần dò nào — bấm Dò trang trước' });
-      if (busy) return json(res, 409, { error: 'đang có một lượt chạy' });
+      if (!rows.length) return json(res, 400, { error: 'no pages selected to run' });
+      if (!lastConfig) return json(res, 409, { error: 'no discover yet — click Discover first' });
+      if (busy) return json(res, 409, { error: 'a run is already in progress' });
 
       const cfg = { ...lastConfig, aiFast: Boolean(body.fast) };
       const id = Date.now().toString(36);
@@ -269,7 +269,7 @@ const server = createServer(async (req, res) => {
         writePagesJson(
           catalog
             .filter((r) => typeof r?.url === 'string' && r.url.trim())
-            .map((r) => ({ url: r.url, figmaNodeId: r.figmaNodeId, frameName: r.frameName, how: r.how ?? 'ghép trên web' })),
+            .map((r) => ({ url: r.url, figmaNodeId: r.figmaNodeId, frameName: r.frameName, how: r.how ?? 'paired on web' })),
         );
       } catch {}
 
@@ -311,7 +311,7 @@ const server = createServer(async (req, res) => {
     /* -------------------------------- stream -------------------------------- */
     if (req.method === 'GET' && path.startsWith('/api/stream/')) {
       const run = runs.get(path.slice('/api/stream/'.length));
-      if (!run) return json(res, 404, { error: 'không thấy lượt chạy này' });
+      if (!run) return json(res, 404, { error: 'run not found' });
       res.writeHead(200, {
         'content-type': 'text/event-stream; charset=utf-8',
         'cache-control': 'no-store',
@@ -368,11 +368,11 @@ const server = createServer(async (req, res) => {
     if (req.method === 'POST' && path === '/api/share') {
       const body = await readBody(req);
       const stamp = String(body.stamp ?? '').trim();
-      if (!/^[\w:.-]{4,40}$/.test(stamp)) return json(res, 400, { error: 'thiếu mã lần chạy' });
+      if (!/^[\w:.-]{4,40}$/.test(stamp)) return json(res, 400, { error: 'missing run id' });
       const root = resolve(lastConfig?.stateDir ?? join(process.cwd(), 'reports'));
       const runDir = resolve(root, stamp);
-      if (runDir !== root && !runDir.startsWith(root + sep)) return json(res, 403, { error: 'ngoài phạm vi' });
-      if (busy) return json(res, 409, { error: 'đang có một lượt chạy — đợi nó xong đã' });
+      if (runDir !== root && !runDir.startsWith(root + sep)) return json(res, 403, { error: 'out of scope' });
+      if (busy) return json(res, 409, { error: 'a run is already in progress — wait for it to finish' });
       busy = true;
       try {
         const r = await buildShare(runDir);
@@ -398,7 +398,7 @@ const server = createServer(async (req, res) => {
       const siteUrl = String(body.siteUrl ?? '').trim();
       const figmaLink = String(body.figmaLink ?? '').trim() || undefined;
       const maxPages = Math.max(1, Math.min(80, Number(body.maxPages ?? 8)));
-      if (!/^https?:\/\//i.test(siteUrl)) return json(res, 400, { error: 'URL trang chủ không hợp lệ' });
+      if (!/^https?:\/\//i.test(siteUrl)) return json(res, 400, { error: 'invalid homepage URL' });
 
       const frames: FigmaFrame[] = (Array.isArray(body.frames) ? body.frames : [])
         .filter((f: any) => f && typeof f.id === 'string' && typeof f.name === 'string')
@@ -416,7 +416,7 @@ const server = createServer(async (req, res) => {
       const cfg = configFor(siteUrl, figmaLink, maxPages, lastCreds);
       lastConfig = cfg;
       lastFrames = frames;
-      log(`dùng lại bảng ghép đã lưu (${frames.length} frame) — bỏ qua bước dò`);
+      log(`reusing saved pairing (${frames.length} frames) — skipping discover`);
       return json(res, 200, {
         ok: true,
         frames: frames.length,
@@ -435,12 +435,12 @@ const server = createServer(async (req, res) => {
     if (req.method === 'GET' && path === '/api/notes') {
       const stamp = url.searchParams.get('stamp') ?? '';
       const dir = runDirFor(stamp);
-      if (!dir) return json(res, 400, { error: 'mã lần chạy không hợp lệ' });
+      if (!dir) return json(res, 400, { error: 'invalid run id' });
       try {
         const r = JSON.parse(await readFile(join(dir, 'report.json'), 'utf8'));
         return json(res, 200, { notes: r.humanNotes ?? '', at: r.humanNotesAt ?? null });
       } catch {
-        return json(res, 404, { error: 'không thấy report của lần chạy này' });
+        return json(res, 404, { error: 'report not found for this run' });
       }
     }
 
@@ -479,9 +479,9 @@ const server = createServer(async (req, res) => {
       const body = await readBody(req);
       const stamp = String(body.stamp ?? '').trim();
       const notes = String(body.notes ?? '');
-      if (notes.length > 20000) return json(res, 400, { error: 'ghi chú quá dài (tối đa 20.000 ký tự)' });
+      if (notes.length > 20000) return json(res, 400, { error: 'note too long (max 20,000 characters)' });
       const dir = runDirFor(stamp);
-      if (!dir) return json(res, 400, { error: 'mã lần chạy không hợp lệ' });
+      if (!dir) return json(res, 400, { error: 'invalid run id' });
       try {
         const report: RunReport = JSON.parse(await readFile(join(dir, 'report.json'), 'utf8'));
         report.humanNotes = notes;
@@ -500,11 +500,11 @@ const server = createServer(async (req, res) => {
             await buildShare(dir);
             reshared = true;
           } catch (e: any) {
-            log(`⚠ không dựng lại được file chia sẻ: ${e?.message ?? e}`);
+            log(`⚠ could not rebuild the share file: ${e?.message ?? e}`);
           }
         }
 
-        log(`ghi chú đã lưu vào ${stamp} (${notes.trim().length} ký tự) — report.html đã dựng lại${reshared ? ', file chia sẻ đã dựng lại' : ''}`);
+        log(`note saved on ${stamp} (${notes.trim().length} chars) — report.html rebuilt${reshared ? ', share file rebuilt' : ''}`);
         return json(res, 200, { ok: true, chars: notes.trim().length, reshared });
       } catch (e: any) {
         return json(res, 500, { error: String(e?.message ?? e) });
@@ -518,15 +518,15 @@ const server = createServer(async (req, res) => {
       const num = Number(body.num);
       const accepted = body.accepted !== false;
       const why = String(body.why ?? '');
-      if (!Number.isInteger(num) || num < 1) return json(res, 400, { error: 'thiếu số lỗi' });
-      if (accepted && !why.trim()) return json(res, 400, { error: 'cần lý do — không lưu im lặng' });
-      if (why.length > 2000) return json(res, 400, { error: 'lý do quá dài (tối đa 2.000 ký tự)' });
+      if (!Number.isInteger(num) || num < 1) return json(res, 400, { error: 'missing finding number' });
+      if (accepted && !why.trim()) return json(res, 400, { error: 'a reason is required — will not save silently' });
+      if (why.length > 2000) return json(res, 400, { error: 'reason too long (max 2,000 characters)' });
       const dir = runDirFor(stamp);
-      if (!dir) return json(res, 400, { error: 'mã lần chạy không hợp lệ' });
+      if (!dir) return json(res, 400, { error: 'invalid run id' });
       try {
         const report: RunReport = JSON.parse(await readFile(join(dir, 'report.json'), 'utf8'));
         const f = findingByNum(report, num);
-        if (!f) return json(res, 404, { error: 'không có lỗi số ' + num + ' trong report này' });
+        if (!f) return json(res, 404, { error: 'no finding #' + num + ' in this report' });
         markFindingAccepted(f, accepted ? why : null);
         await writeFile(join(dir, 'report.json'), JSON.stringify(report, null, 2));
         await writeFile(join(dir, 'report.html'), renderReport(report, stamp));
@@ -536,13 +536,13 @@ const server = createServer(async (req, res) => {
             await buildShare(dir);
             reshared = true;
           } catch (e: any) {
-            log(`⚠ không dựng lại được file chia sẻ: ${e?.message ?? e}`);
+            log(`⚠ could not rebuild the share file: ${e?.message ?? e}`);
           }
         }
         log(
           accepted
-            ? `đã duyệt lỗi #${num} “${f.title}” là false positive — report.html đã dựng lại`
-            : `đã bỏ xác nhận lỗi #${num} “${f.title}” — report.html đã dựng lại`,
+            ? `signed off finding #${num} “${f.title}” as a false positive — report.html rebuilt`
+            : `cleared sign-off on finding #${num} “${f.title}” — report.html rebuilt`,
         );
         return json(res, 200, { ok: true, num, accepted, reshared });
       } catch (e: any) {
@@ -553,7 +553,7 @@ const server = createServer(async (req, res) => {
     /* -------------------------------- status -------------------------------- */
     if (req.method === 'GET' && path === '/api/status') return json(res, 200, { busy, runs: runs.size });
 
-    json(res, 404, { error: 'không có route ' + path });
+    json(res, 404, { error: 'no route ' + path });
   } catch (e: any) {
     json(res, 500, { error: String(e?.message ?? e) });
   }
@@ -568,21 +568,21 @@ const server = createServer(async (req, res) => {
  * place the reason was printed. Logging and staying up keeps the tool usable and the cause visible.
  */
 process.on('uncaughtException', (e: any) => {
-  log(`⚠ lỗi không bắt được (server vẫn chạy): ${e?.stack ?? e?.message ?? e}`);
+  log(`⚠ uncaught exception (server still running): ${e?.stack ?? e?.message ?? e}`);
   busy = false;
 });
 process.on('unhandledRejection', (e: any) => {
-  log(`⚠ promise lỗi không bắt được (server vẫn chạy): ${e?.stack ?? e?.message ?? e}`);
+  log(`⚠ unhandled rejection (server still running): ${e?.stack ?? e?.message ?? e}`);
   busy = false;
 });
 
 server.on('error', (e: any) => {
   if (e?.code === 'EADDRINUSE') {
-    log(`⚠ cổng ${PORT} đang bị chiếm — QA Visual có lẽ đã mở ở một cửa sổ Terminal khác.`);
-    log(`  Mở http://${HOST}:${PORT} là dùng được ngay. Muốn chạy bản mới thì đóng cửa sổ cũ trước,`);
-    log(`  hoặc đổi cổng: QA_PORT=5174 npm start`);
+    log(`⚠ port ${PORT} is already in use — QA Visual is probably open in another Terminal window.`);
+    log(`  Open http://${HOST}:${PORT} to use it. To run a new copy, close the old window first,`);
+    log(`  or change the port: QA_PORT=5174 npm start`);
   } else {
-    log(`⚠ không mở được server: ${e?.message ?? e}`);
+    log(`⚠ could not start the server: ${e?.message ?? e}`);
   }
   process.exit(1);
 });
@@ -590,9 +590,9 @@ server.on('error', (e: any) => {
 server.listen(PORT, HOST, () => {
   const url = `http://${HOST}:${PORT}`;
   console.error('');
-  log(`QA Visual đang chạy tại ${url}`);
-  if (!existsSync(join(UI_DIR, 'index.html'))) log(`⚠ không thấy ${join(UI_DIR, 'index.html')} — chạy npm run build chưa?`);
-  log('Mở link trên trong browser. Ctrl+C để tắt.');
+  log(`QA Visual is running at ${url}`);
+  if (!existsSync(join(UI_DIR, 'index.html'))) log(`⚠ ${join(UI_DIR, 'index.html')} not found — did you run npm run build?`);
+  log('Open that link in a browser. Ctrl+C to stop.');
   console.error('');
 });
 

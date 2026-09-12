@@ -29,14 +29,14 @@ export interface ShareResult {
 
 export async function buildShare(runDir: string, outFile?: string): Promise<ShareResult> {
   const reportFile = join(runDir, 'report.html');
-  if (!existsSync(reportFile)) throw new Error(`không thấy ${reportFile}`);
+  if (!existsSync(reportFile)) throw new Error(`not found: ${reportFile}`);
   let html = readFileSync(reportFile, 'utf8');
 
   // Every relative path the report points at, from both src= and href=.
   const refs = new Set<string>();
   for (const m of html.matchAll(/(?:src|href)="([^"]+\.(?:png|jpe?g|webp|svg))"/gi)) refs.add(m[1]);
   if (!refs.size) {
-    log('report không tham chiếu ảnh nào — không có gì để nhúng');
+    log('report references no images — nothing to embed');
   }
 
   const browser = await chromium.launch({ headless: true, executablePath: process.env.QA_CHROME_PATH || undefined, args: ['--disable-gpu'] });
@@ -86,8 +86,8 @@ export async function buildShare(runDir: string, outFile?: string): Promise<Shar
   writeFileSync(out, html);
   const bytes = statSync(out).size;
   const mb = (n: number) => (n / 1024 / 1024).toFixed(1) + ' MB';
-  log(`file chia sẻ: ${inlined} ảnh, ${mb(rawBytes)} → ${mb(bytes)} · ${out}`);
-  if (skipped.length) log(`⚠ ${skipped.length} ảnh không thấy trên đĩa, bỏ qua: ${skipped.slice(0, 3).join(', ')}`);
+  log(`share file: ${inlined} images, ${mb(rawBytes)} → ${mb(bytes)} · ${out}`);
+  if (skipped.length) log(`⚠ ${skipped.length} images missing on disk, skipped: ${skipped.slice(0, 3).join(', ')}`);
   return { file: out, bytes, images: inlined, skipped };
 }
 
@@ -133,7 +133,7 @@ document.addEventListener('click', function (e) {
   if (!img) return;
   var w = window.open('', '_blank');
   if (!w) return;
-  w.document.title = img.alt || 'ảnh';
+  w.document.title = img.alt || 'image';
   var big = w.document.createElement('img');
   big.src = img.src;
   big.style.maxWidth = '100%';
@@ -148,8 +148,8 @@ function addBanner(html: string, runDir: string): string {
   const when = basename(runDir).replace('T', ' ').replace(/-(\d\d)-(\d\d)$/, ':$1:$2');
   const banner =
     `<div style="background:#eef4ff;border-bottom:1px solid #cfdcf7;padding:10px 20px;font:13px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;color:#26364d">` +
-    `Bản chia sẻ — toàn bộ ảnh đã nhúng trong file này, xem được offline. Ảnh chụp trang và ảnh diff đã nén JPEG; ảnh khoanh vùng lỗi giữ nguyên PNG. ` +
-    `Lần chạy <b>${when}</b>.</div>`;
+    `Share copy — every image is embedded in this file for offline viewing. Page shots and diffs are JPEG; finding crops stay PNG. ` +
+    `Run <b>${when}</b>.</div>`;
   const i = html.indexOf('<body');
   if (i === -1) return banner + html;
   const j = html.indexOf('>', i);
@@ -168,9 +168,9 @@ async function cli() {
     const runs = readdirSync(reportsDir)
       .filter((d) => /^\d{4}-/.test(d) && existsSync(join(reportsDir, d, 'report.html')))
       .sort();
-    if (!runs.length) throw new Error('chưa có lần chạy nào trong reports/');
+    if (!runs.length) throw new Error('no runs in reports/ yet');
     runDir = join(reportsDir, runs[runs.length - 1]);
-    if (arg) log(`không thấy "${arg}" — dùng lần chạy mới nhất`);
+    if (arg) log(`"${arg}" not found — using the latest run`);
   }
   const r = await buildShare(runDir);
   console.log(r.file);

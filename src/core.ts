@@ -14,7 +14,7 @@ import { groupFindings, markDrift, type Occurrence, type GroupedFinding } from '
 import { createProvider, aiStopped, resetAiCircuit, aiMaxInflight, preflight, type VisionProvider } from './provider.js';
 import { detectAll } from './verify.js';
 import { applyAccepted, readAccepted } from './accepted.js';
-import { compareWithDesign, compareSelf, looksNonVietnamese } from './ai.js';
+import { compareWithDesign, compareSelf, looksNonEnglish } from './ai.js';
 import { annotateCrop } from './annotate.js';
 import { locate } from './locate.js';
 import { prepareAuth, authOptions } from './auth.js';
@@ -74,18 +74,18 @@ export async function findPages(browser: Browser, siteUrl: string, maxPages: num
   let from = 'sitemap.xml';
   if (!urls.length) {
     urls = await fromLinks(browser, siteUrl, maxPages, opts);
-    from = 'liên kết trên trang chủ';
+    from = 'homepage links';
   }
   urls = dedupeUrls([siteUrl, ...urls]).slice(0, maxPages);
 
   if (urls.length <= 1) {
-    log('⚠ chỉ dò được 1 trang. Ba nguyên nhân thường gặp, theo thứ tự:');
-    log('  1. Site cần đăng nhập → sitemap trả 401 và trang chủ tải về là trang login. Dán URL kèm user/mật khẩu:');
-    log('     https://user:matkhau@' + new URL(siteUrl).host + '/   (hoặc QA_HTTP_USER / QA_HTTP_PASS trong .env)');
-    log('  2. Menu dựng bằng JS và chưa kịp hiện — thử lại, hoặc thêm URL bằng tay ở bảng ghép.');
-    log('  3. Site thật chỉ có một trang.');
+    log('⚠ only found 1 page. Three common causes, in order:');
+    log('  1. The site needs a login → sitemap returns 401 and the homepage is a login page. Paste a URL with user/password:');
+    log('     https://user:password@' + new URL(siteUrl).host + '/   (or QA_HTTP_USER / QA_HTTP_PASS in .env)');
+    log('  2. The menu is built in JS and was not ready — retry, or add URLs by hand in the pairing table.');
+    log('  3. The site really is one page.');
   } else if (urls.length >= maxPages) {
-    log(`đã đạt giới hạn ${maxPages} trang — tăng "Số trang tối đa" (hoặc --pages) nếu site còn nhiều trang hơn`);
+    log(`hit the ${maxPages}-page limit — raise "Max pages" (or --pages) if the site has more`);
   }
   return { urls, from };
 }
@@ -103,7 +103,7 @@ export async function discover(cfg: Config): Promise<Discovery> {
     const site = cfg.site ?? cfg.url;
     cfg.authState = await prepareAuth(browser, site, cfg.auth);
     const { urls, from } = await findPages(browser, site, cfg.maxPages, cfg);
-    log(`${urls.length} trang: ${urls.map((u) => new URL(u).pathname).join(', ')}`);
+    log(`${urls.length} pages: ${urls.map((u) => new URL(u).pathname).join(', ')}`);
 
     let frames: FigmaFrame[] = [];
     try {
@@ -322,7 +322,7 @@ async function analysePage(
         } catch (e: any) {
           aiError = String(e?.message ?? e).slice(0, 200);
         }
-        progressTick(`AI so design · ${v.name} · ${shortPath(page.url)}`, 'ai');
+        progressTick(`AI vs design · ${v.name} · ${shortPath(page.url)}`, 'ai');
       }),
     );
     mispaired = looksMispaired(titles);
@@ -349,7 +349,7 @@ async function analysePage(
     } catch {
       /* self-compare is a bonus; never fail the page for it */
     }
-    progressTick(`AI so desktop↔mobile · ${shortPath(page.url)}`, 'ai');
+    progressTick(`AI desktop↔mobile · ${shortPath(page.url)}`, 'ai');
   }
   return { occurrences, aiError, mispaired };
 }
@@ -388,7 +388,7 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
       score: 1,
       runnerUp: 0,
       isTemplate: false,
-      how: p.how ?? (frame ? `ghép tay: "${frame.name}"` : 'không ghép design → chỉ kiểm responsive'),
+      how: p.how ?? (frame ? `hand-paired: "${frame.name}"` : 'no design pair → responsive checks only'),
     } as Mapped;
   });
   const urls = mapped.map((m) => m.url);
@@ -400,7 +400,7 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
   resetAiCircuit(Boolean(cfg.aiFast));
   // Check the key and the model choice before spending a run discovering they cannot work.
   if (provider) await preflight(cfg, (l) => log(l));
-  if (provider && cfg.aiFast) log(`chế độ nhanh: tối đa ${aiMaxInflight()} lời gọi AI cùng lúc (cùng số lần gọi, không thêm token nếu không retry)`);
+  if (provider && cfg.aiFast) log(`fast mode: up to ${aiMaxInflight()} AI calls at once (same number of calls, no extra tokens unless a retry)`);
 
   // Size the bar before starting: 3 screenshots per page, then the model calls that page will
   // actually make (3 when it has a design to compare against, 1 self-check when it does not),
@@ -412,7 +412,7 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
     wrap: 2,
   };
   progressTotal(plan);
-  log(`kế hoạch: ${mapped.length} trang × ${VIEWPORTS.length} kích thước = ${plan.capture} ảnh chụp · ${plan.ai} lượt gọi AI · ${plan.wrap} bước cuối = ${plan.capture + plan.ai + plan.wrap} bước`);
+  log(`plan: ${mapped.length} pages × ${VIEWPORTS.length} viewports = ${plan.capture} shots · ${plan.ai} AI calls · ${plan.wrap} wrap-up steps = ${plan.capture + plan.ai + plan.wrap} steps`);
 
   mkdirSync(runDir, { recursive: true });
   const browser = await launch(cfg);
@@ -435,7 +435,7 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
         pageHeight: r.page.viewports.find((v) => v.name === 'mobile')?.pageHeight ?? 0,
       })),
     );
-    if (shared.texts.size) log(`vùng dùng chung: ${shared.texts.size} chuỗi chữ có mặt ở ≥60% trang`);
+    if (shared.texts.size) log(`shared chrome: ${shared.texts.size} strings present on ≥60% of pages`);
 
     const overlays = new Map<string, FigmaOverlay>();
     if (cfg.figma && cfg.figmaToken) {
@@ -444,7 +444,7 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
         try {
           const tree = await fetchFigmaOverlay(cfg.figma, id, cfg.figmaToken);
           overlays.set(id, tree);
-          log(`Figma overlay: ${id} — ${tree.surfaces.length} bề mặt ảnh, ${tree.texts.length} chữ`);
+          log(`Figma overlay: ${id} — ${tree.surfaces.length} image surfaces, ${tree.texts.length} texts`);
         } catch (e: any) {
           log(`Figma overlay: ${e?.message ?? e}`);
         }
@@ -460,7 +460,7 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
       allOccurrences.push(...measurePage(runDir, r.pageDir, r.page, id ? overlays.get(id) : undefined));
     }
     const measuredCount = allOccurrences.length;
-    if (measuredCount) log(`đo trên DOM: ${measuredCount} nhận xét có bằng chứng số (chồng chữ, phân cấp cỡ chữ, khoảng trống màn hình đầu, tỷ lệ ảnh cùng hàng, lề banner)`);
+    if (measuredCount) log(`measured on DOM: ${measuredCount} findings with numeric proof (overlapping text, type hierarchy, first-screen gap, peer image aspect, banner inset)`);
 
     // ---- phase 2: the AI pass. The first page reviews the whole thing; later pages are told to
     // skip the shared header/footer, so the same component is not described over and over.
@@ -487,20 +487,20 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
     const aiFindingCount = allOccurrences.length - measuredCount;
     const silentModel = Boolean(provider) && provider!.calls >= 3 && provider!.failures === 0 && aiFindingCount === 0;
     if (silentModel) {
-      log(`⚠ ${provider!.calls}/${provider!.calls} lời gọi AI THÀNH CÔNG nhưng model không nêu một lỗi nào.`);
-      log(`  Rất có thể model "${provider!.model}" quá yếu cho việc so ảnh — không phải site sạch. Đổi QA_AI_MODEL và chạy lại.`);
+      log(`⚠ ${provider!.calls}/${provider!.calls} AI calls SUCCEEDED but the model reported no findings.`);
+      log(`  Model "${provider!.model}" is likely too weak for image compare — not a clean site. Change QA_AI_MODEL and re-run.`);
     }
 
     // ---- did the model answer in the language it was told to?
-    const wrongLang = allOccurrences.filter((o) => !o.finding.measured && looksNonVietnamese(o.finding)).length;
-    if (wrongLang) log(`⚠ ${wrongLang}/${aiFindingCount} nhận xét KHÔNG phải tiếng Việt — model đang bỏ qua yêu cầu ngôn ngữ. Nội dung vẫn giữ, nhưng nên đổi model.`);
+    const wrongLang = allOccurrences.filter((o) => !o.finding.measured && looksNonEnglish(o.finding)).length;
+    if (wrongLang) log(`⚠ ${wrongLang}/${aiFindingCount} comments are NOT in English — the model ignored the language rule. Findings are kept; consider switching models.`);
 
     // ---- one finding per defect
     const grouped = groupFindings(allOccurrences, shared);
 
     // ---- deviations a human has already ruled intended, greyed out rather than hidden
     const acceptedCount = applyAccepted(grouped, readAccepted());
-    if (acceptedCount) log(`accepted.json: ${acceptedCount} lỗi đã được duyệt là cố ý — vẫn hiện trong báo cáo nhưng không tính`);
+    if (acceptedCount) log(`accepted.json: ${acceptedCount} findings signed off as intentional — still shown, not counted`);
 
     // ---- what changed since last time. A model does not answer identically twice, so a defect can
     // vanish from the list with nothing having changed on the site. Say so instead of hiding it.
@@ -512,20 +512,20 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
       const { gone } = markDrift(grouped, comparable);
       drift = { previousRun: prev.stamp, gone: gone.map((g) => ({ title: g.title, severity: g.severity, scope: g.scope })) };
       const fresh = grouped.filter((g) => g.isNew).length;
-      log(`so với lần chạy ${prev.stamp} (trang trùng đợt này): ${fresh} lỗi mới, ${grouped.length - fresh} vẫn còn, ${gone.length} lần trước có mà lần này không thấy`);
+      log(`vs run ${prev.stamp} (overlapping pages): ${fresh} new, ${grouped.length - fresh} still open, ${gone.length} gone since last time`);
     }
     const templateCount = grouped.filter((g) => g.scope === 'template').length;
     const measuredGroups = grouped.filter((g) => g.measured).length;
     log(
-      `gộp: ${allOccurrences.length} nhận xét thô → ${grouped.length} lỗi (${templateCount} ở component dùng chung, ${measuredGroups} có bằng chứng đo được)`,
+      `grouped: ${allOccurrences.length} raw notes → ${grouped.length} findings (${templateCount} on shared components, ${measuredGroups} with measured proof)`,
     );
 
     // ---- sweep the homepage for the width where layout breaks
-    progressSay('Quét dải chiều rộng để tìm điểm vỡ layout', 'wrap');
+    progressSay('Sweeping widths for the layout break point', 'wrap');
     const sweeps: Array<{ url: string } & SweepResult> = [];
     const s = await sweep(browser, urls[0], authOptions(cfg.authState)).catch(() => null);
     if (s) sweeps.push({ url: urls[0], ...s });
-    progressTick('Xong phần quét chiều rộng', 'wrap');
+    progressTick('Width sweep done', 'wrap');
 
     // ---- approve
     const firstEver = !existsSync(join(approvedRoot, slugOf(urls[0]), 'meta.json'));
@@ -537,7 +537,7 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
         for (const cap of r.caps) copyFileSync(cap.file, join(dir, `${cap.viewport}.png`));
         writeFileSync(join(dir, 'meta.json'), JSON.stringify({ url: r.page.url, at: clock.when, run: stamp }, null, 2));
       }
-      log(firstEver ? 'lần chạy đầu → đã lưu làm bản duyệt' : 'đã chốt lần chạy này làm bản duyệt mới');
+      log(firstEver ? 'first run → saved as the review baseline' : 'this run is now the review baseline');
     }
 
     const prior = listPageCoverage(cfg.stateDir, cfg.site ?? cfg.url);
@@ -577,21 +577,21 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
     await browser.close().catch(() => {});
   }
 
-  progressSay('Đang dựng report', 'wrap');
+  progressSay('Building report', 'wrap');
   const reportPath = join(runDir, 'report.html');
   writeFileSync(reportPath, renderReport(report, stamp));
   const slim = { ...report, pages: report.pages.map((p) => ({ ...p, viewports: p.viewports.map(({ textIndex, reserved, ...rest }) => rest) })) };
   writeFileSync(join(runDir, 'report.json'), JSON.stringify(slim, null, 2));
 
-  progressTick('Xong', 'wrap');
+  progressTick('Done', 'wrap');
   const changed = report.pages.filter((p) => p.viewports.some((v) => v.diff.changed)).length;
   if (report.ai?.failures) {
-    log(`⚠ ${report.ai.failures}/${report.ai.calls} lời gọi AI THẤT BẠI — báo cáo thiếu, không phải site sạch.`);
+    log(`⚠ ${report.ai.failures}/${report.ai.calls} AI calls FAILED — the report is incomplete, not a clean site.`);
     if (report.ai.stopped) log(`  ${report.ai.stopped}`);
     else log(`  ${report.ai.lastError ?? ''}`);
   }
   log(
-    `xong trong ${((Date.now() - t0) / 1000).toFixed(0)}s — ${report.pages.length} trang, ${openFindings(report).length} lỗi (${openFindings(report).filter((f) => f.scope === 'template').length} dùng chung), ${changed} trang khác bản duyệt`,
+    `done in ${((Date.now() - t0) / 1000).toFixed(0)}s — ${report.pages.length} pages, ${openFindings(report).length} findings (${openFindings(report).filter((f) => f.scope === 'template').length} shared), ${changed} pages differ from baseline`,
   );
   return { runDir, reportPath, stamp, report };
 }

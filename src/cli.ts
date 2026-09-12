@@ -27,7 +27,7 @@ function acceptCommand(argv: string[]): number {
   const num = Number(rest[1]);
   const why = rest.slice(2).join(' ').trim();
   if (!Number.isInteger(num) || num < 1 || !why) {
-    console.error('Dùng: qa-visual accept <số lỗi> "lý do vì sao đây là chủ ý" [--run <timestamp>]');
+    console.error('Usage: qa-visual accept <finding#> "why this is intended" [--run <timestamp>]');
     return 1;
   }
   const dir = resolve(process.cwd(), 'reports');
@@ -35,28 +35,28 @@ function acceptCommand(argv: string[]): number {
     ? readdirSync(dir).filter((d) => /^\d{4}-/.test(d) && existsSync(join(dir, d, 'report.json'))).sort()
     : [];
   if (!stamps.length) {
-    console.error('Chưa có lần chạy nào trong reports/ để duyệt.');
+    console.error('No runs in reports/ to sign off.');
     return 1;
   }
   const stamp = want ?? stamps[stamps.length - 1];
   if (!stamps.includes(stamp)) {
-    console.error(`Không có lần chạy ${stamp}. Có: ${stamps.slice(-5).join(', ')}`);
+    console.error(`No run ${stamp}. Have: ${stamps.slice(-5).join(', ')}`);
     return 1;
   }
   const report = JSON.parse(readFileSync(join(dir, stamp, 'report.json'), 'utf8'));
   // Which run this reads from is not a detail: the newest run may well be a different site, and
   // accepting there writes a rule that silences nothing you meant and something you did not.
-  console.log(`Đọc lần chạy ${stamp} — site ${report.site}`);
+  console.log(`Reading run ${stamp} — site ${report.site}`);
   const f = findingByNum(report, num);
   if (!f) {
-    console.error(`Lần chạy ${stamp} không có lỗi số ${num}.`);
+    console.error(`Run ${stamp} has no finding #${num}.`);
     return 1;
   }
   markFindingAccepted(f, why);
   const runDir = join(dir, stamp);
   writeFileSync(join(runDir, 'report.json'), JSON.stringify(report, null, 2));
   writeFileSync(join(runDir, 'report.html'), renderReport(report, stamp));
-  console.log(`Đã duyệt “${f.title}” là cố ý — ghi vào report ${stamp} và accepted.json. Lần chạy sau sẽ không tính lỗi này nữa.`);
+  console.log(`Signed off “${f.title}” as intended — written to report ${stamp} and accepted.json. Later runs will not count it.`);
   return 0;
 }
 
@@ -80,7 +80,7 @@ async function main() {
   let rows = readPagesJson();
   if (rows?.length) {
     rows = rows.slice(0, cfg.maxPages);
-    log(`pages.json: ${rows.length} trang (đã có sẵn, không đoán lại)`);
+    log(`pages.json: ${rows.length} pages (already on file, not re-guessed)`);
   } else {
     // No pairing on file: work out the page list, pair it, and write it down for next time.
     const browser = await launch(cfg);
@@ -93,16 +93,16 @@ async function main() {
     } finally {
       await browser.close().catch(() => {});
     }
-    log(`${urls.length} trang: ${urls.map((u) => new URL(u).pathname).join(', ')}`);
+    log(`${urls.length} pages: ${urls.map((u) => new URL(u).pathname).join(', ')}`);
     const { mapUrlsToFrames } = await import('./mapping.js');
     const mapped = mapUrlsToFrames(urls, frames);
     rows = mapped.map((m) => ({ url: m.url, figmaNodeId: m.figmaNodeId, frameName: m.frameName, how: m.how }) as PageTarget);
     if (frames.length) {
       writePagesJson(rows);
-      log('đã ghi pages.json — mở ra sửa dòng nào ghép sai, lần sau tool dùng nguyên file này');
+      log('wrote pages.json — edit any wrong pair; later runs keep this file');
     }
   }
-  for (const r of rows) log(`  ${new URL(r.url).pathname} → ${r.frameName ?? '(không có design)'} · ${r.how ?? ''}`);
+  for (const r of rows) log(`  ${new URL(r.url).pathname} → ${r.frameName ?? '(no design)'} · ${r.how ?? ''}`);
 
   const out = await runQa(cfg, rows, frames);
   console.log(out.reportPath);

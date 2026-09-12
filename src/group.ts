@@ -93,13 +93,13 @@ function anchorsOverlap(a: string[], b: string[]): boolean {
  * fusing two different bugs that happen to sit near the same text.
  */
 const KINDS: Array<[string, RegExp]> = [
-  ['overlap', /đè|chồng|overlap|che (mất|khuất)|dính chồng/i],
-  ['missing', /thiếu|mất|không (có|thấy|hiển thị)|missing|chưa (có|hiển thị)/i],
-  ['spacing', /khoảng (cách|trống)|cách quá|sát|dính|padding|margin|spacing|trống lớn|kéo dài/i],
+  ['overlap', /đè|chồng|overlap|intersect|che (mất|khuất)|dính chồng/i],
+  ['missing', /thiếu|mất|không (có|thấy|hiển thị)|missing|absent|does not appear|not shown|chưa (có|hiển thị)/i],
+  ['spacing', /khoảng (cách|trống)|empty band|empty space|cách quá|sát|dính|padding|margin|spacing|inset|gutter|trống lớn|kéo dài/i],
   ['layout', /bố cục|cột|xếp dọc|tràn|lệch|dạt|căn (lề|giữa)|vỡ|layout|overflow|bị ép/i],
-  ['type', /font|chữ (to|nhỏ|đậm|nhạt)|cỡ chữ|line-height|ngắt dòng|bẻ dòng|co quá hẹp|bóp/i],
+  ['type', /font|type hierarchy|chữ (to|nhỏ|đậm|nhạt)|cỡ chữ|line-height|ngắt dòng|bẻ dòng|co quá hẹp|bóp|smaller than/i],
   ['color', /màu|đậm|nhạt|contrast|viền|border|nền/i],
-  ['image', /ảnh|hình|image|logo|icon/i],
+  ['image', /ảnh|hình|image|logo|icon|aspect|thumbnail/i],
 ];
 
 function kindOf(f: AiFinding): string {

@@ -21,17 +21,17 @@ async function main() {
     (m: any) => m.id?.endsWith(':free') && (m.architecture?.input_modalities ?? []).includes('image'),
   );
   if (!vision.length) {
-    console.log('Không thấy model ":free" nào nhận ảnh vào lúc này. Danh sách của OpenRouter thay đổi liên tục — kiểm tra lại ở openrouter.ai/models?q=free.');
+    console.log('No ":free" model currently accepts images. OpenRouter’s list changes often — check openrouter.ai/models?q=free.');
     return;
   }
-  console.log(`${vision.length} model ":free" có nhận ảnh (dùng được cho tool này):\n`);
+  console.log(`${vision.length} ":free" models that accept images (usable with this tool):\n`);
   const w = Math.max(...vision.map((m: any) => m.id.length));
   for (const m of vision.sort((a: any, b: any) => a.id.localeCompare(b.id))) {
     const ctx = m.context_length ? `${Math.round(m.context_length / 1000)}k ctx` : '';
     console.log(`  ${m.id.padEnd(w)}  ${ctx}`);
   }
-  console.log(`\nĐặt vào .env:  QA_AI_MODEL=<id ở trên>`);
-  console.log('Lưu ý: hạn mức free là 20 request/phút và 50 request/ngày; số dư âm thì OpenRouter chặn cả model :free.');
+  console.log(`\nSet in .env:  QA_AI_MODEL=<id from above>`);
+  console.log('Note: the free quota is 20 requests/minute and 50/day; a negative balance blocks :free models too.');
 }
 
 main().catch((e) => {

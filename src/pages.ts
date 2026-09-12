@@ -82,7 +82,7 @@ export async function fromLinks(
     await ctx.close().catch(() => {});
   }
   const keep = normalise(hrefs, base, limit);
-  log(keep.length ? `liên kết trên trang chủ → ${keep.length} trang` : 'không thấy liên kết nội bộ nào trên trang chủ');
+  log(keep.length ? `homepage links → ${keep.length} pages` : 'no internal links found on the homepage');
   return keep;
 }
 
@@ -152,7 +152,7 @@ export async function fromSitemap(siteUrl: string, limit: number, fetcher: Fetch
     xml = null;
   }
   if (!xml) {
-    log('sitemap: không tìm thấy — chuyển sang dò liên kết trên trang chủ');
+    log('sitemap: not found — falling back to homepage links');
     return [];
   }
 
@@ -167,7 +167,7 @@ export async function fromSitemap(siteUrl: string, limit: number, fetcher: Fetch
       if (sub) urls.push(...locs(sub));
       if (urls.length > limit * 4) break;
     }
-    log(`sitemap: ${used} (index, ${children.length} sitemap con) → ${urls.length} URL`);
+    log(`sitemap: ${used} (index, ${children.length} child sitemaps) → ${urls.length} URLs`);
   } else {
     urls = locs(xml);
     log(`sitemap: ${used} → ${urls.length} URL`);
@@ -200,14 +200,14 @@ export function readPagesJson(cwd = process.cwd()): PageTarget[] | null {
     if (!Array.isArray(arr)) return null;
     return arr.filter((x: any) => typeof x?.url === 'string');
   } catch (e: any) {
-    log(`pages.json không đọc được: ${e?.message ?? e}`);
+    log(`pages.json could not be read: ${e?.message ?? e}`);
     return null;
   }
 }
 
 export function writePagesJson(targets: PageTarget[], cwd = process.cwd()) {
   const body = {
-    _: 'Ghép URL với frame Figma. Tool sinh file này lần đầu; sửa dòng nào sai rồi lần sau tool dùng nguyên file này, không đoán lại. Bỏ figmaNodeId nếu muốn trang đó không so với design.',
+    _: 'Pairs each URL with a Figma frame. The tool writes this file the first time; edit a wrong row and later runs keep your edit. Drop figmaNodeId to skip design compare for that page.',
     pages: targets,
   };
   writeFileSync(pagesJsonPath(cwd), JSON.stringify(body, null, 2));

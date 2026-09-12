@@ -91,12 +91,12 @@ function explain402(msg: string, model: string): string {
   if (!isInFlightWall(msg) && !/insufficient credits|negative credit/i.test(msg)) return msg;
   const free = model.endsWith(':free');
   return (
-    `hết credit OpenRouter. ` +
+    `OpenRouter is out of credit. ` +
     (free
-      ? `Model "${model}" là bản :free nhưng số dư đang âm hoặc bằng 0 — OpenRouter chặn cả model free khi số dư âm.`
-      : `Model "${model}" là model TRẢ PHÍ, nên hạn mức free 50 lượt/ngày KHÔNG áp dụng (hạn mức đó chỉ dành cho model id kết thúc bằng ":free"). ` +
-        `OpenRouter giữ trước chi phí tối đa của mỗi request vào số dư, nên với số dư 0 thì một request cũng bị chặn — giảm số request song song không giải quyết được.`) +
-    ` Cách xử lý: nạp credit, hoặc đổi sang model ":free" (xem "npm run models").`
+      ? `Model "${model}" is a :free variant but the balance is zero or negative — OpenRouter blocks free models too when the balance is negative.`
+      : `Model "${model}" is PAID, so the free 50 calls/day do not apply (that quota is only for model ids ending in ":free"). ` +
+        `OpenRouter reserves the maximum cost of each request against the balance, so a $0 balance blocks even one request — lowering concurrency will not help.`) +
+    ` Fix: add credit, or switch to a ":free" model (see "npm run models").`
   );
 }
 
@@ -117,7 +117,7 @@ export async function preflight(cfg: Config, logLine: (s: string) => void): Prom
 
   // 2. Is the model on the free allowance at all?
   if (!model.endsWith(':free')) {
-    logLine(`model "${model}" là model trả phí — hạn mức free 50 lượt/ngày không áp dụng cho nó. Cần có credit, hoặc đổi sang model ":free".`);
+    logLine(`model "${model}" is paid — the free 50 calls/day do not apply. You need credit, or switch to a ":free" model.`);
   }
 
   // 3. What is left on the key. Undocumented endpoint, so best-effort.
@@ -128,11 +128,11 @@ export async function preflight(cfg: Config, logLine: (s: string) => void): Prom
     const k = d?.data ?? d;
     if (!k || typeof k !== 'object') return;
     const bits: string[] = [];
-    if (typeof k.usage === 'number') bits.push(`đã dùng $${k.usage.toFixed(4)}`);
-    if (k.limit === null) bits.push('hạn mức: không giới hạn');
-    else if (typeof k.limit === 'number') bits.push(`hạn mức $${k.limit}`);
-    if (typeof k.limit_remaining === 'number') bits.push(`còn $${k.limit_remaining.toFixed(4)}`);
-    if (k.is_free_tier === true) bits.push('tài khoản free tier');
+    if (typeof k.usage === 'number') bits.push(`used $${k.usage.toFixed(4)}`);
+    if (k.limit === null) bits.push('limit: none');
+    else if (typeof k.limit === 'number') bits.push(`limit $${k.limit}`);
+    if (typeof k.limit_remaining === 'number') bits.push(`remaining $${k.limit_remaining.toFixed(4)}`);
+    if (k.is_free_tier === true) bits.push('free-tier account');
     if (bits.length) logLine(`key OpenRouter: ${bits.join(' · ')}`);
   } catch {
     /* undocumented endpoint; never let it break a run */
@@ -157,7 +157,7 @@ async function requireVision(model: string, apiKey: string, baseUrl: string, log
     list = (await res.json())?.data ?? [];
     if (!Array.isArray(list) || !list.length) throw new Error('empty');
   } catch {
-    logLine('không kiểm được model có nhận ảnh hay không (không gọi được danh sách model) — cứ chạy tiếp.');
+    logLine('could not check whether the model accepts images (model list unreachable) — continuing.');
     return;
   }
 
@@ -165,7 +165,7 @@ async function requireVision(model: string, apiKey: string, baseUrl: string, log
   const mine = list.find((m: any) => m.id === model);
 
   if (!mine) {
-    logLine(`⚠ không thấy model "${model}" trong danh sách OpenRouter — kiểm tra lại id trong .env.`);
+    logLine(`⚠ model "${model}" not found in the OpenRouter list — check the id in .env.`);
     return;
   }
   if (takesImage(mine)) return;
@@ -175,10 +175,10 @@ async function requireVision(model: string, apiKey: string, baseUrl: string, log
     .map((m: any) => m.id)
     .sort();
   throw new Error(
-    `model "${model}" KHÔNG nhận ảnh vào — tool này chỉ làm một việc là xem ảnh chụp cạnh design, nên model chỉ đọc chữ thì không kiểm được gì.\n` +
+    `model "${model}" does NOT accept images — this tool only compares screenshots to a design, so a text-only model cannot check anything.\n` +
       (options.length
-        ? `Model ":free" có nhận ảnh hiện có (${options.length}):\n` + options.map((id: string) => `  ${id}`).join('\n') + `\n\nSửa QA_AI_MODEL trong .env rồi chạy lại. Danh sách đầy đủ: npm run models`
-        : `Hiện không có model ":free" nào nhận ảnh — cần nạp credit và dùng model trả phí có vision. Xem: npm run models`),
+        ? `Free models that accept images (${options.length}):\n` + options.map((id: string) => `  ${id}`).join('\n') + `\n\nSet QA_AI_MODEL in .env and re-run. Full list: npm run models`
+        : `No ":free" model currently accepts images — add credit and use a paid vision model. See: npm run models`),
   );
 }
 
@@ -246,7 +246,7 @@ class OpenAICompatible implements VisionProvider {
       this.failures++;
       this.lastError ??= explain402(String(e?.message ?? e), this.model).slice(0, 400);
       if (++consecutiveFailures >= GIVE_UP_AFTER && !stopped) {
-        stopped = `đã dừng gọi AI sau ${GIVE_UP_AFTER} lỗi liên tiếp — không tiêu thêm quota vào các lời gọi chắc chắn thất bại. ${this.lastError}`;
+        stopped = `stopped calling AI after ${GIVE_UP_AFTER} consecutive failures — not spending more quota on calls that will fail. ${this.lastError}`;
       }
       throw e;
     }
@@ -304,7 +304,7 @@ class Anthropic implements VisionProvider {
       this.failures++;
       this.lastError ??= String(e?.message ?? e).slice(0, 300);
       if (++consecutiveFailures >= GIVE_UP_AFTER && !stopped) {
-        stopped = `đã dừng gọi AI sau ${GIVE_UP_AFTER} lỗi liên tiếp — không tiêu thêm quota vào các lời gọi chắc chắn thất bại. Lỗi: ${this.lastError}`;
+        stopped = `stopped calling AI after ${GIVE_UP_AFTER} consecutive failures — not spending more quota on calls that will fail. Error: ${this.lastError}`;
       }
       throw e;
     }

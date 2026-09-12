@@ -61,27 +61,27 @@ function arg(flags: string[], argv: string[]): string | undefined {
 }
 
 export const USAGE = `qa-visual <url|--site url> [options]
-qa-visual accept <số lỗi> "lý do"    Đánh dấu một lỗi ở lần chạy mới nhất là CỐ Ý.
-                                     Ghi vào accepted.json; lần sau vẫn hiện nhưng không tính.
+qa-visual accept <finding#> "reason"  Sign off a finding on the latest run as INTENDED.
+                                      Writes accepted.json; later runs still show it, but do not count it.
 
-  --site <url>       Quét cả site: danh sách trang lấy từ sitemap.xml
-  --pages <n>        Số trang tối đa (mặc định 8)
-  --concurrency <n>  Số trang chạy song song (mặc định 2)
-  --fast             AI tối đa 3 lời gọi cùng lúc (cùng số lần gọi, chạy nhanh hơn)
-  --figma <link>     Link file / page / frame Figma. Frame được ghép với URL theo tên;
-                     kết quả ghép ghi ra pages.json để bạn sửa.
+  --site <url>       Scan the whole site: page list from sitemap.xml
+  --pages <n>        Max pages (default 8)
+  --concurrency <n>  Pages in parallel (default 2)
+  --fast             Up to 3 AI calls at once (same number of calls, finishes sooner)
+  --figma <link>     Figma file / page / frame link. Frames are paired to URLs by name;
+                     the pairing is written to pages.json so you can edit it.
   --design <folder>  Folder with desktop.png / tablet.png / mobile.png (alternative to --figma)
   --approve          Make this run the approved baseline for future comparisons
   --ai <provider>    openrouter | openai | anthropic | none   (default: from .env, else none)
   --model <id>       Vision model (default: from .env)
   --verbose
 
-Site có user/mật khẩu:
-  Dán URL kèm thông tin đăng nhập:  https://user:matkhau@site.com/
-  hoặc đặt trong .env:              QA_HTTP_USER=... / QA_HTTP_PASS=...
-                                    QA_TZ=Asia/Ho_Chi_Minh  (mặc định giờ Hà Nội)
-  Nếu là form đăng nhập (không phải popup của browser), thêm khi cần:
-                                    QA_LOGIN_URL=... (mặc định /wp-login.php)
+Site behind a user/password:
+  Paste a URL with credentials:     https://user:password@site.com/
+  or set in .env:                   QA_HTTP_USER=... / QA_HTTP_PASS=...
+                                    QA_TZ=Asia/Ho_Chi_Minh  (default: Hanoi time)
+  If it is a login form (not the browser popup), add as needed:
+                                    QA_LOGIN_URL=... (default /wp-login.php)
                                     QA_LOGIN_USER_SEL / QA_LOGIN_PASS_SEL / QA_LOGIN_SUBMIT_SEL
 
 Output: reports/<timestamp>/report.html
@@ -114,7 +114,7 @@ export function loadConfig(argv: string[], cwd = process.cwd()): Config {
   loadDotEnv(cwd);
   const url = argv.find((a) => /^https?:\/\//i.test(a) && !a.includes('figma.com'));
   const siteArg = arg(['--site'], argv);
-  if (!url && !siteArg) throw new Error('Thiếu URL (hoặc --site).\n\n' + USAGE);
+  if (!url && !siteArg) throw new Error('Missing URL (or --site).\n\n' + USAGE);
 
   const figma = arg(['--figma'], argv) ?? argv.find((a) => /figma\.com\//.test(a));
   const provider = (arg(['--ai'], argv) ?? process.env.QA_AI_PROVIDER ?? 'none') as AiProvider;
@@ -224,7 +224,7 @@ let state: Progress = { done: 0, total: 0, label: '', phase: 'capture', plan: { 
  * job that is actually moving.
  */
 export function progressTotal(plan: ProgressPlan) {
-  state = { done: 0, total: plan.capture + plan.ai + plan.wrap, label: 'đang bắt đầu…', phase: 'capture', plan };
+  state = { done: 0, total: plan.capture + plan.ai + plan.wrap, label: 'starting…', phase: 'capture', plan };
   progressSink?.({ ...state });
 }
 
