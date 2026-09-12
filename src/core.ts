@@ -398,6 +398,7 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
 
   const provider = createProvider(cfg);
   resetAiCircuit(Boolean(cfg.aiFast));
+  if (provider) log(`AI ${provider.name}/${provider.model}`);
   // Check the key and the model choice before spending a run discovering they cannot work.
   if (provider) await preflight(cfg, (l) => log(l));
   if (provider && cfg.aiFast) log(`fast mode: up to ${aiMaxInflight()} AI calls at once (same number of calls, no extra tokens unless a retry)`);

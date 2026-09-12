@@ -64,6 +64,31 @@
         color: var(--dim);
         font-size: 13px;
       }
+      header .nav {
+        margin-left: auto;
+        display: flex;
+        gap: 8px;
+      }
+      header .navbtn {
+        font: inherit;
+        font-size: 13px;
+        font-weight: 500;
+        padding: 6px 10px;
+        border-radius: 8px;
+        border: 1px solid transparent;
+        background: transparent;
+        color: var(--dim);
+        cursor: pointer;
+      }
+      header .navbtn:hover {
+        color: var(--ink);
+        background: #f8f9fb;
+      }
+      header .navbtn.on {
+        color: var(--ink);
+        border-color: var(--line);
+        background: var(--card);
+      }
       main {
         max-width: 1180px;
         margin: 0 auto;
@@ -84,6 +109,27 @@
       #s2.card {
         border-left-color: var(--warn);
       }
+      .s2head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 16px;
+        margin-bottom: 16px;
+      }
+      .s2head-copy {
+        min-width: 0;
+        flex: 1;
+      }
+      .s2head-copy h2 {
+        margin: 0 0 4px;
+      }
+      .s2head-copy .sub {
+        margin-bottom: 0;
+      }
+      .s2head .primary {
+        flex: 0 0 auto;
+        white-space: nowrap;
+      }
       #s3.card {
         border-left-color: var(--accent);
       }
@@ -91,6 +137,9 @@
         border-left-color: var(--ok);
       }
       #history.card {
+        border-left-color: #98a2b3;
+      }
+      #settings.card {
         border-left-color: #98a2b3;
       }
       h2 {
@@ -539,6 +588,30 @@
         border-radius: 0;
         font-size: 11.5px;
       }
+      .settings-grid {
+        display: grid;
+        gap: 16px;
+        max-width: 480px;
+      }
+      .settings-fast {
+        padding-top: 4px;
+      }
+      .settings-fast .fastlab {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 500;
+        font-size: 13px;
+        cursor: pointer;
+        margin: 0;
+      }
+      .settings-fast .hint {
+        margin: 6px 0 0;
+      }
+      .settings .btnrow {
+        margin-top: 8px;
+        max-width: 480px;
+      }
       .saved {
         background: var(--ok-bg);
         border: 1px solid var(--ok-line);
@@ -717,28 +790,32 @@
     <header>
       <h1><em>WOO</em> · QA Visual</h1>
       <span class="meta" id="meta"></span>
+      <nav class="nav">
+        <button type="button" class="navbtn on" id="navqa">QA</button>
+        <button type="button" class="navbtn" id="navset">Settings</button>
+      </nav>
     </header>
 
     <main>
-      <!-- ============================ 1. input ============================ -->
-      <section class="card" id="s1">
-        <h2>Site and design</h2>
-        <p class="sub">
-          Enter the homepage URL and a Figma file link. The tool will discover
-          pages and guess matching frames — you can fix the pairing in the next
-          step.
-        </p>
-        <div class="field">
-          <label for="site">Homepage URL</label>
-          <input
-            type="url"
-            id="site"
-            placeholder="https://example.com/"
-            autocomplete="url"
-          />
-        </div>
-        <div class="field row2">
-          <div>
+      <div id="qa">
+        <!-- ============================ 1. input ============================ -->
+        <section class="card" id="s1">
+          <h2>Site and design</h2>
+          <p class="sub">
+            Enter the homepage URL and a Figma file link. The tool will discover
+            pages and guess matching frames — you can fix the pairing in the
+            next step.
+          </p>
+          <div class="field">
+            <label for="site">Homepage URL</label>
+            <input
+              type="url"
+              id="site"
+              placeholder="https://example.com/"
+              autocomplete="url"
+            />
+          </div>
+          <div class="field">
             <label for="figma"
               >Figma link
               <span style="font-weight: 400; color: var(--dim)"
@@ -752,173 +829,210 @@
               placeholder="https://www.figma.com/design/…"
             />
           </div>
-          <div>
-            <label for="max">Max pages</label>
-            <input type="number" id="max" value="8" min="1" max="80" />
-          </div>
-        </div>
-        <details class="authbox" id="authbox">
-          <summary>
-            Password-protected site? (staging, Basic auth, or a login page)
-          </summary>
-          <div class="row2" style="margin-top: 12px">
-            <div>
-              <label for="auser">User</label>
-              <input
-                type="text"
-                id="auser"
-                autocomplete="off"
-                spellcheck="false"
-                placeholder="username"
-              />
+          <details class="authbox" id="authbox">
+            <summary>
+              Password-protected site? (staging, Basic auth, or a login page)
+            </summary>
+            <div class="row2" style="margin-top: 12px">
+              <div>
+                <label for="auser">User</label>
+                <input
+                  type="text"
+                  id="auser"
+                  autocomplete="off"
+                  spellcheck="false"
+                  placeholder="username"
+                />
+              </div>
+              <div>
+                <label for="apass">Password</label>
+                <input
+                  type="password"
+                  id="apass"
+                  autocomplete="off"
+                  placeholder="••••••••"
+                />
+              </div>
             </div>
-            <div>
-              <label for="apass">Password</label>
-              <input
-                type="password"
-                id="apass"
-                autocomplete="off"
-                placeholder="••••••••"
-              />
+            <p class="hint">
+              Kept in server memory only — <b>not saved to disk</b>. Reload the
+              page and you will need to enter it again. To skip typing it each
+              time, set <code>QA_HTTP_USER</code> / <code>QA_HTTP_PASS</code> in
+              <code>.env</code>. The tool detects Basic auth (browser popup) vs
+              a login form.
+            </p>
+          </details>
+          <div id="e1"></div>
+          <div class="saved" id="saved" hidden></div>
+          <div class="btnrow">
+            <p class="hint" id="hint1">
+              This step takes 15–30 seconds: open a browser, read the sitemap
+              (or homepage links), read the Figma file and render frames.
+            </p>
+            <div class="btnrow-actions">
+              <button id="redo" hidden>Discover from scratch</button>
+              <button class="primary" id="go1">Discover pages</button>
             </div>
           </div>
-          <p class="hint">
-            Kept in server memory only — <b>not saved to disk</b>. Reload the
-            page and you will need to enter it again. To skip typing it each
-            time, set <code>QA_HTTP_USER</code> / <code>QA_HTTP_PASS</code> in
-            <code>.env</code>. The tool detects Basic auth (browser popup) vs a
-            login form.
-          </p>
-        </details>
-        <label class="toggle" for="fast">
-          <input type="checkbox" id="fast" />
-          <span>
-            <span class="tlab">Fast mode</span>
-            <span class="thint"
-              >Up to 3 AI calls at once — same pages and screenshots, usually
-              ~2.5–3 min / 8 pages. Off = one call at a time. Tokens do not
-              increase unless the API retries.</span
-            >
-          </span>
-        </label>
+        </section>
 
-        <div id="e1"></div>
-        <div class="saved" id="saved" hidden></div>
-        <div class="btnrow">
-          <p class="hint" id="hint1">
-            This step takes 15–30 seconds: open a browser, read the sitemap (or
-            homepage links), read the Figma file and render frames.
-          </p>
-          <div class="btnrow-actions">
-            <button id="redo" hidden>Discover from scratch</button>
-            <button class="primary" id="go1">Discover pages</button>
-          </div>
-        </div>
-      </section>
-
-      <!-- ============================ 2. pairing =========================== -->
-      <section class="card" id="s2" hidden>
-        <h2>URL ↔ Figma frame pairing</h2>
-        <p class="sub" id="s2sub"></p>
-        <div id="e2"></div>
-        <table>
-          <thead>
-            <tr>
-              <th></th>
-              <th></th>
-              <th>Design</th>
-              <th>Page URL</th>
-              <th>Figma frame</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="rows"></tbody>
-        </table>
-        <div class="toolbar">
-          <div class="toolbar-left">
-            <div class="toolbar-left-up">
-              <button id="add">+ Add pair</button>
-              <button id="back2">Change links</button>
-              <button id="picknew">Select unreviewed</button>
-              <button id="pickold">Select already QA’d</button>
-              <button id="pickall">Select all</button>
+        <!-- ============================ 2. pairing =========================== -->
+        <section class="card" id="s2" hidden>
+          <div class="s2head">
+            <div class="s2head-copy">
+              <h2>URL ↔ Figma frame pairing</h2>
+              <p class="sub" id="s2sub"></p>
             </div>
-            <div class="toolbar-left-down">
-              <label class="fastlab" for="fast2"
-                ><input type="checkbox" id="fast2" /> Fast mode</label
-              >
-              <span class="hint" id="count"></span>
+            <button class="primary" id="go2top">Run QA</button>
+          </div>
+          <div id="e2"></div>
+          <table>
+            <thead>
+              <tr>
+                <th></th>
+                <th></th>
+                <th>Design</th>
+                <th>Page URL</th>
+                <th>Figma frame</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+          <div class="toolbar">
+            <div class="toolbar-left">
+              <div class="toolbar-left-up">
+                <button id="add">+ Add pair</button>
+                <button id="back2">Change links</button>
+                <button id="picknew">Select unreviewed</button>
+                <button id="pickold">Select already QA’d</button>
+                <button id="pickall">Select all</button>
+              </div>
+              <div class="toolbar-left-down">
+                <label class="fastlab" for="fast2"
+                  ><input type="checkbox" id="fast2" /> Fast mode</label
+                >
+                <span class="hint" id="count"></span>
+                <span class="grow"></span>
+              </div>
+            </div>
+            <div class="toolbar-right">
+              <button class="primary" id="go2">Run QA</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================= 3. run ============================== -->
+        <section class="card" id="s3" hidden>
+          <h2 id="s3title">Running QA…</h2>
+          <p class="sub" id="s3sub">
+            Capture 3 viewports per page, compare with the design, then merge
+            duplicate findings.
+          </p>
+          <div class="prog" id="prog" hidden>
+            <div class="bar"><div class="fill" id="fill"></div></div>
+            <div class="prow">
+              <span id="plabel">starting…</span>
               <span class="grow"></span>
+              <span class="mono" id="pcount"></span>
             </div>
           </div>
-          <div class="toolbar-right">
-            <button class="primary" id="go2">Run QA</button>
-          </div>
-        </div>
-      </section>
+          <div class="done" id="doneBar" hidden></div>
 
-      <!-- ============================= 3. run ============================== -->
-      <section class="card" id="s3" hidden>
-        <h2 id="s3title">Running QA…</h2>
-        <p class="sub" id="s3sub">
-          Capture 3 viewports per page, compare with the design, then merge
-          duplicate findings.
-        </p>
-        <div class="prog" id="prog" hidden>
-          <div class="bar"><div class="fill" id="fill"></div></div>
-          <div class="prow">
-            <span id="plabel">starting…</span>
-            <span class="grow"></span>
-            <span class="mono" id="pcount"></span>
-          </div>
-        </div>
-        <div class="done" id="doneBar" hidden></div>
+          <details id="logbox">
+            <summary class="cap">Show detailed log</summary>
+            <pre class="log" id="log"></pre>
+          </details>
+        </section>
 
-        <details id="logbox">
-          <summary class="cap">Show detailed log</summary>
-          <pre class="log" id="log"></pre>
-        </details>
-      </section>
-
-      <!--
+        <!--
     Its own card, not part of the run panel.
 
     A note is written after reading the report, which can be minutes or days after the run — and
     the run panel is gone by then. Keeping the editor inside it meant the note could only ever be
     written in the one moment the run finished, and never corrected afterwards.
   -->
-      <section class="card notes" id="notes" hidden>
-        <h2>Reviewer notes</h2>
-        <p class="sub">
-          Things the AI missed, or notes for whoever reads the report. Saving
-          rebuilds report.html with the note included.
-        </p>
-        <label for="notetext"
-          >Notes for run <span id="notefor" class="mono"></span
-        ></label>
-        <textarea
-          id="notetext"
-          rows="5"
-          placeholder="For example:&#10;- Hero is a video background; a white screenshot is expected.&#10;- Mobile menu is missing the cart icon — AI did not catch it.&#10;- /journal/ has no design; ignore the design-compare section."
-        ></textarea>
-        <div class="noterow">
-          <span class="hint" id="notestate"></span>
-          <span class="grow"></span>
-          <button type="button" id="closenote">Close</button>
-          <button class="ok" id="savenote">Save to report</button>
-        </div>
-      </section>
+        <section class="card notes" id="notes" hidden>
+          <h2>Reviewer notes</h2>
+          <p class="sub">
+            Things the AI missed, or notes for whoever reads the report. Saving
+            rebuilds report.html with the note included.
+          </p>
+          <label for="notetext"
+            >Notes for run <span id="notefor" class="mono"></span
+          ></label>
+          <textarea
+            id="notetext"
+            rows="5"
+            placeholder="For example:&#10;- Hero is a video background; a white screenshot is expected.&#10;- Mobile menu is missing the cart icon — AI did not catch it.&#10;- /journal/ has no design; ignore the design-compare section."
+          ></textarea>
+          <div class="noterow">
+            <span class="hint" id="notestate"></span>
+            <span class="grow"></span>
+            <button type="button" id="closenote">Close</button>
+            <button class="ok" id="savenote">Save to report</button>
+          </div>
+        </section>
 
-      <section class="card" id="history">
-        <h2>Previous runs</h2>
-        <p class="sub" id="historySub">
-          Each row is a saved report — the host tells you which project, so you
-          do not need to open timestamp folders.
+        <section class="card" id="history">
+          <h2>Previous runs</h2>
+          <p class="sub" id="historySub">
+            Each row is a saved report — the host tells you which project, so
+            you do not need to open timestamp folders.
+          </p>
+          <div id="historyBody"><p class="hint">Loading…</p></div>
+          <p class="hint" id="historyMoreWrap" hidden>
+            <button type="button" id="histmore">Load more</button>
+          </p>
+        </section>
+      </div>
+
+      <section class="card settings" id="settings" hidden>
+        <h2>Settings</h2>
+        <p class="sub">
+          Used on every run. Change the model here instead of editing
+          <code>.env</code>.
         </p>
-        <div id="historyBody"><p class="hint">Loading…</p></div>
-        <p class="hint" id="historyMoreWrap" hidden>
-          <button type="button" id="histmore">Load more</button>
-        </p>
+        <div class="settings-grid">
+          <div>
+            <label for="aimodel">AI model</label>
+            <select id="aimodel">
+              <option value="google/gemini-3.7-flash">
+                Gemini 3.7 Flash — Recommended
+              </option>
+              <option value="google/gemini-3.1-pro-preview">
+                Gemini 3.1 Pro
+              </option>
+              <option value="anthropic/claude-haiku-4.5">
+                Claude Haiku 4.5
+              </option>
+              <option value="anthropic/claude-sonnet-5">Claude Sonnet 5</option>
+              <option value="openai/gpt-5.4-mini">GPT-5.4 Mini</option>
+              <option value="openai/gpt-5.4">GPT-5.4</option>
+              <option value="none">Off — no AI</option>
+            </select>
+          </div>
+          <div>
+            <label for="max">Max pages</label>
+            <input type="number" id="max" value="8" min="1" max="80" />
+          </div>
+          <div class="settings-fast">
+            <label class="fastlab" for="fast"
+              ><input type="checkbox" id="fast" /> Fast mode</label
+            >
+            <p class="hint">
+              Up to 3 AI calls at once. Same pages and tokens; finishes sooner.
+            </p>
+          </div>
+        </div>
+        <div class="btnrow">
+          <span class="grow"></span>
+          <div class="btnrow-actions">
+            <button type="button" class="primary" id="setdone">
+              Back to QA
+            </button>
+          </div>
+        </div>
       </section>
     </main>
 
@@ -986,6 +1100,10 @@
         btn.disabled = on;
         btn.innerHTML = on ? '<span class="spinner"></span> ' + label : label;
       }
+      function busyGo2(on, label) {
+        busy($('go2'), on, label);
+        if ($('go2top')) busy($('go2top'), on, label);
+      }
       const pathOf = (u) => {
         try {
           return new URL(u).pathname;
@@ -1040,6 +1158,7 @@
       const LS_PREFIX = 'qav:v1:';
       const LS_LAST = 'qav:v1:last';
       const LS_FAST = 'qav:v1:fast';
+      const LS_MODEL = 'qav:v1:model';
       const keyFor = (site, figma) =>
         LS_PREFIX +
         bareUrl((site || '').trim()).replace(/\/+$/, '') +
@@ -1048,6 +1167,41 @@
 
       function fastOn() {
         return Boolean($('fast') && $('fast').checked);
+      }
+      function modelOn() {
+        const el = $('aimodel');
+        if (el && el.value) return el.value;
+        try {
+          return localStorage.getItem(LS_MODEL) || '';
+        } catch {
+          return '';
+        }
+      }
+      function metaAi() {
+        const m = modelOn();
+        return !m || m === 'none' ? 'AI: off' : 'AI: openrouter/' + m;
+      }
+      function paintMeta(host) {
+        const h = host || hostOf($('site').value.trim());
+        const parts = [h, metaAi()].filter(Boolean);
+        if (parts.length) $('meta').textContent = parts.join(' · ');
+      }
+      function setModel(id) {
+        const el = $('aimodel');
+        if (!el) return;
+        const v = String(id || '').trim();
+        if (!v) return;
+        if (![...el.options].some((o) => o.value === v)) {
+          const o = document.createElement('option');
+          o.value = v;
+          o.textContent = v;
+          el.insertBefore(o, el.lastElementChild);
+        }
+        el.value = v;
+        try {
+          localStorage.setItem(LS_MODEL, v);
+        } catch {}
+        paintMeta();
       }
       function setFast(on) {
         const v = Boolean(on);
@@ -1082,6 +1236,7 @@
               figmaLink: $('figma').value.trim(),
               maxPages: Number($('max').value) || 8,
               fast: fastOn(),
+              model: modelOn(),
               rows: ROWS,
               frames: FRAMES,
               savedAt: new Date().toISOString(),
@@ -1118,6 +1273,10 @@
         } catch {
           setFast(false);
         }
+        try {
+          const savedModel = localStorage.getItem(LS_MODEL) || d?.model;
+          if (savedModel) setModel(savedModel);
+        } catch {}
         if (!d?.siteUrl) return;
         $('site').value = d.siteUrl;
         $('figma').value = d.figmaLink || '';
@@ -1223,6 +1382,7 @@
               siteUrl,
               figmaLink,
               maxPages: Number($('max').value) || 8,
+              model: modelOn(),
               frames: saved.frames || [],
               user: $('auser').value.trim(),
               pass: $('apass').value,
@@ -1254,6 +1414,7 @@
             siteUrl,
             figmaLink,
             maxPages: Number($('max').value) || 8,
+            model: modelOn(),
             user: $('auser').value.trim(),
             pass: $('apass').value,
           });
@@ -1408,6 +1569,7 @@
         if (bad) {
           $('count').textContent = bad + ' rows need fixing before you can run';
           $('go2').disabled = true;
+          if ($('go2top')) $('go2top').disabled = true;
           return;
         }
         $('count').textContent =
@@ -1416,8 +1578,14 @@
           ROWS.length +
           ' pages will run' +
           (seen ? ' · ' + seen + ' already QA’d' : '');
-        $('go2').disabled = !ROWS.length || n === 0;
-        $('go2').textContent = n ? 'Run QA (' + n + ' pages)' : 'Run QA';
+        const off = !ROWS.length || n === 0;
+        const label = n ? 'Run QA (' + n + ' pages)' : 'Run QA';
+        $('go2').disabled = off;
+        $('go2').textContent = label;
+        if ($('go2top')) {
+          $('go2top').disabled = off;
+          $('go2top').textContent = label;
+        }
       }
 
       function render() {
@@ -1621,6 +1789,7 @@
         render();
       };
 
+      $('go2top').onclick = () => $('go2').click();
       $('go2').onclick = async () => {
         showErr('e2', '');
         const chosen = selectedRows();
@@ -1642,12 +1811,13 @@
           how: r.how,
         }));
         saveSession();
-        busy($('go2'), true, 'Running…');
+        busyGo2(true, 'Running…');
         try {
           const { runId } = await post('/api/run', {
             pages,
             catalog,
             fast: fastOn(),
+            model: modelOn(),
           });
           $('s2').hidden = true;
           $('s3').hidden = false;
@@ -1666,7 +1836,7 @@
         } catch (e) {
           showErr('e2', e.message);
         } finally {
-          busy($('go2'), false, 'Run QA');
+          busyGo2(false, 'Run QA');
           updateCount();
         }
       };
@@ -2057,10 +2227,38 @@
         }
       };
 
+      function showPage(name) {
+        const settings = name === 'settings';
+        $('qa').hidden = settings;
+        $('settings').hidden = !settings;
+        $('navqa').classList.toggle('on', !settings);
+        $('navset').classList.toggle('on', settings);
+        if (!settings) {
+          setModel(modelOn());
+          saveSession();
+        }
+      }
+
       restoreLast();
       loadHistory();
+      $('navqa').onclick = () => showPage('qa');
+      $('navset').onclick = () => showPage('settings');
+      $('setdone').onclick = () => showPage('qa');
       $('fast').onchange = () => setFast($('fast').checked);
       $('fast2').onchange = () => setFast($('fast2').checked);
+      $('aimodel').onchange = () => setModel($('aimodel').value);
+      fetch('/api/status')
+        .then((r) => r.json())
+        .then((s) => {
+          let remembered = '';
+          try {
+            remembered = localStorage.getItem(LS_MODEL) || '';
+          } catch {}
+          if (remembered) setModel(remembered);
+          else if (s && s.aiModel) setModel(s.aiModel);
+          else paintMeta();
+        })
+        .catch(() => paintMeta());
       $('site').addEventListener('keydown', (e) => {
         if (e.key === 'Enter') $('go1').click();
       });

@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, extname, resolve, normalize, sep, basename } from 'node:path';
-import { loadConfig, setLogSink, setProgressSink, log, type Config, type Progress } from './config.js';
+import { loadConfig, loadDotEnv, setLogSink, setProgressSink, log, type Config, type Progress } from './config.js';
 import { nowQa } from './time.js';
 import { discover, runQa, designCache, openFindings, type DiscoveredFrame } from './core.js';
 import { frameFromLink, type FigmaFrame } from './design.js';
@@ -53,16 +53,49 @@ function push(run: Run, event: string, data: unknown) {
 }
 
 /** Build a Config the same way the CLI does, so both front ends behave identically. */
-function configFor(siteUrl: string, design: string | undefined, maxPages: number, creds?: { user?: string; pass?: string }): Config {
+function configFor(
+  siteUrl: string,
+  design: string | undefined,
+  maxPages: number,
+  creds?: { user?: string; pass?: string },
+  model?: string,
+): Config {
   const argv = [siteUrl, '--site', siteUrl, '--pages', String(maxPages)];
   // One field in the UI takes either: a figma.com link, or a folder of design PNGs.
   if (design) argv.push(/figma\.com\//.test(design) ? '--figma' : '--design', design);
+  const picked = sanitizeModel(model);
+  if (picked === '') argv.push('--ai', 'none');
+  else if (picked) argv.push('--model', picked);
   const cfg = loadConfig(argv);
   // Typed into the form rather than the URL — the form is the place that does not get remembered.
   if (creds?.user || creds?.pass) {
     cfg.auth = { ...(cfg.auth ?? {}), user: creds.user || cfg.auth?.user, pass: creds.pass || cfg.auth?.pass };
   }
   return cfg;
+}
+
+/** OpenRouter ids look like google/gemini-3.7-flash. Empty string means AI off. */
+function sanitizeModel(raw: unknown): string | undefined {
+  if (raw == null) return undefined;
+  const s = String(raw).trim();
+  if (!s || s === 'none') return '';
+  if (s.length > 80 || !/^[a-z0-9_./:~-]+$/i.test(s)) return undefined;
+  return s;
+}
+
+function applyModel(cfg: Config, raw: unknown): Config {
+  const picked = sanitizeModel(raw);
+  if (picked === undefined) return cfg;
+  if (picked === '') return { ...cfg, ai: { ...cfg.ai, provider: 'none', model: '' } };
+  loadDotEnv();
+  const provider = cfg.ai.provider === 'none' ? 'openrouter' : cfg.ai.provider;
+  const apiKey = cfg.ai.apiKey || process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY || '';
+  const baseUrl =
+    cfg.ai.baseUrl ||
+    (provider === 'openai' ? process.env.OPENAI_BASE_URL : undefined) ||
+    process.env.OPENROUTER_BASE_URL ||
+    'https://openrouter.ai/api/v1';
+  return { ...cfg, ai: { provider, model: picked, apiKey, baseUrl } };
 }
 
 /** Credentials the browser typed in, kept only in memory for as long as the server runs. */
@@ -208,7 +241,7 @@ const server = createServer(async (req, res) => {
       setLogSink((l) => lines.push(l));
       try {
         lastCreds = { user: String(body.user ?? '').trim() || undefined, pass: String(body.pass ?? '').trim() || undefined };
-        const cfg = configFor(siteUrl, figmaLink, maxPages, lastCreds);
+        const cfg = configFor(siteUrl, figmaLink, maxPages, lastCreds, body.model);
         lastConfig = cfg;
         const d = await discover(cfg);
         lastFrames = d.frames.map((f) => ({ id: f.id, name: f.name, width: f.width, height: f.height, file: f.file }));
@@ -256,7 +289,8 @@ const server = createServer(async (req, res) => {
       if (!lastConfig) return json(res, 409, { error: 'no discover yet — click Discover first' });
       if (busy) return json(res, 409, { error: 'a run is already in progress' });
 
-      const cfg = { ...lastConfig, aiFast: Boolean(body.fast) };
+      const cfg = applyModel({ ...lastConfig, aiFast: Boolean(body.fast) }, body.model);
+      lastConfig = cfg;
       const id = Date.now().toString(36);
       const run: Run = { id, lines: [], done: false, clients: new Set() };
       runs.set(id, run);
@@ -413,7 +447,7 @@ const server = createServer(async (req, res) => {
 
       const creds = { user: String(body.user ?? '').trim() || lastCreds?.user, pass: String(body.pass ?? '').trim() || lastCreds?.pass };
       lastCreds = creds.user || creds.pass ? creds : lastCreds;
-      const cfg = configFor(siteUrl, figmaLink, maxPages, lastCreds);
+      const cfg = configFor(siteUrl, figmaLink, maxPages, lastCreds, body.model);
       lastConfig = cfg;
       lastFrames = frames;
       log(`reusing saved pairing (${frames.length} frames) — skipping discover`);
@@ -551,7 +585,16 @@ const server = createServer(async (req, res) => {
     }
 
     /* -------------------------------- status -------------------------------- */
-    if (req.method === 'GET' && path === '/api/status') return json(res, 200, { busy, runs: runs.size });
+    if (req.method === 'GET' && path === '/api/status') {
+      loadDotEnv();
+      const provider = process.env.QA_AI_PROVIDER ?? 'none';
+      const model = process.env.QA_AI_MODEL ?? (provider === 'openrouter' ? 'google/gemini-3.7-flash' : '');
+      return json(res, 200, {
+        busy,
+        runs: runs.size,
+        aiModel: provider === 'none' ? '' : model,
+      });
+    }
 
     json(res, 404, { error: 'no route ' + path });
   } catch (e: any) {
