@@ -176,6 +176,33 @@
       ],
       "why": "This is slider, not bug",
       "at": "2026-09-12"
+    },
+    {
+      "id": "0jv90qx",
+      "title": "Đoạn văn mở đầu bị mờ toàn bộ và giảm độ tương phản",
+      "anchors": [
+        "Every year, Australia generates more renewable energy."
+      ],
+      "detail": "Trên bản thiết kế, các dòng đầu có màu chữ đen đậm rõ ràng rồi mới mờ dần xuống dưới. Trên bản tablet thực tế, toàn bộ đoạn văn đều có màu xám rất nhạt, gây khó đọc.",
+      "pages": [
+        "https://aino.energy.wootech.com.au/"
+      ],
+      "why": "animation not run",
+      "at": "2026-09-12"
+    },
+    {
+      "id": "0xwwe3o",
+      "title": "Thiếu đồ họa vòng cung đặc trưng ở section AinoOS",
+      "anchors": [
+        "The intelligence behind",
+        "every Aino system"
+      ],
+      "detail": "Section 'The intelligence behind every Aino system' bị thiếu hai họa tiết vòng cung tròn lớn ở hai bên mép như trên bản thiết kế.",
+      "pages": [
+        "https://aino.energy.wootech.com.au/"
+      ],
+      "why": "website that co 2 vong",
+      "at": "2026-09-12"
     }
   ]
 }
