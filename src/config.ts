@@ -40,7 +40,7 @@ export interface Config {
   verbose: boolean;
 }
 
-function loadDotEnv(dir: string) {
+export function loadDotEnv(dir = process.cwd()) {
   const p = resolve(dir, '.env');
   if (!existsSync(p)) return;
   for (const line of readFileSync(p, 'utf8').split('\n')) {
@@ -79,6 +79,7 @@ qa-visual accept <số lỗi> "lý do"    Đánh dấu một lỗi ở lần ch�
 Site có user/mật khẩu:
   Dán URL kèm thông tin đăng nhập:  https://user:matkhau@site.com/
   hoặc đặt trong .env:              QA_HTTP_USER=... / QA_HTTP_PASS=...
+                                    QA_TZ=Asia/Ho_Chi_Minh  (mặc định giờ Hà Nội)
   Nếu là form đăng nhập (không phải popup của browser), thêm khi cần:
                                     QA_LOGIN_URL=... (mặc định /wp-login.php)
                                     QA_LOGIN_USER_SEL / QA_LOGIN_PASS_SEL / QA_LOGIN_SUBMIT_SEL

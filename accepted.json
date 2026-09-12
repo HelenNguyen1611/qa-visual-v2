@@ -161,6 +161,21 @@
       ],
       "why": "Co y",
       "at": "2026-09-12"
+    },
+    {
+      "id": "120prm4",
+      "title": "Thứ tự hiển thị nội dung bị ngắt quãng bởi hình ảnh",
+      "anchors": [
+        "Reliability is what everyone is actually buying.",
+        "Built here. Hosted here. Accountable here.",
+        "Built for the decade ahead."
+      ],
+      "detail": "Ở 3 khối nội dung bên dưới, tiêu đề bị tách rời khỏi đoạn văn miêu tả và nút CTA (tiêu đề nằm trên ảnh, đoạn mô tả và nút CTA lại nằm dưới ảnh), làm ngắt quãng luồng đọc thay vì gom toàn bộ khối chữ cùng nhau khi xếp chồng dọc trên tablet.",
+      "pages": [
+        "https://aino.energy.wootech.com.au/company/"
+      ],
+      "why": "chu y, ux tot hon",
+      "at": "2026-09-12"
     }
   ]
 }

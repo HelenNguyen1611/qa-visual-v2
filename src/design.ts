@@ -41,6 +41,57 @@ async function figmaGet(path: string, token: string) {
   return res.json() as Promise<any>;
 }
 
+export interface FigmaOverlayBox {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** TEXT + image-fill surfaces from one mapped page frame. Used only by the overlay-gutter check. */
+export interface FigmaOverlay {
+  pageWidth: number;
+  texts: Array<FigmaOverlayBox & { text: string }>;
+  surfaces: FigmaOverlayBox[];
+}
+
+type OverlayNode = {
+  type?: string;
+  characters?: string;
+  fills?: Array<{ type?: string; visible?: boolean }>;
+  absoluteBoundingBox?: { x: number; y: number; width: number; height: number };
+  children?: OverlayNode[];
+};
+
+/** Keep TEXT and nodes with an image fill — enough to find a banner, not a geometry engine. */
+export function flattenFigmaOverlay(doc: OverlayNode): FigmaOverlay {
+  const page = doc.absoluteBoundingBox;
+  const pageWidth = page?.width ?? 0;
+  const texts: FigmaOverlay['texts'] = [];
+  const surfaces: FigmaOverlayBox[] = [];
+  const walk = (n: OverlayNode) => {
+    const b = n.absoluteBoundingBox;
+    if (n.type === 'TEXT' && n.characters && b) {
+      const text = n.characters.replace(/\s+/g, ' ').trim();
+      if (text.length >= 3) texts.push({ text: text.slice(0, 120), x: b.x, y: b.y, w: b.width, h: b.height });
+    }
+    const image = (n.fills ?? []).some((f) => f.visible !== false && f.type === 'IMAGE');
+    if (image && b && b.width >= 400) surfaces.push({ x: b.x, y: b.y, w: b.width, h: b.height });
+    for (const c of n.children ?? []) walk(c);
+  };
+  walk(doc);
+  return { pageWidth, texts, surfaces };
+}
+
+/** Subtree of the mapped page frame, depth 8 — banner title + image surface sit well above that. */
+export async function fetchFigmaOverlay(link: string, nodeId: string, token: string): Promise<FigmaOverlay> {
+  const { fileKey } = parseFigmaLink(link);
+  const j = await figmaGet(`/files/${fileKey}/nodes?ids=${encodeURIComponent(nodeId)}&depth=8`, token);
+  const doc: OverlayNode | undefined = j.nodes?.[nodeId]?.document;
+  if (!doc) throw new Error(`không thấy node ${nodeId} trong file ${fileKey}`);
+  return flattenFigmaOverlay(doc);
+}
+
 /**
  * The page designs in a Figma file.
  *

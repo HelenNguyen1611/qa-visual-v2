@@ -6,7 +6,7 @@ import { launch, captureAll, type Capture } from './capture.js';
 import { sweep, type SweepResult } from './sweep.js';
 import { compare } from './compare.js';
 import { renderReport, type RunReport, type PageReport, type ViewportReport } from './report.js';
-import { listFigmaFrames, renderFigmaFrames, framesFromFolder, type FigmaFrame } from './design.js';
+import { listFigmaFrames, renderFigmaFrames, framesFromFolder, fetchFigmaOverlay, type FigmaFrame, type FigmaOverlay } from './design.js';
 import { fromSitemap, fromLinks, browserFetcher, dedupeUrls, slugOf, type PageTarget } from './pages.js';
 import { mapUrlsToFrames, looksMispaired, type Mapped } from './mapping.js';
 import { detectShared } from './shared.js';
@@ -18,6 +18,7 @@ import { compareWithDesign, compareSelf, looksNonVietnamese } from './ai.js';
 import { annotateCrop } from './annotate.js';
 import { locate } from './locate.js';
 import { prepareAuth, authOptions } from './auth.js';
+import { nowQa } from './time.js';
 import { listPageCoverage, listRunStamps, pageKey, reportPageUrls, reportSite, sameSite, siteKey } from './site.js';
 
 /**
@@ -266,11 +267,12 @@ async function capturePage(
  * point. These findings carry their own box, so they never depend on `locate` matching quoted
  * text, and they are the part of the report that reads the same on every run.
  */
-function measurePage(runDir: string, pageDir: string, page: PageReport): Occurrence[] {
+function measurePage(runDir: string, pageDir: string, page: PageReport, overlay?: FigmaOverlay): Occurrence[] {
   const out: Occurrence[] = [];
   for (const v of page.viewports) {
     const vpH = VIEWPORTS.find((x) => x.name === v.name)?.height ?? 900;
-    for (const m of detectAll(v.textIndex, v.mediaRegions, v.reserved, v.width, vpH)) {
+    const design = v.name === 'desktop' ? overlay : undefined;
+    for (const m of detectAll(v.textIndex, v.mediaRegions, v.reserved, v.width, vpH, design)) {
       const n = out.length + 1;
       const res = annotateCrop(join(runDir, v.shot), m.box, n, join(pageDir, `${v.name}.m${n}.png`));
       if (res) m.finding.crop = relative(runDir, res.file);
@@ -367,7 +369,8 @@ export interface RunOutcome {
  */
 export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[]): Promise<RunOutcome> {
   const t0 = Date.now();
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const clock = nowQa();
+  const stamp = clock.stamp;
   const runDir = join(cfg.stateDir, stamp);
   const approvedRoot = join(cfg.stateDir, '_approved');
 
@@ -434,12 +437,30 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
     );
     if (shared.texts.size) log(`vùng dùng chung: ${shared.texts.size} chuỗi chữ có mặt ở ≥60% trang`);
 
+    const overlays = new Map<string, FigmaOverlay>();
+    if (cfg.figma && cfg.figmaToken) {
+      const ids = [...new Set(mapped.map((m) => m.figmaNodeId).filter((id): id is string => Boolean(id)))];
+      for (const id of ids) {
+        try {
+          const tree = await fetchFigmaOverlay(cfg.figma, id, cfg.figmaToken);
+          overlays.set(id, tree);
+          log(`Figma overlay: ${id} — ${tree.surfaces.length} bề mặt ảnh, ${tree.texts.length} chữ`);
+        } catch (e: any) {
+          log(`Figma overlay: ${e?.message ?? e}`);
+        }
+      }
+    }
+
     const allOccurrences: Occurrence[] = [];
 
     // ---- the measured pass: what the browser's numbers prove, with or without a model
-    for (const r of captured) allOccurrences.push(...measurePage(runDir, r.pageDir, r.page));
+    for (let i = 0; i < captured.length; i++) {
+      const r = captured[i];
+      const id = mapped[i]?.figmaNodeId;
+      allOccurrences.push(...measurePage(runDir, r.pageDir, r.page, id ? overlays.get(id) : undefined));
+    }
     const measuredCount = allOccurrences.length;
-    if (measuredCount) log(`đo trên DOM: ${measuredCount} nhận xét có bằng chứng số (chồng chữ, phân cấp cỡ chữ, khoảng trống màn hình đầu)`);
+    if (measuredCount) log(`đo trên DOM: ${measuredCount} nhận xét có bằng chứng số (chồng chữ, phân cấp cỡ chữ, khoảng trống màn hình đầu, tỷ lệ ảnh cùng hàng, lề banner)`);
 
     // ---- phase 2: the AI pass. The first page reviews the whole thing; later pages are told to
     // skip the shared header/footer, so the same component is not described over and over.
@@ -514,7 +535,7 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
         const dir = join(approvedRoot, r.page.slug);
         mkdirSync(dir, { recursive: true });
         for (const cap of r.caps) copyFileSync(cap.file, join(dir, `${cap.viewport}.png`));
-        writeFileSync(join(dir, 'meta.json'), JSON.stringify({ url: r.page.url, at: new Date().toISOString(), run: stamp }, null, 2));
+        writeFileSync(join(dir, 'meta.json'), JSON.stringify({ url: r.page.url, at: clock.when, run: stamp }, null, 2));
       }
       log(firstEver ? 'lần chạy đầu → đã lưu làm bản duyệt' : 'đã chốt lần chạy này làm bản duyệt mới');
     }
@@ -528,7 +549,7 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
 
     report = {
       site: cfg.site ?? cfg.url,
-      when: new Date().toISOString(),
+      when: clock.when,
       durationMs: Date.now() - t0,
       approvedThisRun,
       pages: captured.map((r) => r.page),

@@ -2,6 +2,7 @@ import type { DiffResult } from './compare.js';
 import type { SweepResult } from './sweep.js';
 import type { MediaRegion, TextItem, ReservedRegion } from './browser.js';
 import type { GroupedFinding } from './group.js';
+import { formatQaWhen } from './time.js';
 
 export interface AiFinding {
   title: string;
@@ -122,21 +123,21 @@ const ACCEPT_SCRIPT = [
   "      var st = box.querySelector('.acceptstate');",
   "      var why = ta ? ta.value : '';",
   "      var accepted = act !== 'undo';",
-  "      if (!stamp) { if (st) { st.className = 'acceptstate bad'; st.textContent = 'mở report từ QA Visual (localhost) để lưu'; } return; }",
+  "      if (!stamp) { if (st) { st.className = 'acceptstate bad'; st.textContent = 'open the report from QA Visual (localhost) to save'; } return; }",
   "      if (accepted && !why.trim()) {",
-  "        if (st) { st.className = 'acceptstate bad'; st.textContent = 'cần lý do — không lưu im lặng'; }",
+  "        if (st) { st.className = 'acceptstate bad'; st.textContent = 'a reason is required — will not save silently'; }",
   '        return;',
   '      }',
   '      btn.disabled = true;',
-  "      if (st) { st.className = 'acceptstate'; st.textContent = 'Đang lưu…'; }",
+  "      if (st) { st.className = 'acceptstate'; st.textContent = 'Saving…'; }",
   "      post('/api/findings/accept', { stamp: stamp, num: Number(box.getAttribute('data-num')), why: why, accepted: accepted })",
   '        .then(function (x) {',
-  "          if (!x.ok) throw new Error(x.d.error || 'không lưu được');",
+  "          if (!x.ok) throw new Error(x.d.error || 'could not save');",
   '          location.reload();',
   '        })',
   '        .catch(function (e) {',
   '          btn.disabled = false;',
-  "          if (st) { st.className = 'acceptstate bad'; st.textContent = (e.message || String(e)) + ' — mở QA Visual.command rồi tải lại trang.'; }",
+  "          if (st) { st.className = 'acceptstate bad'; st.textContent = (e.message || String(e)) + ' — open QA Visual.command and reload this page.'; }",
   '        });',
   '    });',
   '  });',
@@ -146,17 +147,17 @@ const ACCEPT_SCRIPT = [
   "    var nta = notes.querySelector('textarea.notes');",
   "    var nst = notes.querySelector('.acceptstate');",
     "    if (nbtn) nbtn.addEventListener('click', function () {",
-  "      if (!stamp) { if (nst) { nst.className = 'acceptstate bad'; nst.textContent = 'mở report từ QA Visual (localhost) để lưu'; } return; }",
+  "      if (!stamp) { if (nst) { nst.className = 'acceptstate bad'; nst.textContent = 'open the report from QA Visual (localhost) to save'; } return; }",
   '      nbtn.disabled = true;',
-  "      if (nst) { nst.className = 'acceptstate'; nst.textContent = 'Đang lưu…'; }",
+  "      if (nst) { nst.className = 'acceptstate'; nst.textContent = 'Saving…'; }",
   "      post('/api/notes', { stamp: stamp, notes: nta ? nta.value : '' })",
   '        .then(function (x) {',
-  "          if (!x.ok) throw new Error(x.d.error || 'không lưu được');",
+  "          if (!x.ok) throw new Error(x.d.error || 'could not save');",
   '          location.reload();',
   '        })',
   '        .catch(function (e) {',
   '          nbtn.disabled = false;',
-  "          if (nst) { nst.className = 'acceptstate bad'; nst.textContent = (e.message || String(e)) + ' — mở QA Visual.command rồi tải lại trang.'; }",
+  "          if (nst) { nst.className = 'acceptstate bad'; nst.textContent = (e.message || String(e)) + ' — open QA Visual.command and reload this page.'; }",
   '        });',
   '    });',
   '  }',
@@ -189,7 +190,7 @@ export function renderReport(r: RunReport, stamp?: string): string {
   const unmapped = r.pages.filter((p) => !p.mapping.frameName);
   const mispaired = r.pages.filter((p) => p.mispaired);
   const majors = open.filter((f) => f.severity === 'major').length;
-  const SEV = { major: 'nặng', minor: 'vừa', note: 'nhẹ' } as Record<string, string>;
+  const SEV = { major: 'major', minor: 'minor', note: 'note' } as Record<string, string>;
   const VP_COLS = ['mobile', 'tablet', 'desktop'] as const;
   const VP_W = { mobile: 390, tablet: 768, desktop: 1440 } as const;
 
@@ -200,25 +201,25 @@ export function renderReport(r: RunReport, stamp?: string): string {
    * good news and it is the opposite. Coverage is stated before any count.
    */
   const verdict = (() => {
-    if (r.ai?.failures && r.ai.failures >= r.ai.calls) return { tone: 'bad', line: 'Chưa kiểm được', sub: 'Toàn bộ lời gọi AI thất bại — chưa có kết luận nào về site.' };
+    if (r.ai?.failures && r.ai.failures >= r.ai.calls) return { tone: 'bad', line: 'Could not review', sub: 'Every AI call failed — there is no conclusion about the site.' };
     if (!open.length && r.ai?.silent)
       return {
         tone: 'warn',
-        line: 'Không có kết quả — nghi model quá yếu',
-        sub: `${r.ai.calls}/${r.ai.calls} lời gọi AI thành công nhưng model không nêu một lỗi nào. Đây không phải kết luận "site sạch".`,
+        line: 'No results — the model may be too weak',
+        sub: `${r.ai.calls}/${r.ai.calls} AI calls succeeded but the model reported no findings. That is not a “clean site” verdict.`,
       };
     // Zero findings right after a run that found several, with no errors, is a red flag not a pass.
     if (!open.length && (r.drift?.gone.length ?? 0) >= 3)
       return {
         tone: 'warn',
-        line: 'Không tìm thấy lỗi nào — đáng ngờ',
-        sub: `Lần chạy trước báo ${r.drift!.gone.length} lỗi trên cùng site này. Kiểm tra danh sách bên dưới trước khi coi là đã sửa hết.`,
+        line: 'No findings — suspicious',
+        sub: `The previous run reported ${r.drift!.gone.length} findings on this same site. Check the list below before treating them as all fixed.`,
       };
-    if (!open.length) return { tone: 'ok', line: 'Không tìm thấy lỗi nào', sub: `Đã đối chiếu ${r.pages.length} trang ở 3 kích thước màn hình.` };
-    const parts = [`${open.length} lỗi`];
-    if (template.length) parts.push(`${template.length} ở component dùng chung`);
-    if (majors) parts.push(`${majors} mức nặng`);
-    return { tone: majors ? 'bad' : 'warn', line: parts[0], sub: parts.slice(1).join(' · ') || `Trên ${r.pages.length} trang.` };
+    if (!open.length) return { tone: 'ok', line: 'No findings', sub: `Compared ${r.pages.length} pages at 3 viewports.` };
+    const parts = [`${open.length} findings`];
+    if (template.length) parts.push(`${template.length} on shared components`);
+    if (majors) parts.push(`${majors} major`);
+    return { tone: majors ? 'bad' : 'warn', line: parts[0], sub: parts.slice(1).join(' · ') || `Across ${r.pages.length} pages.` };
   })();
 
   /** Index of findings — the fast scan, with a column per screen size. Cards below are the detail. */
@@ -228,27 +229,27 @@ export function renderReport(r: RunReport, stamp?: string): string {
       : `<div class="tablewrap">
   <table class="grid">
     <thead><tr>
-      <th class="c">#</th><th>Lỗi</th><th>Mức</th><th>Phạm vi</th>
+      <th class="c">#</th><th>Finding</th><th>Severity</th><th>Scope</th>
       ${VP_COLS.map((v) => `<th class="c">${v[0].toUpperCase() + v.slice(1)}<br><span class="tiny">${VP_W[v]}px</span></th>`).join('')}
-      <th class="c">Trang</th>
+      <th class="c">Pages</th>
     </tr></thead>
     <tbody>${open
       .map(
         (f) => `<tr>
         <td class="c tnum">${f.num}</td>
-        <td><a href="#f${f.num}">${esc(f.title)}</a>${f.isNew === true ? ' <span class="chip new">mới</span>' : ''}${
-          f.measured ? ' <span class="chip meas">đo được</span>' : ''
+        <td><a href="#f${f.num}">${esc(f.title)}</a>${f.isNew === true ? ' <span class="chip new">new</span>' : ''}${
+          f.measured ? ' <span class="chip meas">measured</span>' : ''
         }</td>
         <td><span class="chip ${f.severity}">${SEV[f.severity]}</span></td>
-        <td>${f.scope === 'template' ? '<span class="chip tpl">dùng chung</span>' : '<span class="tiny">riêng trang</span>'}</td>
+        <td>${f.scope === 'template' ? '<span class="chip tpl">shared</span>' : '<span class="tiny">page-only</span>'}</td>
         ${VP_COLS.map((v) => `<td class="c ${f.viewports.includes(v) ? 'yes' : 'no'}">${f.viewports.includes(v) ? '●' : '·'}</td>`).join('')}
         <td class="c tnum">${f.pages.length}/${r.pages.length}</td>
       </tr>`,
       )
       .join('')}</tbody>
   </table>
-  <p class="note">● = lỗi được báo ở kích thước đó. Ô trống nghĩa là <b>không được báo</b> ở kích thước đó — chưa chắc là không có lỗi.
-  <b>đo được</b> = tool đo trên DOM (box chồng nhau, cỡ chữ, khoảng trống) nên đúng sai không phụ thuộc model; không có nhãn đó là nhận xét của AI.</p>
+  <p class="note">● = reported at that viewport. An empty cell means it was <b>not reported</b> there — not that it is absent.
+  <b>measured</b> = the tool measured it on the DOM (overlapping boxes, type scale, empty space), so it does not depend on the model; no label means an AI comment.</p>
 </div>`;
 
   /**
@@ -267,42 +268,42 @@ export function renderReport(r: RunReport, stamp?: string): string {
       <div class="acceptbox" data-num="${f.num}">
         ${
           f.accepted
-            ? `<p class="accepted"><b>Đã bỏ qua — false positive / chủ ý.</b> ${esc(f.acceptedWhy ?? '')}</p>`
+            ? `<p class="accepted"><b>Dismissed — false positive / intentional.</b> ${esc(f.acceptedWhy ?? '')}</p>`
             : `<p class="acceptlab">Human check</p>`
         }
         <div class="acceptedit">
-          <label class="accepthint">${f.accepted ? 'Sửa lý do, hoặc bỏ xác nhận nếu đây vẫn là lỗi.' : 'Nếu đây không phải lỗi: ghi lý do rồi bấm Bỏ qua. Để trống nếu đây đúng là lỗi.'}</label>
-          <textarea class="why" rows="2" placeholder="Lý do / ghi chú, ví dụ: khoảng trống do form cột phải, không phải lỗi.">${f.accepted ? esc(f.acceptedWhy ?? '') : ''}</textarea>
+          <label class="accepthint">${f.accepted ? 'Edit the reason, or undo if this is still a defect.' : 'If this is not a defect: write a reason and click Dismiss. Leave empty if it is a real issue.'}</label>
+          <textarea class="why" rows="2" placeholder="Reason / note, e.g. empty space is the right-column form, not a bug.">${f.accepted ? esc(f.acceptedWhy ?? '') : ''}</textarea>
           <div class="acceptrow">
-            <button type="button" data-act="save">${f.accepted ? 'Cập nhật lý do' : 'Bỏ qua lỗi này'}</button>
-            ${f.accepted ? `<button type="button" data-act="undo">Bỏ xác nhận</button>` : ''}
+            <button type="button" data-act="save">${f.accepted ? 'Update reason' : 'Dismiss this finding'}</button>
+            ${f.accepted ? `<button type="button" data-act="undo">Undo dismiss</button>` : ''}
             <span class="acceptstate"></span>
           </div>
         </div>
       </div>
       <div class="chips">
         <span class="chip ${f.severity}">${SEV[f.severity]}</span>
-        ${f.measured ? `<span class="chip meas" title="${esc(f.locatedHow ?? '')}">đo được</span>` : `<span class="chip quiet">AI nhận xét</span>`}
-        ${f.scope === 'template' ? `<span class="chip tpl">component dùng chung</span>` : ''}
+        ${f.measured ? `<span class="chip meas" title="${esc(f.locatedHow ?? '')}">measured</span>` : `<span class="chip quiet">AI comment</span>`}
+        ${f.scope === 'template' ? `<span class="chip tpl">shared component</span>` : ''}
         ${f.viewports.map((v) => `<span class="chip">${v}</span>`).join('')}
-        ${f.isNew === true ? `<span class="chip new">mới</span>` : f.isNew === false ? `<span class="chip">vẫn còn từ lần trước</span>` : ''}
-        ${f.merged > 1 ? `<span class="chip quiet">gộp từ ${f.merged} nhận xét</span>` : ''}
+        ${f.isNew === true ? `<span class="chip new">new</span>` : f.isNew === false ? `<span class="chip">still present</span>` : ''}
+        ${f.merged > 1 ? `<span class="chip quiet">merged from ${f.merged} comments</span>` : ''}
       </div>
       <p>${esc(f.detail)}</p>
       ${
         !f.crop && f.anchors?.length
-          ? `<p class="noloc">Chưa khoanh được vùng trên ảnh — chữ AI trích: <code>${esc(f.anchors.slice(0, 2).join('</code> <code>'))}</code></p>`
+          ? `<p class="noloc">Could not crop a region — AI quoted: <code>${esc(f.anchors.slice(0, 2).join('</code> <code>'))}</code></p>`
           : ''
       }
       <p class="where">${
         f.scope === 'template'
-          ? `Có ở <b>${f.pages.length}/${r.pages.length} trang</b> — sửa một lần là hết ở tất cả: ${f.pages.map((p) => `<code>${esc(path(p))}</code>`).join(' ')}`
-          : `Trang: ${f.pages.map((p) => `<code>${esc(path(p))}</code>`).join(' ')}`
+          ? `On <b>${f.pages.length}/${r.pages.length} pages</b> — fix once and it is gone everywhere: ${f.pages.map((p) => `<code>${esc(path(p))}</code>`).join(' ')}`
+          : `Pages: ${f.pages.map((p) => `<code>${esc(path(p))}</code>`).join(' ')}`
       }</p>
     </div>
     ${
       f.crop
-        ? `<a class="shot pic" href="${esc(f.crop)}" target="_blank"><img src="${esc(f.crop)}" alt="vùng lỗi ${f.num}" loading="lazy"><span class="zoom">Bấm để xem to</span></a>`
+        ? `<a class="shot pic" href="${esc(f.crop)}" target="_blank"><img src="${esc(f.crop)}" alt="finding ${f.num}" loading="lazy"><span class="zoom">Click to enlarge</span></a>`
         : ''
     }
   </article>`;
@@ -312,36 +313,36 @@ export function renderReport(r: RunReport, stamp?: string): string {
     const changed = p.viewports.filter((v) => v.diff.changed);
     const assets = p.viewports[0] ? [...p.viewports[0].brokenImages, ...p.viewports[0].failedBackgrounds] : [];
     const flags = [
-      mine.length ? `${mine.length} lỗi riêng` : '',
-      changed.length ? `${changed.length} kích thước khác bản duyệt` : '',
-      p.mispaired ? 'nghi ghép sai design' : '',
-      p.aiError ? 'AI lỗi' : '',
+      mine.length ? `${mine.length} page-only findings` : '',
+      changed.length ? `${changed.length} viewports differ from baseline` : '',
+      p.mispaired ? 'possible design mismatch' : '',
+      p.aiError ? 'AI error' : '',
     ].filter(Boolean);
     return `
     <details class="page"${mine.length || p.mispaired ? ' open' : ''}>
       <summary>
         <code>${esc(path(p.url))}</code>
-        <span class="tiny">${p.mapping.frameName ? '↔ ' + esc(p.mapping.frameName) : 'chưa ghép design'}</span>
+        <span class="tiny">${p.mapping.frameName ? '↔ ' + esc(p.mapping.frameName) : 'no design paired'}</span>
         <span class="grow"></span>
-        ${flags.length ? `<span class="tiny ${mine.length || p.mispaired ? 'bad' : ''}">${flags.join(' · ')}</span>` : '<span class="tiny ok">ổn</span>'}
+        ${flags.length ? `<span class="tiny ${mine.length || p.mispaired ? 'bad' : ''}">${flags.join(' · ')}</span>` : '<span class="tiny ok">ok</span>'}
       </summary>
       <div class="pbody">
-        ${p.mispaired ? `<div class="alert"><b>Có thể ghép sai design cho trang này</b> — số nhận xét kiểu "thiếu phần tử / sai thứ tự" cao bất thường. Kiểm tra lại bảng ghép trước khi tin các lỗi bên dưới.</div>` : ''}
-        ${p.aiError ? `<div class="alert">AI lỗi ở trang này: ${esc(p.aiError)}</div>` : ''}
+        ${p.mispaired ? `<div class="alert"><b>This page may be paired with the wrong design</b> — unusually many “missing element / wrong order” comments. Recheck the pairing table before trusting the findings below.</div>` : ''}
+        ${p.aiError ? `<div class="alert">AI error on this page: ${esc(p.aiError)}</div>` : ''}
         ${mine.map(findingBlock).join('')}
-        ${assets.length ? `<ul class="plain">${assets.map((m: any) => `<li class="bad">${m.why ? `Ảnh nền CSS lỗi (${esc(m.why)})` : 'Ảnh không load'}: <span class="mono">${esc(m.src)}</span></li>`).join('')}</ul>` : ''}
+        ${assets.length ? `<ul class="plain">${assets.map((m: any) => `<li class="bad">${m.why ? `CSS background failed (${esc(m.why)})` : 'Image failed to load'}: <span class="mono">${esc(m.src)}</span></li>`).join('')}</ul>` : ''}
         <div class="shots">
           ${p.viewports
             .map(
               (v) => `<figure>
-                <figcaption>${v.name} <span class="tiny">${v.width}px · cao ${v.pageHeight}px</span></figcaption>
+                <figcaption>${v.name} <span class="tiny">${v.width}px · ${v.pageHeight}px tall</span></figcaption>
                 <a href="${esc(v.shot)}" target="_blank"><img src="${esc(v.shot)}" alt="" loading="lazy"></a>
                 ${
                   v.diff.noBaseline
-                    ? `<span class="tiny">chưa có bản duyệt</span>`
+                    ? `<span class="tiny">no baseline yet</span>`
                     : v.diff.changed
-                      ? `<span class="tiny bad">${v.diff.changedPixels.toLocaleString()} px đổi${v.diff.baselineHeight !== v.diff.currentHeight ? ` · cao ${v.diff.baselineHeight}→${v.diff.currentHeight}` : ''}${v.diff.diffRel ? ` · <a href="${esc(v.diff.diffRel)}" target="_blank">ảnh diff</a>` : ''}</span>`
-                      : `<span class="tiny ok">không đổi</span>`
+                      ? `<span class="tiny bad">${v.diff.changedPixels.toLocaleString()} px changed${v.diff.baselineHeight !== v.diff.currentHeight ? ` · height ${v.diff.baselineHeight}→${v.diff.currentHeight}` : ''}${v.diff.diffRel ? ` · <a href="${esc(v.diff.diffRel)}" target="_blank">diff image</a>` : ''}</span>`
+                      : `<span class="tiny ok">unchanged</span>`
                 }
               </figure>`,
             )
@@ -352,7 +353,7 @@ export function renderReport(r: RunReport, stamp?: string): string {
     </details>`;
   };
 
-  return `<!doctype html><html lang="vi"${stamp ? ` data-stamp="${esc(stamp)}"` : ''}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  return `<!doctype html><html lang="en"${stamp ? ` data-stamp="${esc(stamp)}"` : ''}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>QA Visual — ${esc(host)}</title>
 <style>
 /* Light by default, dark when the reader's system says so — a report gets opened at night too. */
@@ -530,57 +531,57 @@ footer{max-width:940px;margin:0 auto;padding:22px 20px 50px;border-top:1px solid
   <h1 class="${verdict.tone}">${esc(verdict.line)}</h1>
   <div class="verdict-sub">${esc(verdict.sub)}</div>
   <p class="runmeta">
-    <b>${esc(r.when.slice(0, 16).replace('T', ' '))}</b> · ${r.pages.length} trang${
-      r.coverage && r.coverage.seen > r.coverage.ran ? ` / ${r.coverage.seen} URL đã QA` : ''
-    } · 3 kích thước · ${(r.durationMs / 1000).toFixed(0)}s
-    · ${r.aiModel ? 'AI ' + esc(r.aiModel) : 'AI tắt'}${r.authHow ? ' · ' + esc(r.authHow) : ''}${r.approvedThisRun ? ' · <b>đã chốt làm bản duyệt</b>' : ''}
+    <b>${esc(formatQaWhen(r.when))}</b> · ${r.pages.length} pages${
+      r.coverage && r.coverage.seen > r.coverage.ran ? ` / ${r.coverage.seen} URLs already QA’d` : ''
+    } · 3 viewports · ${(r.durationMs / 1000).toFixed(0)}s
+    · ${r.aiModel ? 'AI ' + esc(r.aiModel) : 'AI off'}${r.authHow ? ' · ' + esc(r.authHow) : ''}${r.approvedThisRun ? ' · <b>saved as baseline</b>' : ''}
   </p>
 </header>
 <main>
 
 ${
   r.coverage && r.coverage.seen > r.coverage.ran
-    ? `<div class="alert"><b>Chỉ kiểm ${r.coverage.ran} trang lần này.</b> Site này đã từng QA ${r.coverage.seen} URL qua các lần chạy. Trang không nằm trong đợt này không được soi — đừng đọc là sạch.</div>`
+    ? `<div class="alert"><b>Only ${r.coverage.ran} pages in this run.</b> This site has been QA’d on ${r.coverage.seen} URLs across runs. Pages not in this batch were not inspected — do not read that as clean.</div>`
     : ''
 }
 ${
   r.ai && r.ai.failures
-    ? `<div class="fatal"><b>⚠ Báo cáo chưa đầy đủ.</b> ${r.ai.failures}/${r.ai.calls} lời gọi AI thất bại, nên những vùng đó <b>chưa được kiểm</b> — danh sách dưới đây thiếu, không phải site sạch.
+    ? `<div class="fatal"><b>⚠ Report is incomplete.</b> ${r.ai.failures}/${r.ai.calls} AI calls failed, so those regions were <b>not reviewed</b> — the list below is missing items, not a clean site.
        <div class="tiny" style="margin-top:6px;color:inherit;opacity:.85">${r.ai.stopped ? esc(r.ai.stopped) : esc(r.ai.lastError ?? '')}</div></div>`
     : ''
 }
 ${
   r.ai?.silent
-    ? `<div class="fatal"><b>⚠ Model không trả về kết quả nào.</b> ${r.ai.calls}/${r.ai.calls} lời gọi AI <b>thành công</b> (không có lỗi mạng, không hết quota) nhưng model không nêu một lỗi nào ở bất kỳ lượt nào.
-       <div class="tiny" style="margin-top:6px;color:inherit;opacity:.85">Gọi được ≠ trả lời được. Rất có thể model đang dùng quá yếu cho việc so ảnh — đổi <code>QA_AI_MODEL</code> rồi chạy lại (<code>npm run models</code>). Đừng đọc báo cáo này là "site sạch".</div></div>`
+    ? `<div class="fatal"><b>⚠ The model returned no findings.</b> ${r.ai.calls}/${r.ai.calls} AI calls <b>succeeded</b> (no network error, no quota) but the model reported nothing on any pass.
+       <div class="tiny" style="margin-top:6px;color:inherit;opacity:.85">A successful call is not a useful answer. The model is likely too weak for image compare — change <code>QA_AI_MODEL</code> and run again (<code>npm run models</code>). Do not read this report as a clean site.</div></div>`
     : ''
 }
 ${
   r.ai?.wrongLang
-    ? `<div class="alert"><b>Model trả lời sai ngôn ngữ.</b> ${r.ai.wrongLang} nhận xét không phải tiếng Việt — model đang bỏ qua yêu cầu trong prompt. Nội dung lỗi vẫn dùng được, nhưng nên đổi <code>QA_AI_MODEL</code> sang model khoẻ hơn (<code>npm run models</code>).</div>`
+    ? `<div class="alert"><b>The model answered in the wrong language.</b> ${r.ai.wrongLang} comments are not in English — the model ignored the prompt. The findings are still usable, but switch <code>QA_AI_MODEL</code> to a stronger model (<code>npm run models</code>).</div>`
     : ''
 }
 ${
   mispaired.length
-    ? `<div class="alert"><b>Có thể ghép sai design</b> ở ${mispaired.length} trang: ${mispaired.map((p) => `<code>${esc(path(p.url))}</code>`).join(' ')}. Kiểm tra lại bảng ghép trước khi tin các lỗi của những trang này.</div>`
+    ? `<div class="alert"><b>Possible design mismatch</b> on ${mispaired.length} pages: ${mispaired.map((p) => `<code>${esc(path(p.url))}</code>`).join(' ')}. Recheck the pairing table before trusting those findings.</div>`
     : ''
 }
 ${
   r.drift && r.drift.gone.length
-    ? `<div class="alert"><b>Lần chạy trước báo, lần này không thấy</b> — cần bạn xác nhận đã sửa hay AI bỏ sót:
-       <ul>${r.drift.gone.map((g) => `<li>${esc(g.title)} <span class="tiny" style="color:inherit;opacity:.8">(${esc(SEV[g.severity] ?? g.severity)}${g.scope === 'template' ? ', dùng chung' : ''})</span></li>`).join('')}</ul></div>`
+    ? `<div class="alert"><b>Reported last run, missing this run</b> — confirm they were fixed, or that the AI missed them:
+       <ul>${r.drift.gone.map((g) => `<li>${esc(g.title)} <span class="tiny" style="color:inherit;opacity:.8">(${esc(SEV[g.severity] ?? g.severity)}${g.scope === 'template' ? ', shared' : ''})</span></li>`).join('')}</ul></div>`
     : ''
 }
 
 <section class="notesbox">
-  <h2>Ghi chú của người kiểm</h2>
-  <p class="lead">Những gì AI bỏ sót, hoặc lưu ý cho người đọc lần sau.${
-    r.humanNotesAt ? ` Ghi lúc ${esc(r.humanNotesAt.slice(0, 16).replace('T', ' '))}.` : ''
+  <h2>Reviewer notes</h2>
+  <p class="lead">Things the AI missed, or notes for the next reader.${
+    r.humanNotesAt ? ` Written ${esc(formatQaWhen(r.humanNotesAt))}.` : ''
   }</p>
   <div class="notesedit">
-    <textarea class="notes" rows="4" placeholder="Ghi chú cho lần chạy này…">${esc(r.humanNotes ?? '')}</textarea>
+    <textarea class="notes" rows="4" placeholder="Notes for this run…">${esc(r.humanNotes ?? '')}</textarea>
     <div class="acceptrow">
-      <button type="button" data-act="savenote">Lưu ghi chú</button>
+      <button type="button" data-act="savenote">Save notes</button>
       <span class="acceptstate"></span>
     </div>
   </div>
@@ -589,10 +590,10 @@ ${
 ${
   open.length
     ? `<section>
-  <h2>Danh sách lỗi</h2>
-  <p class="lead">Bấm tên lỗi để xem ảnh khoanh vùng.${
-    r.drift ? ` So với lần chạy trước: ${open.filter((f) => f.isNew).length} mới · ${open.filter((f) => f.isNew === false).length} vẫn còn.` : ''
-  }${r.rawFindingCount > open.length ? ` Đã gộp ${r.rawFindingCount} nhận xét thô thành ${open.length} lỗi.` : ''}</p>
+  <h2>Findings</h2>
+  <p class="lead">Click a title to jump to the cropped screenshot.${
+    r.drift ? ` vs last run: ${open.filter((f) => f.isNew).length} new · ${open.filter((f) => f.isNew === false).length} still present.` : ''
+  }${r.rawFindingCount > open.length ? ` Merged ${r.rawFindingCount} raw comments into ${open.length} findings.` : ''}</p>
   ${indexTable()}
 </section>`
     : ''
@@ -601,8 +602,8 @@ ${
 ${
   template.length
     ? `<section>
-  <h2>Lỗi ở component dùng chung</h2>
-  <p class="lead">Header / nav / footer — sửa một lần là hết ở mọi trang. Đây là chỗ đáng sửa trước.</p>
+  <h2>Shared-component findings</h2>
+  <p class="lead">Header / nav / footer — fix once and it is gone on every page. Start here.</p>
   ${template.map(findingBlock).join('')}
 </section>`
     : ''
@@ -611,8 +612,8 @@ ${
 ${
   accepted.length
     ? `<section>
-  <h2>Đã duyệt là cố ý (${accepted.length})</h2>
-  <p class="lead">Người xem đã xác nhận những chỗ này là false positive hoặc chủ ý, nên không tính vào số lỗi. Sửa lý do hoặc bỏ xác nhận ngay trên thẻ — lần chạy sau cũng không tính lại.</p>
+  <h2>Dismissed as intentional (${accepted.length})</h2>
+  <p class="lead">A reviewer marked these as false positives or intentional, so they do not count. Edit the reason or undo on the card — later runs will keep them dismissed.</p>
   ${accepted.map(findingBlock).join('')}
 </section>`
     : ''
@@ -621,13 +622,13 @@ ${
 ${
   perPage.length
     ? `<section>
-  <h2>Lỗi riêng từng trang</h2>
-  <p class="lead">Mở từng trang để xem lỗi kèm ảnh chụp cả 3 kích thước.</p>
+  <h2>Page-only findings</h2>
+  <p class="lead">Open a page to see its findings with all 3 viewport screenshots.</p>
   ${r.pages.map(pageRow).join('')}
 </section>`
     : `<section>
-  <h2>Từng trang</h2>
-  <p class="lead">Không có lỗi riêng của trang nào. Mở ra nếu muốn xem ảnh chụp.</p>
+  <h2>Pages</h2>
+  <p class="lead">No page-only findings. Open a page to see its screenshots.</p>
   ${r.pages.map(pageRow).join('')}
 </section>`
 }
@@ -635,72 +636,72 @@ ${
 ${
   r.sweeps.some((s) => s.breaks.length)
     ? `<section>
-  <h2>Layout tràn ngang</h2>
-  <p class="lead">Dải chiều rộng mà trang rộng hơn màn hình — cần thêm media query.</p>
+  <h2>Horizontal overflow</h2>
+  <p class="lead">Width ranges where the page is wider than the viewport — a media query is needed.</p>
   <div class="card pad">${r.sweeps
     .filter((s) => s.breaks.length)
     .map(
       (s) =>
         `<code>${esc(path(s.url))}</code><ul class="plain">${s.breaks
-          .map((b) => `<li>Từ <b>${b.from}px</b> xuống <b>${b.to}px</b>: rộng hơn màn hình tới ${b.overflowPx}px — cần media query quanh ${b.from}px.</li>`)
+          .map((b) => `<li>From <b>${b.from}px</b> down to <b>${b.to}px</b>: ${b.overflowPx}px wider than the screen — add a media query around ${b.from}px.</li>`)
           .join('')}</ul>`,
     )
-    .join('')}<p class="tiny" style="margin:0">Chỉ quét ở trang chủ — điểm vỡ layout là chuyện của template.</p></div>
+    .join('')}<p class="tiny" style="margin:0">Swept on the homepage only — overflow breakpoints belong to the template.</p></div>
 </section>`
     : ''
 }
 
 <details class="tech">
-  <summary>Chi tiết kỹ thuật</summary>
+  <summary>Technical details</summary>
 
-  <h3>Bảng ghép URL ↔ design</h3>
+  <h3>URL ↔ design pairing</h3>
   <div class="card" style="overflow-x:auto">
     <table class="plain">
-      <thead><tr><th>Trang</th><th>Frame Figma</th><th>Cách ghép</th></tr></thead>
+      <thead><tr><th>Page</th><th>Figma frame</th><th>How paired</th></tr></thead>
       <tbody>${r.pages
         .map(
           (p) => `<tr>
         <td><a href="${esc(p.url)}" target="_blank">${esc(path(p.url))}</a></td>
-        <td>${p.mapping.frameName ? esc(p.mapping.frameName) + (p.mapping.isTemplate ? ' <span class="chip">template</span>' : '') : '<span class="warn">chưa ghép</span>'}</td>
+        <td>${p.mapping.frameName ? esc(p.mapping.frameName) + (p.mapping.isTemplate ? ' <span class="chip">template</span>' : '') : '<span class="warn">unpaired</span>'}</td>
         <td class="tiny">${esc(p.mapping.how)}</td>
       </tr>`,
         )
         .join('')}</tbody>
     </table>
   </div>
-  ${unmapped.length ? `<p class="tiny warn">${unmapped.length} trang chưa có design — vẫn so với bản duyệt, quét sweep và kiểm ảnh lỗi, nhưng không đối chiếu design.</p>` : ''}
+  ${unmapped.length ? `<p class="tiny warn">${unmapped.length} pages have no design — still compared to the baseline, swept, and checked for broken images, but not compared to design.</p>` : ''}
 
-  <h3>Số liệu lần chạy</h3>
+  <h3>Run stats</h3>
   <div class="card pad">
     <table class="plain">
       <tbody>
-        <tr><td>Lỗi nặng</td><td class="${majors ? 'bad' : 'ok'}">${majors}</td></tr>
-        <tr><td>Lỗi ở component dùng chung</td><td>${template.length}</td></tr>
-        <tr><td>Lỗi riêng từng trang</td><td>${perPage.length}</td></tr>
-        <tr><td>Trang khác bản duyệt</td><td class="${changedPages.length ? 'bad' : 'ok'}">${changedPages.length}/${r.pages.length}</td></tr>
-        <tr><td>Ảnh / nền không load</td><td class="${brokenAssets.size ? 'bad' : 'ok'}">${brokenAssets.size}</td></tr>
-        <tr><td>Script / CSS / font lỗi</td><td class="${criticalReq.length ? 'bad' : 'ok'}">${criticalReq.length}</td></tr>
-        <tr><td>Nhận xét thô từ AI</td><td>${r.rawFindingCount}</td></tr>
-        <tr><td>Chuỗi chữ nhận là component dùng chung</td><td>${r.sharedTextCount}</td></tr>
-        ${r.ai ? `<tr><td>Lời gọi AI</td><td>${r.ai.calls - r.ai.failures}/${r.ai.calls} thành công</td></tr>` : ''}
-        ${r.coverage && r.coverage.seen > r.coverage.ran ? `<tr><td>Đợt này / URL đã từng QA</td><td>${r.coverage.ran}/${r.coverage.seen}</td></tr>` : ''}
-        ${r.drift ? `<tr><td>Đối chiếu với lần chạy</td><td class="mono">${esc(r.drift.previousRun)}</td></tr>` : ''}
+        <tr><td>Major findings</td><td class="${majors ? 'bad' : 'ok'}">${majors}</td></tr>
+        <tr><td>Shared-component findings</td><td>${template.length}</td></tr>
+        <tr><td>Page-only findings</td><td>${perPage.length}</td></tr>
+        <tr><td>Pages that differ from baseline</td><td class="${changedPages.length ? 'bad' : 'ok'}">${changedPages.length}/${r.pages.length}</td></tr>
+        <tr><td>Images / backgrounds that failed</td><td class="${brokenAssets.size ? 'bad' : 'ok'}">${brokenAssets.size}</td></tr>
+        <tr><td>Failed script / CSS / font</td><td class="${criticalReq.length ? 'bad' : 'ok'}">${criticalReq.length}</td></tr>
+        <tr><td>Raw AI comments</td><td>${r.rawFindingCount}</td></tr>
+        <tr><td>Strings treated as shared chrome</td><td>${r.sharedTextCount}</td></tr>
+        ${r.ai ? `<tr><td>AI calls</td><td>${r.ai.calls - r.ai.failures}/${r.ai.calls} succeeded</td></tr>` : ''}
+        ${r.coverage && r.coverage.seen > r.coverage.ran ? `<tr><td>This batch / URLs previously QA’d</td><td>${r.coverage.ran}/${r.coverage.seen}</td></tr>` : ''}
+        ${r.drift ? `<tr><td>Compared with run</td><td class="mono">${esc(r.drift.previousRun)}</td></tr>` : ''}
       </tbody>
     </table>
   </div>
 
   ${
     criticalReq.length
-      ? `<h3>Request lỗi</h3><div class="card pad"><ul class="plain">${criticalReq.slice(0, 20).map((f) => `<li class="bad mono">${esc(f)}</li>`).join('')}</ul></div>`
+      ? `<h3>Failed requests</h3><div class="card pad"><ul class="plain">${criticalReq.slice(0, 20).map((f) => `<li class="bad mono">${esc(f)}</li>`).join('')}</ul></div>`
       : ''
   }
 </details>
 
 </main>
 <footer>
-  Vùng video/iframe/canvas hiện trắng trong ảnh chụp nên được tự loại khỏi so sánh.
-  Vùng lỗi được khoanh bằng cách tra chữ AI trích dẫn vào DOM, không dùng toạ độ AI đoán.
-  Chạy lại với <code>--approve</code> để chốt bản duyệt mới.
+  Video / iframe / canvas regions render white in screenshots, so they are excluded from the compare.
+  Finding crops are located by looking up the AI’s quoted text in the DOM, not from guessed coordinates.
+  Re-run with <code>--approve</code> to save a new baseline.
 </footer>
 ${ACCEPT_SCRIPT}
 </body></html>`;

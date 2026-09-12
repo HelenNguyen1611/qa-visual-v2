@@ -1,6 +1,7 @@
 import type { TextItem, MediaRegion, ReservedRegion } from './browser.js';
 import type { Box } from './annotate.js';
 import type { AiFinding } from './report.js';
+import type { FigmaOverlay, FigmaOverlayBox } from './design.js';
 
 /**
  * Defects the browser's own measurements can prove, with no model in the loop.
@@ -21,7 +22,7 @@ export interface Measured {
 }
 
 /** Per viewport, so one pathological page cannot fill the report with crops. */
-const CAP = { overlap: 4, type: 2, gap: 1 };
+const CAP = { overlap: 4, type: 2, gap: 1, aspect: 2, banner: 1 };
 
 const area = (b: { w: number; h: number }) => Math.max(0, b.w) * Math.max(0, b.h);
 
@@ -106,14 +107,14 @@ function overlaps(items: TextItem[], viewportWidth: number): Measured[] {
       used.add(j);
       out.push({
         finding: {
-          title: 'Chữ chồng lên nhau',
+          title: 'Overlapping text',
           severity: 'major',
           detail:
-            `Hai khối chữ đè lên nhau ${Math.round(ratio * 100)}% (vùng chồng ${Math.round(inter.w)}×${Math.round(inter.h)}px): ` +
-            `“${a.text.slice(0, 60)}” và “${b.text.slice(0, 60)}”. Đo trực tiếp trên DOM, không phải nhận xét từ ảnh.`,
+            `Two text blocks overlap by ${Math.round(ratio * 100)}% (${Math.round(inter.w)}×${Math.round(inter.h)}px): ` +
+            `“${a.text.slice(0, 60)}” and “${b.text.slice(0, 60)}”. Measured on the DOM, not inferred from the screenshot.`,
           anchors: [a.text.slice(0, 60), b.text.slice(0, 60)],
           y: Math.min(a.y, b.y),
-          locatedHow: 'đo trên DOM: hai box chữ giao nhau',
+          locatedHow: 'measured on DOM: two text boxes intersect',
           measured: true,
         },
         box: union(a, b),
@@ -151,15 +152,15 @@ function typeHierarchy(items: TextItem[], viewportWidth: number): Measured[] {
     if (a >= b - 0.5) continue;
     out.push({
       finding: {
-        title: `Cỡ chữ sai phân cấp: ${hi.toUpperCase()} nhỏ hơn ${lo.toUpperCase()}`,
+        title: `Type hierarchy inverted: ${hi.toUpperCase()} smaller than ${lo.toUpperCase()}`,
         severity: 'minor',
         detail:
-          `${hi.toUpperCase()} lớn nhất trên trang là ${a}px (“${big.text.slice(0, 50)}”), ` +
-          `trong khi ${lo.toUpperCase()} lớn nhất là ${b}px (“${small.text.slice(0, 50)}”). ` +
-          `Cấp trên phải lớn hơn hoặc bằng cấp dưới. Đo bằng computed style.`,
+          `Largest ${hi.toUpperCase()} on the page is ${a}px (“${big.text.slice(0, 50)}”), ` +
+          `while the largest ${lo.toUpperCase()} is ${b}px (“${small.text.slice(0, 50)}”). ` +
+          `The higher level must be larger or equal. Measured from computed style.`,
         anchors: [big.text.slice(0, 60), small.text.slice(0, 60)],
         y: big.y,
-        locatedHow: `đo trên DOM: font-size ${a}px vs ${b}px`,
+        locatedHow: `measured on DOM: font-size ${a}px vs ${b}px`,
         measured: true,
       },
       box: { x: big.x, y: big.y, w: big.w, h: big.h },
@@ -233,20 +234,246 @@ function firstScreenGap(
   return [
     {
       finding: {
-        title: 'Khoảng trống lớn ở màn hình đầu',
+        title: 'Large empty band on the first screen',
         severity: 'minor',
         detail:
-          `Không có chữ hay media nào trong dải y = ${Math.round(worst.from)} … ${Math.round(worst.to)} ` +
-          `(${size}px, chiếm ${Math.round((size / viewportHeight) * 100)}% màn hình đầu cao ${viewportHeight}px). ` +
-          `Đo trên DOM: đã tính cả ảnh, video, ảnh nền CSS, và cả media đang ẩn chờ hiệu ứng, là nội dung.`,
+          `No text or media in y = ${Math.round(worst.from)} … ${Math.round(worst.to)} ` +
+          `(${size}px, ${Math.round((size / viewportHeight) * 100)}% of the ${viewportHeight}px first screen). ` +
+          `Measured on the DOM: images, video, CSS backgrounds, and media reserved for effects all count as content.`,
         anchors: anchors.length ? anchors : undefined,
         y: Math.round(worst.from),
-        locatedHow: `đo trên DOM: trống ${size}px trong màn hình đầu`,
+        locatedHow: `measured on DOM: ${size}px empty on the first screen`,
         measured: true,
       },
       box: { x: 0, y: Math.round(worst.from), w: viewportWidth, h: size },
     },
   ];
+}
+
+/** Drop BEM `--modifier` classes so `card--wide` still shares a row with `card`. */
+function stripBemModifiers(segment: string): string {
+  return segment.replace(/\.[A-Za-z0-9_-]+--[A-Za-z0-9_-]+/g, '');
+}
+
+/**
+ * Selector without the image and its local wrap (picture/figure) — the shared row/carousel.
+ * BEM modifiers are stripped first: the card is often two wrappers above the img, so dropping
+ * the last two segments alone would leave `card--wide` as its own group.
+ */
+export function mediaRowKey(selector: string): string {
+  const parts = selector.split(/\s*>\s*/).filter(Boolean).map(stripBemModifiers);
+  if (parts.length < 3) return '';
+  return parts.slice(0, -2).join(' > ');
+}
+
+export function displayedAspect(m: { w: number; h: number }): number {
+  return m.h > 0 ? m.w / m.h : 0;
+}
+
+function median(xs: number[]): number {
+  const s = xs.slice().sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+}
+
+/**
+ * Index of a single ratio that sits away from a tight cluster of the rest.
+ * Two loners, or a spread group, is not a finding.
+ */
+export function loneAspectOutlier(aspects: number[]): number {
+  if (aspects.length < 3) return -1;
+  let found = -1;
+  for (let i = 0; i < aspects.length; i++) {
+    const others = aspects.filter((_, j) => j !== i);
+    const med = median(others);
+    const cluster = Math.max(0.05, med * 0.06);
+    if (others.some((a) => Math.abs(a - med) > cluster)) continue;
+    const floor = Math.max(0.08, med * 0.1);
+    if (Math.abs(aspects[i] - med) < floor) continue;
+    if (found !== -1) return -1;
+    found = i;
+  }
+  return found;
+}
+
+/** How much of the box sits inside the viewport — clones parked off-canvas do not count. */
+function visibleWidth(m: { x: number; w: number }, viewportWidth: number): number {
+  return Math.min(m.x + m.w, viewportWidth) - Math.max(m.x, 0);
+}
+
+/**
+ * One card image whose displayed box is a different ratio than the others in the same row.
+ * Compares layout boxes among peers — not natural-vs-rendered stretch (that is `distortion`).
+ */
+export function peerImageAspect(media: MediaRegion[], viewportWidth: number): Measured[] {
+  const imgs = media.filter((m) => m.kind === 'img' && m.w >= 80 && m.h >= 80 && visibleWidth(m, viewportWidth) >= 80);
+  const buckets = new Map<string, MediaRegion[]>();
+  for (const m of imgs) {
+    const key = mediaRowKey(m.selector);
+    if (!key) continue;
+    const list = buckets.get(key) ?? [];
+    list.push(m);
+    buckets.set(key, list);
+  }
+
+  const out: Measured[] = [];
+  for (const group of buckets.values()) {
+    if (out.length >= CAP.aspect) break;
+    if (group.length < 3) continue;
+    const midY = median(group.map((g) => g.y));
+    const midH = median(group.map((g) => g.h));
+    const row = group.filter(
+      (g) => Math.abs(g.y - midY) <= Math.max(48, midH * 0.25) && Math.abs(g.h - midH) <= Math.max(24, midH * 0.25),
+    );
+    if (row.length < 3) continue;
+    const aspects = row.map(displayedAspect);
+    const idx = loneAspectOutlier(aspects);
+    if (idx < 0) continue;
+    const hit = row[idx];
+    const med = median(aspects.filter((_, i) => i !== idx));
+    const shown = aspects[idx];
+    out.push({
+      finding: {
+        title: 'Card image aspect differs from its row',
+        severity: 'minor',
+        detail:
+          `Image ${Math.round(hit.w)}×${Math.round(hit.h)}px (aspect ${shown.toFixed(2)}) is off the rest of the row ` +
+          `(median ${med.toFixed(2)}, ${row.length} images). Measured from displayed boxes, not the source file.`,
+        y: hit.y,
+        locatedHow: `measured on DOM: aspect ${shown.toFixed(2)} vs median ${med.toFixed(2)}`,
+        measured: true,
+      },
+      box: { x: hit.x, y: hit.y, w: hit.w, h: hit.h },
+    });
+  }
+  return out;
+}
+
+/**
+ * A media surface that is wide but not full-bleed.
+ *
+ * Full-bleed heroes make the page margin look like "banner padding" (Figma 50 vs DOM 120).
+ * The case this check is for is an inset banner: image shorter than the page, text sitting on it.
+ */
+export function isInsetBanner(box: FigmaOverlayBox, pageW: number): boolean {
+  if (pageW < 800 || box.w < 400) return false;
+  if (box.w < pageW * 0.55 || box.w > pageW * 0.96) return false;
+  return box.x >= 8 || pageW - (box.x + box.w) >= 8;
+}
+
+export function overlayGutter(text: FigmaOverlayBox, host: FigmaOverlayBox): number {
+  return Math.min(text.x - host.x, host.x + host.w - (text.x + text.w));
+}
+
+function containsOverlay(host: FigmaOverlayBox, text: FigmaOverlayBox): boolean {
+  if (text.x < host.x - 4 || text.x + text.w > host.x + host.w + 4) return false;
+  const overlap = Math.min(text.y + text.h, host.y + host.h) - Math.max(text.y, host.y);
+  return overlap >= Math.min(text.h, 12) * 0.5;
+}
+
+function tightestHost(text: FigmaOverlayBox, surfaces: FigmaOverlayBox[], pageW: number): FigmaOverlayBox | null {
+  const hits = surfaces.filter((s) => isInsetBanner(s, pageW) && containsOverlay(s, text));
+  if (!hits.length) return null;
+  return hits.slice().sort((a, b) => a.w * a.h - b.w * b.h)[0];
+}
+
+export function normText(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function textScore(a: string, b: string): number {
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  if (a.includes(b) || b.includes(a)) {
+    const lo = Math.min(a.length, b.length);
+    const hi = Math.max(a.length, b.length);
+    return lo / hi >= 0.7 ? 0.9 : 0;
+  }
+  return 0;
+}
+
+/** Pairs that win clearly — a repeated CTA is not a pair. */
+export function uniqueTextPairs(figma: Array<{ text: string }>, dom: Array<{ text: string }>): Array<{ fi: number; di: number }> {
+  const fn = figma.map((t) => normText(t.text));
+  const dn = dom.map((t) => normText(t.text));
+  const used = new Set<number>();
+  const pairs: Array<{ fi: number; di: number }> = [];
+  for (let i = 0; i < fn.length; i++) {
+    let best = -1;
+    let bestS = 0;
+    let second = 0;
+    for (let j = 0; j < dn.length; j++) {
+      if (used.has(j)) continue;
+      const s = textScore(fn[i], dn[j]);
+      if (s > bestS) {
+        second = bestS;
+        bestS = s;
+        best = j;
+      } else if (s > second) second = s;
+    }
+    if (best < 0 || bestS < 0.85 || bestS - second < 0.2) continue;
+    used.add(best);
+    pairs.push({ fi: i, di: best });
+  }
+  return pairs;
+}
+
+/**
+ * Overlay heading on an inset banner whose distance to the image edge differs from Figma.
+ *
+ * Inset is the heading box against the image box — not CSS padding, and not a text-wrap wrapper.
+ * Full-bleed surfaces are skipped. Only desktop-width viewports: Figma pages are desktop artboards.
+ */
+export function overlayBannerPad(
+  items: TextItem[],
+  media: MediaRegion[],
+  overlay: FigmaOverlay,
+  viewportWidth: number,
+): Measured[] {
+  if (!overlay.pageWidth || viewportWidth < 1200) return [];
+  const headings = items.filter((t) => t.heading && /^h[123]$/.test(t.heading) && !t.ariaHidden && t.w >= 8);
+  const surfaces = media.filter((m) => m.kind === 'img' || m.kind === 'background');
+  const pairs = uniqueTextPairs(overlay.texts, headings);
+  const out: Measured[] = [];
+  const used = new Set<FigmaOverlayBox>();
+  const scale = viewportWidth / overlay.pageWidth;
+
+  for (const { fi, di } of pairs) {
+    if (out.length >= CAP.banner) break;
+    const ft = overlay.texts[fi];
+    const dt = headings[di];
+    const fs = tightestHost(ft, overlay.surfaces, overlay.pageWidth);
+    const ds = tightestHost(dt, surfaces, viewportWidth);
+    if (!fs || !ds || used.has(ds)) continue;
+    const raw = overlayGutter(ft, fs);
+    const fg = raw * scale;
+    const dg = overlayGutter(dt, ds);
+    if (fg < 8 || dg < 8) continue;
+    if (fg > fs.w * 0.22 || dg > ds.w * 0.22) continue;
+    const delta = Math.abs(dg - fg);
+    if (delta < Math.max(16, fg * 0.2)) continue;
+    used.add(ds);
+    const scaled = Math.abs(scale - 1) > 0.03 ? ` (×${scale.toFixed(2)} → ${Math.round(fg)}px)` : '';
+    out.push({
+      finding: {
+        title: 'Banner inset differs from Figma',
+        severity: 'minor',
+        detail:
+          `Overlay text “${dt.text.slice(0, 60)}” is ${Math.round(dg)}px from the image edge on the page, ` +
+          `Figma ${Math.round(raw)}px${scaled}. Measured as text inset on the image surface, not a text-wrap wrapper.`,
+        anchors: [dt.text.slice(0, 60)],
+        y: ds.y,
+        locatedHow: `measured on DOM: gutter ${Math.round(dg)}px vs Figma ${Math.round(fg)}px`,
+        measured: true,
+      },
+      box: { x: ds.x, y: ds.y, w: ds.w, h: ds.h },
+    });
+  }
+  return out;
 }
 
 /** Every measured check for one viewport of one page. */
@@ -256,11 +483,12 @@ export function detectAll(
   reserved: ReservedRegion[],
   viewportWidth: number,
   viewportHeight: number,
+  overlay?: FigmaOverlay,
 ): Measured[] {
-  if (!items.length) return [];
   return [
-    ...overlaps(items, viewportWidth),
-    ...typeHierarchy(items, viewportWidth),
+    ...(items.length ? [...overlaps(items, viewportWidth), ...typeHierarchy(items, viewportWidth)] : []),
     ...firstScreenGap(items, media, reserved, viewportWidth, viewportHeight),
+    ...peerImageAspect(media, viewportWidth),
+    ...(overlay ? overlayBannerPad(items, media, overlay, viewportWidth) : []),
   ];
 }

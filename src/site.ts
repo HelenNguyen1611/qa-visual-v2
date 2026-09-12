@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { formatQaWhen } from './time.js';
 
 /**
  * Which site a run belongs to.
@@ -97,7 +98,7 @@ export function summarizeRun(root: string, stamp: string): RunSummary | null {
       stamp,
       site,
       host: siteHost(site) || stamp,
-      when: typeof r.when === 'string' ? r.when : stamp,
+      when: formatQaWhen(typeof r.when === 'string' ? r.when : stamp),
       findings,
       hasShare: existsSync(join(dir, 'report-share.html')),
       hasNotes: typeof r.humanNotes === 'string' && Boolean(r.humanNotes.trim()),

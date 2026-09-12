@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="vi">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -142,91 +142,91 @@
 <main>
   <!-- ============================ 1. input ============================ -->
   <section class="card" id="s1">
-    <h2>Trang web và design</h2>
-    <p class="sub">Nhập URL trang chủ và link file Figma. Tool sẽ dò các trang của site rồi đoán frame tương ứng — bạn sửa lại ở bước sau.</p>
+    <h2>Site and design</h2>
+    <p class="sub">Enter the homepage URL and a Figma file link. The tool will discover pages and guess matching frames — you can fix the pairing in the next step.</p>
     <div class="field">
-      <label for="site">URL trang chủ</label>
+      <label for="site">Homepage URL</label>
       <input type="url" id="site" placeholder="https://example.com/" autocomplete="url">
     </div>
     <div class="field row2">
       <div>
-        <label for="figma">Link Figma <span style="font-weight:400;color:var(--dim)">(hoặc đường dẫn folder PNG · để trống nếu chưa có design)</span></label>
+        <label for="figma">Figma link <span style="font-weight:400;color:var(--dim)">(or a folder of PNGs · leave empty if there is no design yet)</span></label>
         <input type="text" id="figma" placeholder="https://www.figma.com/design/…">
       </div>
       <div>
-        <label for="max">Số trang tối đa</label>
+        <label for="max">Max pages</label>
         <input type="number" id="max" value="8" min="1" max="80">
       </div>
     </div>
     <label class="toggle" for="fast">
       <input type="checkbox" id="fast">
       <span>
-        <span class="tlab">Chạy nhanh</span>
-        <span class="thint">AI tối đa 3 lời gọi cùng lúc — cùng số trang và ảnh, thường ~2.5–3 phút / 8 trang. Tắt = 1 lời gọi một lúc như cũ. Token không tăng nếu API không retry.</span>
+        <span class="tlab">Fast mode</span>
+        <span class="thint">Up to 3 AI calls at once — same pages and screenshots, usually ~2.5–3 min / 8 pages. Off = one call at a time. Tokens do not increase unless the API retries.</span>
       </span>
     </label>
     <details class="authbox" id="authbox">
-      <summary>Site có mật khẩu? (staging, Basic auth, hoặc trang login)</summary>
+      <summary>Password-protected site? (staging, Basic auth, or a login page)</summary>
       <div class="row2" style="margin-top:12px">
         <div>
           <label for="auser">User</label>
-          <input type="text" id="auser" autocomplete="off" spellcheck="false" placeholder="tên đăng nhập">
+          <input type="text" id="auser" autocomplete="off" spellcheck="false" placeholder="username">
         </div>
         <div>
-          <label for="apass">Mật khẩu</label>
+          <label for="apass">Password</label>
           <input type="password" id="apass" autocomplete="off" placeholder="••••••••">
         </div>
       </div>
-      <p class="hint">Chỉ giữ trong bộ nhớ của server, <b>không lưu vào máy</b> — mở lại trang là phải nhập lại.
-      Muốn khỏi nhập mỗi lần thì đặt <code>QA_HTTP_USER</code> / <code>QA_HTTP_PASS</code> trong <code>.env</code>.
-      Tool tự nhận biết là Basic auth (popup của browser) hay form login.</p>
+      <p class="hint">Kept in server memory only — <b>not saved to disk</b>. Reload the page and you will need to enter it again.
+      To skip typing it each time, set <code>QA_HTTP_USER</code> / <code>QA_HTTP_PASS</code> in <code>.env</code>.
+      The tool detects Basic auth (browser popup) vs a login form.</p>
     </details>
     <div id="e1"></div>
     <div class="saved" id="saved" hidden></div>
     <div class="btnrow">
-      <button class="primary" id="go1">Dò trang</button>
-      <button id="redo" hidden>Dò lại từ đầu</button>
+      <button class="primary" id="go1">Discover pages</button>
+      <button id="redo" hidden>Discover from scratch</button>
     </div>
-    <p class="hint" id="hint1">Bước này mất 15–30 giây: mở browser, đọc sitemap (hoặc dò link trang chủ), đọc file Figma và render frame.</p>
+    <p class="hint" id="hint1">This step takes 15–30 seconds: open a browser, read the sitemap (or homepage links), read the Figma file and render frames.</p>
   </section>
 
   <!-- ============================ 2. pairing =========================== -->
   <section class="card" id="s2" hidden>
-    <h2>Bảng ghép URL ↔ frame Figma</h2>
+    <h2>URL ↔ Figma frame pairing</h2>
     <p class="sub" id="s2sub"></p>
     <div id="e2"></div>
     <table>
-      <thead><tr><th></th><th></th><th>Design</th><th>URL trang</th><th>Frame Figma</th><th></th></tr></thead>
+      <thead><tr><th></th><th></th><th>Design</th><th>Page URL</th><th>Figma frame</th><th></th></tr></thead>
       <tbody id="rows"></tbody>
     </table>
     <div class="toolbar">
-      <button id="add">+ Thêm cặp</button>
-      <button id="back2">Đổi link</button>
-      <button id="picknew">Chọn trang chưa QA</button>
-      <button id="pickold">Chọn trang đã QA</button>
-      <button id="pickall">Chọn tất cả</button>
+      <button id="add">+ Add pair</button>
+      <button id="back2">Change links</button>
+      <button id="picknew">Select unreviewed</button>
+      <button id="pickold">Select already QA’d</button>
+      <button id="pickall">Select all</button>
       <span class="grow"></span>
-      <label class="fastlab" for="fast2"><input type="checkbox" id="fast2"> Chạy nhanh</label>
+      <label class="fastlab" for="fast2"><input type="checkbox" id="fast2"> Fast mode</label>
       <span class="hint" id="count"></span>
-      <button class="primary" id="go2">Chạy QA</button>
+      <button class="primary" id="go2">Run QA</button>
     </div>
   </section>
 
   <!-- ============================= 3. run ============================== -->
   <section class="card" id="s3" hidden>
-    <h2 id="s3title">Đang chạy QA…</h2>
-    <p class="sub" id="s3sub">Chụp 3 kích thước màn hình cho từng trang, so với design, rồi gộp lỗi trùng.</p>
+    <h2 id="s3title">Running QA…</h2>
+    <p class="sub" id="s3sub">Capture 3 viewports per page, compare with the design, then merge duplicate findings.</p>
     <div class="prog" id="prog" hidden>
       <div class="bar"><div class="fill" id="fill"></div></div>
       <div class="prow">
-        <span id="plabel">đang bắt đầu…</span>
+        <span id="plabel">starting…</span>
         <span class="grow"></span>
         <span class="mono" id="pcount"></span>
       </div>
     </div>
     <div class="done" id="doneBar" hidden></div>
 
-    <details id="logbox"><summary class="cap">Xem log chi tiết</summary><pre class="log" id="log"></pre></details>
+    <details id="logbox"><summary class="cap">Show detailed log</summary><pre class="log" id="log"></pre></details>
   </section>
 
   <!--
@@ -237,26 +237,26 @@
     written in the one moment the run finished, and never corrected afterwards.
   -->
   <section class="card notes" id="notes" hidden>
-    <h2>Ghi chú của người kiểm</h2>
-    <p class="sub">Những gì AI bỏ sót, hoặc lưu ý cho người đọc report. Lưu xong, report.html được dựng lại kèm ghi chú.</p>
-    <label for="notetext">Ghi chú cho lần chạy <span id="notefor" class="mono"></span></label>
-    <textarea id="notetext" rows="5" placeholder="Ví dụ:&#10;- Hero là video background, ảnh chụp ra trắng là bình thường.&#10;- Menu mobile thiếu icon giỏ hàng — AI không thấy.&#10;- Trang /journal/ chưa có design, đừng tin phần so design."></textarea>
+    <h2>Reviewer notes</h2>
+    <p class="sub">Things the AI missed, or notes for whoever reads the report. Saving rebuilds report.html with the note included.</p>
+    <label for="notetext">Notes for run <span id="notefor" class="mono"></span></label>
+    <textarea id="notetext" rows="5" placeholder="For example:&#10;- Hero is a video background; a white screenshot is expected.&#10;- Mobile menu is missing the cart icon — AI did not catch it.&#10;- /journal/ has no design; ignore the design-compare section."></textarea>
     <div class="noterow">
-      <button class="primary" id="savenote">Lưu vào report</button>
-      <button type="button" id="closenote">Đóng</button>
+      <button class="primary" id="savenote">Save to report</button>
+      <button type="button" id="closenote">Close</button>
       <span class="hint" id="notestate"></span>
     </div>
   </section>
 
   <section class="card" id="history">
-    <h2>Lần chạy trước</h2>
-    <p class="sub" id="historySub">Mỗi dòng là một report đã lưu — host cho biết dự án, không cần mở từng folder timestamp.</p>
-    <div id="historyBody"><p class="hint">Đang đọc…</p></div>
-    <p class="hint" id="historyMoreWrap" hidden><button type="button" id="histmore">Tải thêm</button></p>
+    <h2>Previous runs</h2>
+    <p class="sub" id="historySub">Each row is a saved report — the host tells you which project, so you do not need to open timestamp folders.</p>
+    <div id="historyBody"><p class="hint">Loading…</p></div>
+    <p class="hint" id="historyMoreWrap" hidden><button type="button" id="histmore">Load more</button></p>
   </section>
 </main>
 
-<dialog id="zoom"><div class="bar"><span id="zoomName"></span><button onclick="zoom.close()">Đóng</button></div><img id="zoomImg" alt=""></dialog>
+<dialog id="zoom"><div class="bar"><span id="zoomName"></span><button onclick="zoom.close()">Close</button></div><img id="zoomImg" alt=""></dialog>
 
 <script>
 'use strict';
@@ -274,9 +274,9 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
  * listening: the Terminal window was closed, or it crashed. So say that, with the fix.
  */
 const DEAD_SERVER =
-  'Không kết nối được server QA Visual (nó đã tắt hoặc bị lỗi).\n' +
-  '1. Mở lại "QA Visual.command" — nếu cửa sổ Terminal cũ còn mở thì đọc dòng lỗi cuối trong đó trước.\n' +
-  '2. Trang này giữ nguyên những gì bạn đã nhập; bấm lại là chạy tiếp.';
+  'Could not reach the QA Visual server (it is stopped or crashed).\n' +
+  '1. Re-open "QA Visual.command" — if the old Terminal window is still open, read the last error there first.\n' +
+  '2. This page keeps what you typed; click again to continue.';
 
 async function post(path, body) {
   let res;
@@ -285,7 +285,7 @@ async function post(path, body) {
   } catch {
     throw new Error(DEAD_SERVER);
   }
-  const data = await res.json().catch(() => ({ error: 'phản hồi không phải JSON' }));
+  const data = await res.json().catch(() => ({ error: 'response was not JSON' }));
   if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
   return data;
 }
@@ -421,15 +421,15 @@ function offerSaved() {
   const has = Boolean(d);
   $('saved').hidden = !has;
   $('redo').hidden = !has;
-  $('go1').textContent = has ? 'Sang bảng ghép' : 'Dò trang';
+  $('go1').textContent = has ? 'Open pairing table' : 'Discover pages';
   $('hint1').textContent = has
-    ? 'Dùng lại bảng ghép đã lưu — không phải dò lại, sang ngay bước QA. Bấm "Dò lại từ đầu" nếu site đã thêm trang hoặc Figma đã đổi.'
-    : 'Bước này mất 15–30 giây: mở browser, đọc sitemap (hoặc dò link trang chủ), đọc file Figma và render frame.';
+    ? 'Reuse the saved pairing — skip discovery and go straight to QA. Click "Discover from scratch" if the site added pages or Figma changed.'
+    : 'This step takes 15–30 seconds: open a browser, read the sitemap (or homepage links), read the Figma file and render frames.';
   if (has) {
     const when = (d.savedAt || '').slice(0, 16).replace('T', ' ');
     $('saved').innerHTML =
-      '<b>Đã có bảng ghép lưu cho site này</b> — ' + d.rows.length + ' trang, ' + (d.frames || []).length + ' frame' +
-      (when ? ', lưu lúc ' + when : '') + '.';
+      '<b>Saved pairing found for this site</b> — ' + d.rows.length + ' pages, ' + (d.frames || []).length + ' frames' +
+      (when ? ', saved ' + when : '') + '.';
   }
 }
 
@@ -476,31 +476,31 @@ $('go1').onclick = async () => {
   const siteUrl = $('site').value.trim();
   const figmaLink = $('figma').value.trim();
   showErr('e1', '');
-  if (!/^https?:\/\//i.test(siteUrl)) return showErr('e1', 'URL trang chủ phải bắt đầu bằng http:// hoặc https://');
-  if (figmaLink && !/figma\.com\//.test(figmaLink) && !figmaLink.startsWith('/')) return showErr('e1', 'phần design phải là link figma.com/… hoặc đường dẫn tuyệt đối tới folder PNG');
+  if (!/^https?:\/\//i.test(siteUrl)) return showErr('e1', 'Homepage URL must start with http:// or https://');
+  if (figmaLink && !/figma\.com\//.test(figmaLink) && !figmaLink.startsWith('/')) return showErr('e1', 'Design must be a figma.com/… link or an absolute path to a PNG folder');
 
   // Saved pairing for exactly this (site, design)? Re-arm the server and go straight to the table.
   const saved = loadSession(siteUrl, figmaLink);
   if (saved) {
-    busy($('go1'), true, 'Đang mở bảng ghép…');
+    busy($('go1'), true, 'Opening pairing…');
     try {
       const r = await post('/api/session', { siteUrl, figmaLink, maxPages: Number($('max').value) || 8, frames: saved.frames || [], user: $('auser').value.trim(), pass: $('apass').value });
       FRAMES = saved.frames || [];
       ROWS = saved.rows;
-      $('meta').textContent = [hostOf(siteUrl), r.aiModel ? 'AI: ' + r.aiModel : 'AI: tắt'].join(' · ');
+      $('meta').textContent = [hostOf(siteUrl), r.aiModel ? 'AI: ' + r.aiModel : 'AI: off'].join(' · ');
       $('s2sub').textContent =
-        ROWS.length + ' trang · ' + FRAMES.length + ' frame Figma (bảng đã lưu, không dò lại). Tick trang cần chạy — mặc định bỏ trang đã QA.';
+        ROWS.length + ' pages · ' + FRAMES.length + ' Figma frames (saved table, discovery skipped). Tick pages to run — already-QA’d pages are off by default.';
       await openPairing();
       return;
     } catch (e) {
       showErr('e1', e.message);
       return;
     } finally {
-      busy($('go1'), false, 'Sang bảng ghép');
+      busy($('go1'), false, 'Open pairing table');
     }
   }
 
-  busy($('go1'), true, 'Đang dò trang…');
+  busy($('go1'), true, 'Discovering pages…');
   try {
     const d = await post('/api/discover', { siteUrl, figmaLink, maxPages: Number($('max').value) || 8, user: $('auser').value.trim(), pass: $('apass').value });
     FRAMES = d.frames || [];
@@ -508,17 +508,17 @@ $('go1').onclick = async () => {
     // The server strips any user:pass@ out of the URL; use its version from here on so the secret
     // is not what gets shown, remembered, or keyed on.
     if (d.siteUrl) $('site').value = d.siteUrl;
-    $('meta').textContent = [hostOf(siteUrl), d.aiModel ? 'AI: ' + d.aiModel : 'AI: tắt'].join(' · ');
-    const bits = [ROWS.length + ' trang (' + d.pagesFrom + ')', FRAMES.length + ' frame Figma'];
-    if (d.authHow) bits.push('vào được bằng ' + d.authHow);
-    if (/figma\.com\//.test(figmaLink) && !d.hasFigmaToken) bits.push('⚠ chưa có FIGMA_TOKEN trong .env');
-    $('s2sub').textContent = bits.join(' · ') + '. Tick trang cần chạy — mặc định bỏ trang đã QA.';
+    $('meta').textContent = [hostOf(siteUrl), d.aiModel ? 'AI: ' + d.aiModel : 'AI: off'].join(' · ');
+    const bits = [ROWS.length + ' pages (' + d.pagesFrom + ')', FRAMES.length + ' Figma frames'];
+    if (d.authHow) bits.push('signed in via ' + d.authHow);
+    if (/figma\.com\//.test(figmaLink) && !d.hasFigmaToken) bits.push('⚠ FIGMA_TOKEN is missing from .env');
+    $('s2sub').textContent = bits.join(' · ') + '. Tick pages to run — already-QA’d pages are off by default.';
     await openPairing();
     saveSession();
   } catch (e) {
     showErr('e1', e.message);
   } finally {
-    busy($('go1'), false, 'Dò trang');
+    busy($('go1'), false, 'Discover pages');
   }
 };
 $('back2').onclick = () => { $('s2').hidden = true; $('s1').hidden = false; };
@@ -549,30 +549,30 @@ function validate() {
   return ROWS.map((r, i) => {
     const flags = [];
     const x = id[i];
-    if (!x.ok) flags.push({ level: 'bad', text: 'URL không hợp lệ — phải là http:// hoặc https://' });
+    if (!x.ok) flags.push({ level: 'bad', text: 'Invalid URL — must be http:// or https://' });
     else {
-      if (firstKey.get(x.key) !== i) flags.push({ level: 'bad', text: 'trùng dòng ' + (firstKey.get(x.key) + 1) + ' — cùng một trang, sẽ bị QA hai lần' });
+      if (firstKey.get(x.key) !== i) flags.push({ level: 'bad', text: 'duplicate of row ' + (firstKey.get(x.key) + 1) + ' — same page, would be QA’d twice' });
       else if (x.slug && firstSlug.get(x.slug) !== i) {
-        flags.push({ level: 'bad', text: 'cùng tên thư mục "' + x.slug + '" với dòng ' + (firstSlug.get(x.slug) + 1) + ' — hai trang sẽ ghi đè bản duyệt của nhau, diff sẽ so sai. Bỏ một dòng.' });
+        flags.push({ level: 'bad', text: 'same folder name "' + x.slug + '" as row ' + (firstSlug.get(x.slug) + 1) + ' — the two pages would overwrite each other’s baseline and diffs would compare the wrong pages. Remove one row.' });
       }
-      if (home && hostOf(x.u) !== home) flags.push({ level: 'warn', text: 'khác tên miền với dòng 1 (' + home + ') — kiểm tra xem có gõ nhầm không' });
+      if (home && hostOf(x.u) !== home) flags.push({ level: 'warn', text: 'different host from row 1 (' + home + ') — check for a typo' });
     }
-    if (r.pendingLink) flags.push({ level: 'warn', text: 'link Figma chưa được nhận — bấm Lấy frame, hoặc chọn lại frame khác' });
+    if (r.pendingLink) flags.push({ level: 'warn', text: 'Figma link not applied yet — click Fetch frame, or pick another frame' });
     return flags;
   });
 }
 
 function frameOptions(sel) {
-  let h = '<option value="">— không so design</option>';
+  let h = '<option value="">— no design compare</option>';
   for (const f of FRAMES) h += '<option value="' + esc(f.id) + '"' + (f.id === sel ? ' selected' : '') + '>' + esc(f.name) + ' · ' + f.width + 'px</option>';
-  h += '<option value="__paste"' + (sel === '__paste' ? ' selected' : '') + '>+ dán link Figma…</option>';
+  h += '<option value="__paste"' + (sel === '__paste' ? ' selected' : '') + '>+ paste Figma link…</option>';
   return h;
 }
 
 function qaLabel(url) {
   const seen = seenOf(url);
-  if (!seen) return '<div class="qa new">chưa QA</div>';
-  return '<div class="qa old">đã QA · ' + esc(formatWhen(seen.when, seen.stamp)) + '</div>';
+  if (!seen) return '<div class="qa new">not QA’d yet</div>';
+  return '<div class="qa old">QA’d · ' + esc(formatWhen(seen.when, seen.stamp)) + '</div>';
 }
 
 function selectedRows() {
@@ -585,13 +585,13 @@ function updateCount() {
   const n = selectedRows().length;
   const seen = ROWS.filter((r) => seenOf(r.url)).length;
   if (bad) {
-    $('count').textContent = bad + ' dòng cần sửa trước khi chạy';
+    $('count').textContent = bad + ' rows need fixing before you can run';
     $('go2').disabled = true;
     return;
   }
-  $('count').textContent = n + '/' + ROWS.length + ' trang sẽ chạy' + (seen ? ' · ' + seen + ' đã QA trước đó' : '');
+  $('count').textContent = n + '/' + ROWS.length + ' pages will run' + (seen ? ' · ' + seen + ' already QA’d' : '');
   $('go2').disabled = !ROWS.length || n === 0;
-  $('go2').textContent = n ? 'Chạy QA (' + n + ' trang)' : 'Chạy QA';
+  $('go2').textContent = n ? 'Run QA (' + n + ' pages)' : 'Run QA';
 }
 
 function render() {
@@ -600,11 +600,11 @@ function render() {
     const f = FRAMES.find((x) => x.id === r.figmaNodeId) || (r.frameName ? FRAMES.find((x) => x.name === r.frameName) : null);
     const thumb = f && f.thumb
       ? '<img src="/design/' + encodeURIComponent(f.thumb) + '" alt="' + esc(f.name) + '" data-zoom="' + esc(f.name) + '">'
-      : '<div class="none">' + (f ? 'chưa render' : '—') + '</div>';
+      : '<div class="none">' + (f ? 'not rendered' : '—') + '</div>';
     const fl = flags[i].map((x) => '<div class="flag ' + x.level + '">' + esc(x.text) + '</div>').join('');
     const on = r.include !== false;
     return '<tr data-i="' + i + '">'
-      + '<td class="pick"><input type="checkbox" class="pick" ' + (on ? 'checked' : '') + ' title="Chạy QA trang này"></td>'
+      + '<td class="pick"><input type="checkbox" class="pick" ' + (on ? 'checked' : '') + ' title="Run QA on this page"></td>'
       + '<td class="n">' + (i + 1) + '</td>'
       + '<td class="thumb">' + thumb + '</td>'
       + '<td class="urlcell"><input type="url" class="url" value="' + esc(r.url || '') + '" placeholder="https://…">'
@@ -612,9 +612,9 @@ function render() {
       + (r.how ? '<div class="why">' + esc(r.how) + '</div>' : '') + fl + '</td>'
       + '<td><select class="frame">' + frameOptions(r.pendingLink ? '__paste' : (f ? f.id : '')) + '</select>'
       + '<div class="paste' + (r.pendingLink !== undefined ? ' on' : '') + '">'
-      + '<input type="text" class="link" placeholder="dán link frame Figma rồi Enter" value="' + esc(r.pendingLink || '') + '">'
-      + '<button class="getframe" style="margin-top:6px">Lấy frame</button></div></td>'
-      + '<td class="act"><button class="icon del" title="xoá dòng">✕</button></td>'
+      + '<input type="text" class="link" placeholder="paste Figma frame link, then Enter" value="' + esc(r.pendingLink || '') + '">'
+      + '<button class="getframe" style="margin-top:6px">Fetch frame</button></div></td>'
+      + '<td class="act"><button class="icon del" title="remove row">✕</button></td>'
       + '</tr>';
   }).join('');
   updateCount();
@@ -625,7 +625,7 @@ $('rows').addEventListener('input', (e) => {
   const i = +tr.dataset.i;
   if (e.target.classList.contains('url')) {
     ROWS[i].url = e.target.value;
-    ROWS[i].how = 'sửa tay';
+    ROWS[i].how = 'edited by hand';
     // Re-validate without re-rendering, so the caret does not jump while typing.
     const flags = validate();
     const cell = tr.querySelector('.urlcell');
@@ -656,7 +656,7 @@ $('rows').addEventListener('change', (e) => {
   const f = FRAMES.find((x) => x.id === v);
   ROWS[i].figmaNodeId = f ? f.id : undefined;
   ROWS[i].frameName = f ? f.name : undefined;
-  ROWS[i].how = f ? 'chọn tay: "' + f.name + '"' : 'không so design';
+  ROWS[i].how = f ? 'picked by hand: "' + f.name + '"' : 'no design compare';
   render();
 });
 
@@ -682,19 +682,19 @@ async function getFrame(i) {
   const link = (ROWS[i].pendingLink || '').trim();
   const btn = document.querySelector('tr[data-i="' + i + '"] .getframe');
   showErr('e2', '');
-  if (!link) return showErr('e2', 'dòng ' + (i + 1) + ': chưa dán link nào');
-  if (btn) busy(btn, true, 'Đang lấy…');
+  if (!link) return showErr('e2', 'row ' + (i + 1) + ': no link pasted');
+  if (btn) busy(btn, true, 'Fetching…');
   try {
     const f = await post('/api/frame', { link });
     if (!FRAMES.some((x) => x.id === f.id)) FRAMES.push(f);
     delete ROWS[i].pendingLink;
     ROWS[i].figmaNodeId = f.id;
     ROWS[i].frameName = f.name;
-    ROWS[i].how = 'dán link: "' + f.name + '"';
+    ROWS[i].how = 'pasted link: "' + f.name + '"';
     render();
   } catch (e) {
-    showErr('e2', 'dòng ' + (i + 1) + ': ' + e.message);
-    if (btn) busy(btn, false, 'Lấy frame');
+    showErr('e2', 'row ' + (i + 1) + ': ' + e.message);
+    if (btn) busy(btn, false, 'Fetch frame');
   }
 }
 
@@ -702,7 +702,7 @@ $('add').onclick = () => {
   const base = ROWS[0]?.url || '';
   let prefix = '';
   try { prefix = new URL(base).origin + '/'; } catch {}
-  ROWS.push({ url: prefix, how: 'thêm tay', include: true });
+  ROWS.push({ url: prefix, how: 'added by hand', include: true });
   render();
   const els = document.querySelectorAll('tr .url');
   const last = els[els.length - 1];
@@ -717,11 +717,11 @@ $('pickall').onclick = () => { for (const r of ROWS) r.include = true; render();
 $('go2').onclick = async () => {
   showErr('e2', '');
   const chosen = selectedRows();
-  if (!chosen.length) return showErr('e2', 'chưa tick trang nào — chọn trang chưa QA, hoặc tick lại trang muốn kiểm tra lại');
+  if (!chosen.length) return showErr('e2', 'no pages ticked — select unreviewed pages, or tick pages you want to re-check');
   const pages = chosen.map((r) => ({ url: r.url.trim(), figmaNodeId: r.figmaNodeId, frameName: r.frameName, how: r.how }));
   const catalog = ROWS.map((r) => ({ url: r.url.trim(), figmaNodeId: r.figmaNodeId, frameName: r.frameName, how: r.how }));
   saveSession();
-  busy($('go2'), true, 'Đang chạy…');
+  busy($('go2'), true, 'Running…');
   try {
     const { runId } = await post('/api/run', { pages, catalog, fast: fastOn() });
     $('s2').hidden = true; $('s3').hidden = false;
@@ -729,17 +729,17 @@ $('go2').onclick = async () => {
     $('doneBar').hidden = true;
     $('notes').hidden = true;
     $('s3sub').dataset.plan = '';
-    $('s3sub').textContent = 'Chụp 3 kích thước màn hình cho từng trang, so với design, rồi gộp lỗi trùng.';
+    $('s3sub').textContent = 'Capture 3 viewports per page, compare with the design, then merge duplicate findings.';
     $('prog').hidden = false;
     $('fill').style.width = '0%';
-    $('plabel').textContent = 'đang bắt đầu…';
+    $('plabel').textContent = 'starting…';
     $('pcount').textContent = '';
-    $('s3title').textContent = 'Đang chạy QA…';
+    $('s3title').textContent = 'Running QA…';
     watch(runId);
   } catch (e) {
     showErr('e2', e.message);
   } finally {
-    busy($('go2'), false, 'Chạy QA');
+    busy($('go2'), false, 'Run QA');
     updateCount();
   }
 };
@@ -759,7 +759,7 @@ function watch(runId) {
     log.textContent += JSON.parse(ev.data) + '\n';
     log.scrollTop = log.scrollHeight;
   });
-  const PHASE = { capture: 'Chụp ảnh', ai: 'AI đối chiếu', wrap: 'Tổng hợp' };
+  const PHASE = { capture: 'Screenshots', ai: 'AI compare', wrap: 'Wrap-up' };
   /**
    * Count within the current phase, not out of the grand total.
    *
@@ -775,15 +775,15 @@ function watch(runId) {
 
     const pl = p.plan || { capture: 0, ai: 0, wrap: 0 };
     let within = '';
-    if (p.phase === 'capture' && pl.capture) within = 'ảnh ' + Math.min(p.done, pl.capture) + '/' + pl.capture;
-    else if (p.phase === 'ai' && pl.ai) within = 'lượt AI ' + Math.max(0, Math.min(p.done - pl.capture, pl.ai)) + '/' + pl.ai;
+    if (p.phase === 'capture' && pl.capture) within = 'shots ' + Math.min(p.done, pl.capture) + '/' + pl.capture;
+    else if (p.phase === 'ai' && pl.ai) within = 'AI ' + Math.max(0, Math.min(p.done - pl.capture, pl.ai)) + '/' + pl.ai;
     $('pcount').textContent = pct + '%' + (within ? ' · ' + within : '');
 
     if (pl.capture && $('s3sub').dataset.plan !== '1') {
       const pages = Math.round(pl.capture / 3);
       $('s3sub').textContent =
-        pages + ' trang × 3 kích thước = ' + pl.capture + ' ảnh chụp · ' + pl.ai + ' lượt gọi AI · ' + pl.wrap +
-        ' bước cuối = ' + p.total + ' bước';
+        pages + ' pages × 3 viewports = ' + pl.capture + ' shots · ' + pl.ai + ' AI calls · ' + pl.wrap +
+        ' wrap-up steps = ' + p.total + ' steps';
       $('s3sub').dataset.plan = '1';
     }
   });
@@ -792,14 +792,14 @@ function watch(runId) {
     es.close();
     $('fill').style.width = '100%';
     $('prog').hidden = true;
-    $('s3title').textContent = 'Xong';
-    $('s3sub').textContent = d.durationMs ? 'Chạy xong trong ' + Math.round(d.durationMs / 1000) + ' giây.' : '';
+    $('s3title').textContent = 'Done';
+    $('s3sub').textContent = d.durationMs ? 'Finished in ' + Math.round(d.durationMs / 1000) + ' seconds.' : '';
     $('doneBar').hidden = false;
     const stamp = (d.reportUrl || '').split('/')[2] || '';
-    $('doneBar').innerHTML = '<span class="big">' + d.findings + ' lỗi</span>'
-      + '<button class="primary" id="open">Mở report</button>'
-      + '<button id="share">Xuất file chia sẻ</button>'
-      + '<button id="again">Chạy lại</button>'
+    $('doneBar').innerHTML = '<span class="big">' + d.findings + ' findings</span>'
+      + '<button class="primary" id="open">Open report</button>'
+      + '<button id="share">Export share file</button>'
+      + '<button id="again">Run again</button>'
       + '<span class="hint" id="shareOut" style="margin:0"></span>';
     openNotes(stamp, $('site').value.trim());
     $('open').onclick = () => window.open(d.reportUrl, '_blank');
@@ -812,11 +812,11 @@ function watch(runId) {
     es.close();
     $('prog').hidden = true;
     $('notes').hidden = true;
-    $('s3title').textContent = 'Lỗi khi chạy';
+    $('s3title').textContent = 'Run failed';
     $('s3sub').textContent = '';
     $('doneBar').hidden = false;
     $('doneBar').innerHTML = '<div class="err" style="margin:0">' + esc(JSON.parse(ev.data).error) + '</div>'
-      + '<button id="again2">Về bảng ghép</button>';
+      + '<button id="again2">Back to pairing</button>';
     $('again2').onclick = () => backToPairing();
   });
   es.onerror = () => { if (es.readyState === 2) es.close(); };
@@ -849,7 +849,7 @@ async function openNotes(stamp, label) {
     const prev = await fetch('/api/notes/previous?before=' + encodeURIComponent(stamp) + (site ? '&site=' + site : '')).then((r) => r.json());
     if (prev.notes) {
       $('notetext').value = prev.notes;
-      $('notestate').textContent = 'đang hiện ghi chú của lần chạy ' + prev.from + ' — sửa lại rồi bấm Lưu';
+      $('notestate').textContent = 'showing notes from run ' + prev.from + ' — edit and click Save';
     }
   } catch {
     /* the box still works without a prefill */
@@ -862,20 +862,20 @@ $('savenote').onclick = async () => {
   const btn = $('savenote'), st = $('notestate');
   st.className = 'hint';
   st.textContent = '';
-  busy(btn, true, 'Đang lưu…');
+  busy(btn, true, 'Saving…');
   try {
     const r = await post('/api/notes', { stamp: NOTE_STAMP, notes: $('notetext').value });
     st.className = 'hint ok';
     st.textContent =
-      (r.chars ? 'Đã lưu ' + r.chars + ' ký tự vào report' : 'Đã xoá ghi chú khỏi report') +
-      (r.reshared ? ' · file chia sẻ đã cập nhật theo.' : ' — mở lại report để xem.');
+      (r.chars ? 'Saved ' + r.chars + ' characters to the report' : 'Removed notes from the report') +
+      (r.reshared ? ' · share file updated.' : ' — reopen the report to see it.');
     const noteBtn = document.querySelector('tr[data-stamp="' + NOTE_STAMP + '"] [data-act="note"]');
-    if (noteBtn) noteBtn.textContent = r.chars ? 'Sửa ghi chú' : 'Ghi chú';
+    if (noteBtn) noteBtn.textContent = r.chars ? 'Edit notes' : 'Notes';
   } catch (e) {
     st.className = 'hint bad';
     st.innerHTML = esc(e.message).replace(/\n/g, '<br>');
   } finally {
-    busy(btn, false, 'Lưu vào report');
+    busy(btn, false, 'Save to report');
   }
 };
 
@@ -891,26 +891,40 @@ async function makeShare(stamp, btn, out) {
   if (!btn || !out) return;
   const label = btn.textContent;
   out.textContent = '';
-  busy(btn, true, 'Đang nén ảnh…');
+  busy(btn, true, 'Compressing images…');
   try {
     const r = await post('/api/share', { stamp });
     const mb = (r.bytes / 1024 / 1024).toFixed(1);
-    out.innerHTML = r.images + ' ảnh · ' + mb + ' MB · <a href="' + r.url + '" download>tải file</a>'
-      + (r.skipped ? ' · ⚠ ' + r.skipped + ' ảnh thiếu' : '');
+    out.innerHTML = r.images + ' images · ' + mb + ' MB · <a href="' + r.url + '" download>download</a>'
+      + (r.skipped ? ' · ⚠ ' + r.skipped + ' images missing' : '');
     const a = document.createElement('a');
     a.href = r.url; a.download = '';
     document.body.appendChild(a);     a.click(); a.remove();
-    btn.textContent = 'Xuất lại share';
+    btn.textContent = 'Re-export share';
   } catch (e) {
     out.innerHTML = '<span style="color:var(--bad)">' + esc(e.message) + '</span>';
   } finally {
-    busy(btn, false, label || 'Xuất file chia sẻ');
+    busy(btn, false, label || 'Export share file');
   }
 }
 
 function formatWhen(iso, stamp) {
-  const raw = (iso || stamp || '').replace('T', ' ');
-  const m = raw.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2})[:\-](\d{2})/);
+  const raw = iso || stamp || '';
+  if (/[zZ]$/.test(raw) || /[+-]\d{2}:\d{2}$/.test(raw)) {
+    const d = new Date(raw);
+    if (!Number.isNaN(d.getTime())) {
+      return d.toLocaleString('sv-SE', {
+        timeZone: 'Asia/Ho_Chi_Minh',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+      }).replace('T', ' ').slice(0, 16);
+    }
+  }
+  const m = raw.replace('T', ' ').match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2})[:\-](\d{2})/);
   return m ? m[1] + ' ' + m[2] + ':' + m[3] : raw.slice(0, 16);
 }
 
@@ -924,9 +938,9 @@ function historyRow(r) {
     '<td class="when">' + esc(formatWhen(r.when, r.stamp)) + '</td>' +
     '<td class="nfind">' + r.findings + '</td>' +
     '<td><div class="acts">' +
-      '<button type="button" data-act="open">Mở report</button>' +
-      '<button type="button" data-act="note">' + (r.hasNotes ? 'Sửa ghi chú' : 'Ghi chú') + '</button>' +
-      '<button type="button" data-act="share">' + (r.hasShare ? 'Xuất lại share' : 'Xuất file chia sẻ') + '</button>' +
+      '<button type="button" data-act="open">Open report</button>' +
+      '<button type="button" data-act="note">' + (r.hasNotes ? 'Edit notes' : 'Notes') + '</button>' +
+      '<button type="button" data-act="share">' + (r.hasShare ? 'Re-export share' : 'Export share file') + '</button>' +
       '<span class="shareout"></span>' +
     '</div></td>' +
   '</tr>';
@@ -937,14 +951,14 @@ function historyMeta() {
   const wrap = $('historyMoreWrap');
   const more = $('histmore');
   if (!histTotal) {
-    sub.textContent = 'Mỗi dòng là một report đã lưu — host cho biết dự án, không cần mở từng folder timestamp.';
+    sub.textContent = 'Each row is a saved report — the host tells you which project, so you do not need to open timestamp folders.';
     wrap.hidden = true;
     return;
   }
-  sub.textContent = histOffset + ' / ' + histTotal + ' lần chạy — host cho biết dự án, không cần mở từng folder timestamp.';
+  sub.textContent = histOffset + ' / ' + histTotal + ' runs — the host tells you which project, so you do not need to open timestamp folders.';
   const left = histTotal - histOffset;
   wrap.hidden = left <= 0;
-  more.textContent = left > 0 ? 'Tải thêm (' + left + ')' : 'Tải thêm';
+  more.textContent = left > 0 ? 'Load more (' + left + ')' : 'Load more';
 }
 
 async function fetchRuns(offset) {
@@ -963,17 +977,17 @@ async function loadHistory() {
     histTotal = d.total || rows.length;
     histOffset = rows.length;
     if (!histTotal) {
-      box.innerHTML = '<p class="hint">Chưa có lần chạy nào trong reports/.</p>';
+      box.innerHTML = '<p class="hint">No runs in reports/ yet.</p>';
       historyMeta();
       return;
     }
     box.innerHTML =
-      '<table class="history"><thead><tr><th>Site</th><th>Thời gian</th><th>Lỗi</th><th></th></tr></thead><tbody>' +
+      '<table class="history"><thead><tr><th>Site</th><th>When</th><th>Findings</th><th></th></tr></thead><tbody>' +
       rows.map(historyRow).join('') +
       '</tbody></table>';
     historyMeta();
   } catch {
-    box.innerHTML = '<p class="hint">Không đọc được danh sách lần chạy — server có đang chạy không?</p>';
+    box.innerHTML = '<p class="hint">Could not load the run list — is the server running?</p>';
     $('historyMoreWrap').hidden = true;
   }
 }
@@ -982,7 +996,7 @@ async function loadMoreHistory() {
   const btn = $('histmore');
   const tb = $('historyBody').querySelector('tbody');
   if (!tb) return loadHistory();
-  busy(btn, true, 'Đang tải…');
+  busy(btn, true, 'Loading…');
   try {
     const d = await fetchRuns(histOffset);
     histTotal = d.total || histTotal;
@@ -990,9 +1004,9 @@ async function loadMoreHistory() {
     histOffset += (d.runs || []).length;
     historyMeta();
   } catch {
-    btn.textContent = 'Không tải được — bấm lại';
+    btn.textContent = 'Could not load — click again';
   } finally {
-    if (!$('historyMoreWrap').hidden) busy(btn, false, $('histmore').textContent || 'Tải thêm');
+    if (!$('historyMoreWrap').hidden) busy(btn, false, $('histmore').textContent || 'Load more');
   }
 }
 

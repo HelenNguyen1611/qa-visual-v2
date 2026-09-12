@@ -4,6 +4,7 @@ import { readFile, stat, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, extname, resolve, normalize, sep, basename } from 'node:path';
 import { loadConfig, setLogSink, setProgressSink, log, type Config, type Progress } from './config.js';
+import { nowQa } from './time.js';
 import { discover, runQa, designCache, openFindings, type DiscoveredFrame } from './core.js';
 import { frameFromLink, type FigmaFrame } from './design.js';
 import { writePagesJson, type PageTarget } from './pages.js';
@@ -484,7 +485,7 @@ const server = createServer(async (req, res) => {
       try {
         const report: RunReport = JSON.parse(await readFile(join(dir, 'report.json'), 'utf8'));
         report.humanNotes = notes;
-        report.humanNotesAt = notes.trim() ? new Date().toISOString() : undefined;
+        report.humanNotesAt = notes.trim() ? nowQa().when : undefined;
         await writeFile(join(dir, 'report.json'), JSON.stringify(report, null, 2));
         await writeFile(join(dir, 'report.html'), renderReport(report, stamp));
         // Also as plain text, so the note is findable with grep and readable without the report.

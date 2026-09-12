@@ -2,6 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { log } from './config.js';
 import { sameGroupedDefect, type GroupedFinding } from './group.js';
+import { nowQa } from './time.js';
 
 /**
  * Findings a human has looked at and signed off as intended.
@@ -85,7 +86,7 @@ export function markFindingAccepted(finding: GroupedFinding, why: string | null)
     detail: finding.detail,
     pages: finding.pages,
     why: trimmed,
-    at: new Date().toISOString().slice(0, 10),
+    at: nowQa().when.slice(0, 10),
   };
   const i = entries.findIndex((e) => e.id === id);
   if (i >= 0) entries[i] = { ...entries[i], ...entry };
