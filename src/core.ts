@@ -12,7 +12,7 @@ import { pairDesktopAndMobile, pickDesign, looksMispaired, type Mapped } from '.
 import { detectShared } from './shared.js';
 import { groupFindings, markDrift, type Occurrence, type GroupedFinding } from './group.js';
 import { createProvider, aiStopped, resetAiCircuit, aiMaxInflight, preflight, type VisionProvider } from './provider.js';
-import { detectAll } from './verify.js';
+import { detectAll, traceOverlayNeedle } from './verify.js';
 import { applyAccepted, readAccepted } from './accepted.js';
 import { compareWithDesign, compareSelf, looksNonEnglish } from './ai.js';
 import { annotateCrop } from './annotate.js';
@@ -344,6 +344,28 @@ function measurePage(runDir: string, pageDir: string, page: PageReport, overlay?
   for (const v of page.viewports) {
     const vpH = VIEWPORTS.find((x) => x.name === v.name)?.height ?? 900;
     const design = v.name === 'desktop' ? overlay : undefined;
+    if (design && process.env.QA_OVERLAY_TRACE) {
+      const raw = process.env.QA_OVERLAY_TRACE.trim();
+      const needles =
+        raw === '1'
+          ? [
+              'See all',
+              'Insights',
+              'Projects',
+              'Where imagination',
+              'imagination',
+              'Flagship',
+              'Our Vision',
+              'Learn more',
+              'Stories from',
+              'Giant',
+            ]
+          : raw.split(',').map((s) => s.trim()).filter(Boolean);
+      for (const needle of needles) {
+        const t = traceOverlayNeedle(design, v.textIndex, v.width, needle);
+        if (t.figmaFound || t.domFound) log(`trace ${page.slug} “${needle}”: ${t.skip} · pair=${t.paired} score=${t.pairScore.toFixed(2)} figma=${t.figmaFontSize ?? '—'}px/${t.figmaLineRatio?.toFixed(2) ?? '—'}lh @y${t.figmaY} → dom=${t.domFontSize ?? '—'}px/${t.domLineRatio?.toFixed(2) ?? '—'}lh @y${t.domY} Δsize=${t.sizeDelta ?? '—'} Δlh=${t.lhRatioDelta?.toFixed(2) ?? '—'} gapF=${t.gapToNextFigma ?? '—'} gapD=${t.gapToNextDom ?? '—'}`);
+      }
+    }
     for (const m of detectAll(v.textIndex, v.mediaRegions, v.reserved, v.width, vpH, design)) {
       const n = out.length + 1;
       const res = annotateCrop(join(runDir, v.shot), m.box, n, join(pageDir, `${v.name}.m${n}.png`));
@@ -569,7 +591,7 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
       allOccurrences.push(...measurePage(runDir, r.pageDir, r.page, id ? overlays.get(id) : undefined));
     }
     const measuredCount = allOccurrences.length;
-    if (measuredCount) log(`measured on DOM: ${measuredCount} findings with numeric proof (overlapping text, type hierarchy, first-screen gap, peer image aspect, banner inset)`);
+    if (measuredCount) log(`measured on DOM: ${measuredCount} findings with numeric proof (overlap, type hierarchy, first-screen gap, peer aspect, stretch, missing Figma text, overlay gap/align/type, banner inset)`);
 
     // ---- phase 2: the AI pass. The first page reviews the whole thing; later pages are told to
     // skip the shared header/footer, so the same component is not described over and over.

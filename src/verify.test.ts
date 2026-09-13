@@ -5,11 +5,18 @@ import type { TextItem } from './browser.js';
 import type { FigmaOverlay } from './design.js';
 import {
   isInsetBanner,
+  isNonContentChrome,
   loneAspectOutlier,
   mediaRowKey,
+  missingUniqueFigmaText,
   overlayBannerPad,
   overlayGutter,
+  overlayNeighborGap,
+  overlayRowAlign,
+  overlayTextImageBaseline,
+  overlayTypeCompare,
   peerImageAspect,
+  stretchedImages,
   uniqueTextPairs,
 } from './verify.js';
 
@@ -157,6 +164,23 @@ describe('uniqueTextPairs', () => {
     );
     assert.deepEqual(pairs, [{ fi: 0, di: 0 }]);
   });
+
+  it('zips nav + heading when both sides have the same count', () => {
+    const pairs = uniqueTextPairs(
+      [
+        { text: 'Projects', y: 40 },
+        { text: 'Projects', y: 200 },
+      ],
+      [
+        { text: 'Projects', y: 48 },
+        { text: 'Projects', y: 240 },
+      ],
+    );
+    assert.deepEqual(pairs, [
+      { fi: 0, di: 0 },
+      { fi: 1, di: 1 },
+    ]);
+  });
 });
 
 describe('overlayBannerPad', () => {
@@ -204,5 +228,256 @@ describe('overlayBannerPad', () => {
       1440,
     );
     assert.equal(hits.length, 0);
+  });
+});
+
+function run(text: string, x: number, y: number, w: number, h: number, extra: Partial<TextItem> = {}): TextItem {
+  return { text, x, y, w, h, tag: 'p', ...extra };
+}
+
+describe('missingUniqueFigmaText', () => {
+  const overlay: FigmaOverlay = {
+    pageWidth: 1440,
+    texts: [
+      { text: 'See all', x: 1200, y: 800, w: 80, h: 20 },
+      { text: 'Learn more', x: 100, y: 400, w: 120, h: 20 },
+      { text: 'Learn more', x: 400, y: 400, w: 120, h: 20 },
+    ],
+    surfaces: [],
+  };
+
+  it('flags a unique short label that is not on the page', () => {
+    const hits = missingUniqueFigmaText([run('Flagship projects', 80, 800, 300, 40), run('Learn more', 100, 400, 120, 20)], overlay, 1440);
+    assert.equal(hits.length, 1);
+    assert.match(hits[0].finding.title, /See all/);
+    assert.equal(hits[0].finding.measured, true);
+  });
+
+  it('does not flag a unique label that is present', () => {
+    const hits = missingUniqueFigmaText(
+      [run('See all', 1200, 800, 80, 20), run('Learn more', 100, 400, 120, 20)],
+      overlay,
+      1440,
+    );
+    assert.equal(hits.length, 0);
+  });
+
+  it('does not flag a repeated CTA that is missing', () => {
+    const hits = missingUniqueFigmaText([run('Flagship projects', 80, 800, 300, 40)], overlay, 1440);
+    assert.equal(
+      hits.some((h) => /Learn more/.test(h.finding.title)),
+      false,
+    );
+  });
+
+  it('does not flag a long heading whose words are already on the page', () => {
+    const hits = missingUniqueFigmaText(
+      [
+        run('Marketing strategy driven by', 80, 200, 400, 24),
+        run('intelligent systems', 80, 230, 400, 24),
+      ],
+      {
+        pageWidth: 1440,
+        texts: [{ text: 'Marketing strategy driven by intelligent systems', x: 80, y: 200, w: 500, h: 48 }],
+        surfaces: [],
+      },
+      1440,
+    );
+    assert.equal(hits.length, 0);
+  });
+
+  it('does not flag form labels, chips, or dates', () => {
+    const hits = missingUniqueFigmaText(
+      [run('Contact', 80, 40, 80, 20)],
+      {
+        pageWidth: 1440,
+        texts: [
+          { text: 'Full name', x: 80, y: 200, w: 120, h: 20 },
+          { text: 'Industry', x: 80, y: 240, w: 80, h: 20 },
+          { text: '17 July 2026', x: 80, y: 280, w: 120, h: 20 },
+          { text: 'See all', x: 400, y: 80, w: 80, h: 20 },
+        ],
+        surfaces: [],
+      },
+      1440,
+    );
+    assert.equal(hits.length, 1);
+    assert.match(hits[0].finding.title, /See all/);
+  });
+});
+
+describe('isNonContentChrome', () => {
+  it('keeps CTAs and drops form / chip / date strings', () => {
+    assert.equal(isNonContentChrome('See all'), false);
+    assert.equal(isNonContentChrome('Learn more'), false);
+    assert.equal(isNonContentChrome('Full name'), true);
+    assert.equal(isNonContentChrome('Email address'), true);
+    assert.equal(isNonContentChrome('Industry'), true);
+    assert.equal(isNonContentChrome('17 July 2026'), true);
+    assert.equal(isNonContentChrome('hello@wooagency.com.au'), true);
+  });
+});
+
+describe('stretchedImages', () => {
+  it('emits a card whose displayed aspect drifted more than 15%', () => {
+    const hits = stretchedImages([
+      { kind: 'img', x: 0, y: 200, w: 600, h: 200, distortion: 0.22, selector: 'article > img' },
+      { kind: 'img', x: 0, y: 800, w: 280, h: 330, distortion: 0.02, selector: 'article > img.ok' },
+    ]);
+    assert.equal(hits.length, 1);
+    assert.match(hits[0].finding.title, /stretch/i);
+    assert.match(hits[0].finding.detail, /22%/);
+  });
+});
+
+describe('overlayNeighborGap', () => {
+  it('flags a title-to-lead gap that grew by 12px', () => {
+    const overlay: FigmaOverlay = {
+      pageWidth: 1440,
+      texts: [
+        { text: 'Insights', x: 80, y: 100, w: 400, h: 40 },
+        { text: 'Stories from the studio', x: 80, y: 160, w: 500, h: 24 },
+      ],
+      surfaces: [],
+    };
+    const hits = overlayNeighborGap(
+      [run('Insights', 80, 100, 400, 40), run('Stories from the studio', 80, 172, 500, 24)],
+      overlay,
+      1440,
+    );
+    assert.equal(hits.length, 1);
+    assert.match(hits[0].finding.detail, /32px/);
+    assert.match(hits[0].finding.detail, /20px/);
+  });
+
+  it('uses the Figma neighbour, not the next unique pair in Y order', () => {
+    const overlay: FigmaOverlay = {
+      pageWidth: 1280,
+      texts: [
+        { text: 'Insights', x: 80, y: 100, w: 400, h: 40 },
+        { text: 'Unrelated sidebar', x: 700, y: 130, w: 200, h: 20 },
+        { text: 'Stories from the studio', x: 80, y: 160, w: 500, h: 24 },
+      ],
+      surfaces: [],
+    };
+    const hits = overlayNeighborGap(
+      [
+        run('Insights', 80, 100, 400, 40),
+        run('Unrelated sidebar', 900, 400, 200, 20),
+        run('Stories from the studio', 80, 172, 500, 24),
+      ],
+      overlay,
+      1440,
+    );
+    assert.equal(hits.length, 1);
+    assert.match(hits[0].finding.detail, /32px/);
+    assert.match(hits[0].finding.detail, /20px/);
+  });
+});
+
+describe('overlayRowAlign', () => {
+  it('flags a second title that is inset 16px vs its Figma peer', () => {
+    const overlay: FigmaOverlay = {
+      pageWidth: 1440,
+      texts: [
+        { text: 'First project', x: 80, y: 500, w: 400, h: 32 },
+        { text: 'Second project', x: 760, y: 500, w: 400, h: 32 },
+      ],
+      surfaces: [],
+    };
+    const hits = overlayRowAlign(
+      [run('First project', 80, 500, 400, 32), run('Second project', 776, 500, 400, 32)],
+      overlay,
+      1440,
+    );
+    assert.equal(hits.length, 1);
+    assert.match(hits[0].finding.title, /line up/);
+  });
+
+  it('does not compare two left-edge headings that are not on the same Figma row', () => {
+    const overlay: FigmaOverlay = {
+      pageWidth: 1440,
+      texts: [
+        { text: 'How we help you', x: 80, y: 100, w: 300, h: 32 },
+        { text: 'Trusted by the best', x: 80, y: 166, w: 300, h: 32 },
+      ],
+      surfaces: [],
+    };
+    const hits = overlayRowAlign(
+      [run('How we help you', 80, 100, 300, 32), run('Trusted by the best', 80, 847, 300, 32)],
+      overlay,
+      1440,
+    );
+    assert.equal(hits.length, 0);
+  });
+});
+
+describe('overlayTextImageBaseline', () => {
+  it('flags copy that no longer shares the photo bottom', () => {
+    const overlay: FigmaOverlay = {
+      pageWidth: 1440,
+      texts: [{ text: 'Our Vision', x: 80, y: 860, w: 400, h: 40 }],
+      surfaces: [{ x: 700, y: 400, w: 600, h: 500 }],
+    };
+    const hits = overlayTextImageBaseline(
+      [run('Our Vision', 80, 420, 400, 40)],
+      [{ kind: 'img', x: 700, y: 400, w: 600, h: 500, selector: 'section > img' }],
+      overlay,
+      1440,
+    );
+    assert.equal(hits.length, 1);
+    assert.match(hits[0].finding.title, /bottom/);
+  });
+});
+
+describe('overlayTypeCompare', () => {
+  it('flags a heading that rendered 3px smaller', () => {
+    const overlay: FigmaOverlay = {
+      pageWidth: 1440,
+      texts: [{ text: 'Projects', x: 80, y: 100, w: 400, h: 50, fontSize: 45, fontWeight: 400, lineHeight: 58 }],
+      surfaces: [],
+    };
+    const hits = overlayTypeCompare(
+      [run('Projects', 80, 100, 400, 50, { fontSize: 42, fontWeight: 400, lineHeight: 54 })],
+      overlay,
+      1440,
+    );
+    assert.equal(hits.length, 1);
+    assert.match(hits[0].finding.title, /size/);
+  });
+
+  it('flags a weight drop of 100', () => {
+    const overlay: FigmaOverlay = {
+      pageWidth: 1440,
+      texts: [{ text: 'Submit', x: 80, y: 400, w: 120, h: 24, fontSize: 16, fontWeight: 500, lineHeight: 20 }],
+      surfaces: [],
+    };
+    const hits = overlayTypeCompare(
+      [run('Submit', 80, 400, 120, 24, { fontSize: 16, fontWeight: 400, lineHeight: 20 })],
+      overlay,
+      1440,
+    );
+    assert.equal(hits.length, 1);
+    assert.match(hits[0].finding.title, /weight/);
+  });
+
+  it('compares CSS px, not a 1280→1440 scaled size', () => {
+    const overlay: FigmaOverlay = {
+      pageWidth: 1280,
+      texts: [{ text: 'Projects', x: 80, y: 100, w: 400, h: 50, fontSize: 45, fontWeight: 400, lineHeight: 58 }],
+      surfaces: [],
+    };
+    const miss = overlayTypeCompare(
+      [run('Projects', 80, 100, 400, 50, { fontSize: 42, fontWeight: 400, lineHeight: 54 })],
+      overlay,
+      1440,
+    );
+    assert.equal(miss.length, 1);
+    const match = overlayTypeCompare(
+      [run('Projects', 80, 100, 400, 50, { fontSize: 45, fontWeight: 400, lineHeight: 58 })],
+      overlay,
+      1440,
+    );
+    assert.equal(match.length, 0);
   });
 });

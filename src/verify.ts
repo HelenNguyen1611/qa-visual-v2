@@ -1,7 +1,7 @@
 import type { TextItem, MediaRegion, ReservedRegion } from './browser.js';
 import type { Box } from './annotate.js';
 import type { AiFinding } from './report.js';
-import type { FigmaOverlay, FigmaOverlayBox } from './design.js';
+import type { FigmaOverlay, FigmaOverlayBox, FigmaOverlayText } from './design.js';
 
 /**
  * Defects the browser's own measurements can prove, with no model in the loop.
@@ -22,7 +22,14 @@ export interface Measured {
 }
 
 /** Per viewport, so one pathological page cannot fill the report with crops. */
-const CAP = { overlap: 4, type: 2, gap: 1, aspect: 2, banner: 1 };
+const CAP = { overlap: 4, type: 2, gap: 1, aspect: 2, banner: 1, missing: 4, distort: 2, overlayGap: 3, overlayAlign: 3, overlayType: 3, overlayBase: 2 };
+
+const GAP_DELTA = 12;
+const ALIGN_DELTA = 16;
+const BASE_DELTA = 20;
+const SIZE_DELTA = 2.5;
+const WEIGHT_DELTA = 100;
+const LH_RATIO_DELTA = 0.12;
 
 const area = (b: { w: number; h: number }) => Math.max(0, b.w) * Math.max(0, b.h);
 
@@ -378,9 +385,32 @@ function tightestHost(text: FigmaOverlayBox, surfaces: FigmaOverlayBox[], pageW:
 export function normText(s: string): string {
   return s
     .toLowerCase()
+    .replace(/[\u200b\u200c\u200d\ufeff]/g, '')
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+const MONTH =
+  /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)\b/;
+
+/**
+ * Form labels, filter chips, dates, and contact meta — not “a control the design drew and the
+ * site hid”. Unique-text missing is for CTAs and named chrome, not CMS chrome.
+ */
+export function isNonContentChrome(raw: string): boolean {
+  const n = normText(raw);
+  if (!n) return true;
+  const words = n.split(' ').filter(Boolean);
+  if (/@/.test(raw) || /(?:\+|00)\d[\d\s.-]{6,}/.test(raw)) return true;
+  if (/\b(20\d{2}|19\d{2})\b/.test(n) && (MONTH.test(n) || (/\b\d{1,2}\b/.test(n) && words.length <= 5))) return true;
+  if (/\brequired field\b/.test(n)) return true;
+  if (/\b(email|phone|password|username|postcode|zip|message)\b/.test(n) && words.length <= 4) return true;
+  if (/\b(full|first|last|company|street)\s+(name|address)\b/.test(n)) return true;
+  if (words.length === 1 && n.length <= 16) {
+    return !/^(see|all|more|next|submit|discover|contact|join|apply|shop|buy|book|search|login|subscribe)$/.test(n);
+  }
+  return false;
 }
 
 function textScore(a: string, b: string): number {
@@ -394,18 +424,47 @@ function textScore(a: string, b: string): number {
   return 0;
 }
 
-/** Pairs that win clearly — a repeated CTA is not a pair. */
-export function uniqueTextPairs(figma: Array<{ text: string }>, dom: Array<{ text: string }>): Array<{ fi: number; di: number }> {
+/** Pairs that win clearly — a repeated CTA is not a pair. Identical labels with the same count (nav + H1) zip by Y. */
+export function uniqueTextPairs(
+  figma: Array<{ text: string; y?: number }>,
+  dom: Array<{ text: string; y?: number }>,
+): Array<{ fi: number; di: number }> {
   const fn = figma.map((t) => normText(t.text));
   const dn = dom.map((t) => normText(t.text));
-  const used = new Set<number>();
+  const usedF = new Set<number>();
+  const usedD = new Set<number>();
   const pairs: Array<{ fi: number; di: number }> = [];
+
+  const groups = new Map<string, { f: number[]; d: number[] }>();
   for (let i = 0; i < fn.length; i++) {
+    if (fn[i].length < 3) continue;
+    const g = groups.get(fn[i]) ?? { f: [], d: [] };
+    g.f.push(i);
+    groups.set(fn[i], g);
+  }
+  for (let j = 0; j < dn.length; j++) {
+    const g = groups.get(dn[j]);
+    if (g) g.d.push(j);
+  }
+  const yOf = (row: { y?: number } | undefined) => row?.y ?? 0;
+  for (const g of groups.values()) {
+    if (g.f.length === 0 || g.d.length === 0 || g.f.length !== g.d.length) continue;
+    const fs = g.f.slice().sort((a, b) => yOf(figma[a]) - yOf(figma[b]) || a - b);
+    const ds = g.d.slice().sort((a, b) => yOf(dom[a]) - yOf(dom[b]) || a - b);
+    for (let k = 0; k < fs.length; k++) {
+      usedF.add(fs[k]);
+      usedD.add(ds[k]);
+      pairs.push({ fi: fs[k], di: ds[k] });
+    }
+  }
+
+  for (let i = 0; i < fn.length; i++) {
+    if (usedF.has(i)) continue;
     let best = -1;
     let bestS = 0;
     let second = 0;
     for (let j = 0; j < dn.length; j++) {
-      if (used.has(j)) continue;
+      if (usedD.has(j)) continue;
       const s = textScore(fn[i], dn[j]);
       if (s > bestS) {
         second = bestS;
@@ -414,10 +473,347 @@ export function uniqueTextPairs(figma: Array<{ text: string }>, dom: Array<{ tex
       } else if (s > second) second = s;
     }
     if (best < 0 || bestS < 0.85 || bestS - second < 0.2) continue;
-    used.add(best);
+    usedF.add(i);
+    usedD.add(best);
     pairs.push({ fi: i, di: best });
   }
   return pairs;
+}
+
+const overlayScale = (overlay: FigmaOverlay, viewportWidth: number) =>
+  overlay.pageWidth > 0 ? viewportWidth / overlay.pageWidth : 1;
+
+function visibleCopy(items: TextItem[], viewportWidth: number): TextItem[] {
+  return items.filter((t) => t.tag !== 'img' && !t.ariaHidden && t.w >= 8 && t.h >= 4 && onScreen(t, viewportWidth));
+}
+
+function overlapX(a: Rect, b: Rect): number {
+  return Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x));
+}
+
+function overlapY(a: Rect, b: Rect): number {
+  return Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+}
+
+function sharesBand(text: Rect, surface: Rect): boolean {
+  return overlapX(text, surface) >= 8 || overlapY(text, surface) >= Math.min(text.h, 12) * 0.5;
+}
+
+function sameColumn(a: Rect, b: Rect): boolean {
+  const o = overlapX(a, b);
+  return o >= Math.min(a.w, b.w) * 0.35;
+}
+
+function scaledBox(f: FigmaOverlayBox, scale: number): Box {
+  return { x: Math.round(f.x * scale), y: Math.round(f.y * scale), w: Math.round(f.w * scale), h: Math.round(f.h * scale) };
+}
+
+type OverlayPair = { f: FigmaOverlayText; d: TextItem };
+
+function overlayPairs(items: TextItem[], overlay: FigmaOverlay, viewportWidth: number): OverlayPair[] {
+  const vis = visibleCopy(items, viewportWidth);
+  return uniqueTextPairs(overlay.texts, vis).map(({ fi, di }) => ({ f: overlay.texts[fi], d: vis[di] }));
+}
+
+function bestDomScore(needle: string, items: TextItem[]): number {
+  let best = 0;
+  for (const t of items) {
+    const s = textScore(needle, normText(t.text));
+    if (s > best) best = s;
+  }
+  return best;
+}
+
+/**
+ * A short unique string in the Figma frame with no counterpart on the page.
+ *
+ * Body copy is allowed to differ (placeholder vs CMS). This is for chrome the design names once:
+ * “See all”, a section CTA, a heading that display:none removed.
+ */
+export function missingUniqueFigmaText(items: TextItem[], overlay: FigmaOverlay, viewportWidth: number): Measured[] {
+  if (!overlay.pageWidth || viewportWidth < 1200) return [];
+  const copy = visibleCopy(items, viewportWidth);
+  const hay = copy.map((t) => normText(t.text)).join(' ');
+  const norms = overlay.texts.map((t) => normText(t.text));
+  const scale = overlayScale(overlay, viewportWidth);
+  const out: Measured[] = [];
+
+  for (let i = 0; i < overlay.texts.length && out.length < CAP.missing; i++) {
+    const n = norms[i];
+    const f = overlay.texts[i];
+    if (n.length < 6 || n.length > 48) continue;
+    if (n.split(' ').filter(Boolean).length > 8) continue;
+    if (isNonContentChrome(f.text)) continue;
+    if (norms.some((other, j) => j !== i && textScore(n, other) >= 0.85)) continue;
+    if (bestDomScore(n, copy) >= 0.85) continue;
+    if (n.length >= 12 && hay.includes(n)) continue;
+    const quote = f.text.replace(/\s+/g, ' ').trim().slice(0, 60);
+    out.push({
+      finding: {
+        title: `“${quote}” is missing`,
+        severity: 'minor',
+        detail: `Live: “${quote}” is not on the page.\nDesign: “${quote}” is in the frame.`,
+        anchors: [quote],
+        y: Math.round(f.y * scale),
+        locatedHow: 'measured on DOM: unique Figma text has no matching run',
+        measured: true,
+      },
+      box: scaledBox(f, scale),
+    });
+  }
+  return out;
+}
+
+/** An img whose displayed box does not match its file’s aspect — object-fit:fill, a squashed still. */
+export function stretchedImages(media: MediaRegion[]): Measured[] {
+  const hits = media
+    .filter((m) => m.kind === 'img' && (m.distortion ?? 0) > 0.15 && m.w >= 80 && m.h >= 80)
+    .sort((a, b) => (b.distortion ?? 0) - (a.distortion ?? 0));
+  const out: Measured[] = [];
+  for (const m of hits.slice(0, CAP.distort)) {
+    const pct = Math.round((m.distortion ?? 0) * 100);
+    out.push({
+      finding: {
+        title: 'Image is stretched',
+        severity: 'minor',
+        detail:
+          `Live: this image’s box is stretched (${pct}% off its file).\n` +
+          `Design: images keep the proportions of the file.`,
+        y: m.y,
+        locatedHow: `measured on DOM: aspect distortion ${pct}%`,
+        measured: true,
+      },
+      box: { x: m.x, y: m.y, w: m.w, h: m.h },
+    });
+  }
+  return out;
+}
+
+function sameFigmaRow(a: Rect, b: Rect): boolean {
+  if (Math.abs(a.y - b.y) <= 16) return true;
+  const minH = Math.min(a.h, b.h);
+  return minH >= 8 && overlapY(a, b) / minH >= 0.5;
+}
+
+/**
+ * Two unique strings stacked in the same Figma column whose gap grew or shrank vs the live pair.
+ *
+ * Neighbours are taken from the Figma tree (same column, 4–72px gap), then mapped to DOM.
+ * CSS spacing is compared in px — not multiplied by the 1280→1440 screenshot scale.
+ */
+export function overlayNeighborGap(items: TextItem[], overlay: FigmaOverlay, viewportWidth: number): Measured[] {
+  if (!overlay.pageWidth || viewportWidth < 1200) return [];
+  const vis = visibleCopy(items, viewportWidth);
+  const byFi = new Map<number, OverlayPair>();
+  for (const { fi, di } of uniqueTextPairs(overlay.texts, vis)) {
+    byFi.set(fi, { f: overlay.texts[fi], d: vis[di] });
+  }
+  const out: Measured[] = [];
+  const used = new Set<string>();
+  for (let i = 0; i < overlay.texts.length && out.length < CAP.overlayGap; i++) {
+    const aF = overlay.texts[i];
+    let bestJ = -1;
+    let bestGap = Infinity;
+    for (let j = 0; j < overlay.texts.length; j++) {
+      if (i === j) continue;
+      if (!sameColumn(aF, overlay.texts[j])) continue;
+      const gapF = overlay.texts[j].y - (aF.y + aF.h);
+      if (gapF < 4 || gapF > 72) continue;
+      if (gapF < bestGap) {
+        bestGap = gapF;
+        bestJ = j;
+      }
+    }
+    if (bestJ < 0) continue;
+    const key = i < bestJ ? `${i}:${bestJ}` : `${bestJ}:${i}`;
+    if (used.has(key)) continue;
+    used.add(key);
+    const a = byFi.get(i);
+    const b = byFi.get(bestJ);
+    if (!a || !b) continue;
+    const gapD = b.d.y - (a.d.y + a.d.h);
+    if (gapD < 0) continue;
+    if (Math.abs(gapD - bestGap) < GAP_DELTA) continue;
+    const qa = a.d.text.slice(0, 40);
+    const qb = b.d.text.slice(0, 40);
+    out.push({
+      finding: {
+        title:
+          gapD > bestGap
+            ? `“${qa}” and “${qb}” sit farther apart than in the design`
+            : `“${qa}” and “${qb}” sit closer than in the design`,
+        severity: 'minor',
+        detail: `Live: ${Math.round(gapD)}px between them.\nDesign: ${Math.round(bestGap)}px between them.`,
+        anchors: [a.d.text.slice(0, 60), b.d.text.slice(0, 60)],
+        y: a.d.y,
+        locatedHow: `measured on DOM: gap ${Math.round(gapD)}px vs Figma ${Math.round(bestGap)}px`,
+        measured: true,
+      },
+      box: union(a.d, b.d),
+    });
+  }
+  return out;
+}
+
+/** Two unique strings that share a Figma row, but not the same relative alignment on the page. */
+export function overlayRowAlign(items: TextItem[], overlay: FigmaOverlay, viewportWidth: number): Measured[] {
+  if (!overlay.pageWidth || viewportWidth < 1200) return [];
+  const scale = overlayScale(overlay, viewportWidth);
+  const pairs = overlayPairs(items, overlay, viewportWidth);
+  const out: Measured[] = [];
+  for (let i = 0; i < pairs.length && out.length < CAP.overlayAlign; i++) {
+    for (let j = i + 1; j < pairs.length && out.length < CAP.overlayAlign; j++) {
+      const a = pairs[i];
+      const b = pairs[j];
+      if (!sameFigmaRow(a.f, b.f)) continue;
+      const dxF = (b.f.x - a.f.x) * scale;
+      const dyF = (b.f.y - a.f.y) * scale;
+      const dxD = b.d.x - a.d.x;
+      const dyD = b.d.y - a.d.y;
+      const offX = Math.abs(dxD - dxF) >= ALIGN_DELTA;
+      const offY = Math.abs(dyD - dyF) >= ALIGN_DELTA;
+      if (!offX && !offY) continue;
+      const qa = a.d.text.slice(0, 40);
+      const qb = b.d.text.slice(0, 40);
+      const live = offX
+        ? `their left edges are ${Math.round(Math.abs(dxD))}px apart`
+        : `their tops are ${Math.round(Math.abs(dyD))}px apart`;
+      const design = offX
+        ? `their left edges are ${Math.round(Math.abs(dxF))}px apart`
+        : `their tops are ${Math.round(Math.abs(dyF))}px apart`;
+      out.push({
+        finding: {
+          title: `“${qa}” and “${qb}” do not line up`,
+          severity: 'minor',
+          detail: `Live: ${live}.\nDesign: ${design}.`,
+          anchors: [a.d.text.slice(0, 60), b.d.text.slice(0, 60)],
+          y: Math.min(a.d.y, b.d.y),
+          locatedHow: `measured on DOM: ${offX ? 'x' : 'y'} delta ${Math.round(Math.abs(offX ? dxD - dxF : dyD - dyF))}px vs Figma`,
+          measured: true,
+        },
+        box: union(a.d, b.d),
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * Copy that shares a bottom edge with a photo in Figma, but not on the page
+ * (flex-start + a pushed image).
+ */
+export function overlayTextImageBaseline(
+  items: TextItem[],
+  media: MediaRegion[],
+  overlay: FigmaOverlay,
+  viewportWidth: number,
+): Measured[] {
+  if (!overlay.pageWidth || viewportWidth < 1200) return [];
+  const scale = overlayScale(overlay, viewportWidth);
+  const pairs = overlayPairs(items, overlay, viewportWidth);
+  const liveSurfaces = media.filter((m) => (m.kind === 'img' || m.kind === 'background') && m.w >= 200 && m.h >= 120);
+  const out: Measured[] = [];
+
+  for (const p of pairs) {
+    if (out.length >= CAP.overlayBase) break;
+    const fb = p.f.y + p.f.h;
+    const host = overlay.surfaces
+      .filter((s) => sharesBand(p.f, s) && Math.abs(s.y + s.h - fb) <= 8 && p.f.y >= s.y + s.h * 0.4)
+      .sort((a, b) => a.w * a.h - b.w * b.h)[0];
+    if (!host) continue;
+    const wantW = host.w * scale;
+    const wantH = host.h * scale;
+    const live = liveSurfaces
+      .filter((s) => sharesBand(p.d, s) && Math.abs(s.y + s.h / 2 - (p.d.y + p.d.h / 2)) <= wantH * 1.1)
+      .sort((a, b) => Math.abs(a.w - wantW) + Math.abs(a.h - wantH) - (Math.abs(b.w - wantW) + Math.abs(b.h - wantH)))[0];
+    if (!live) continue;
+    const delta = Math.abs(p.d.y + p.d.h - (live.y + live.h));
+    if (delta < BASE_DELTA) continue;
+    const quote = p.d.text.slice(0, 60);
+    out.push({
+      finding: {
+        title: `“${quote}” does not share a bottom edge with the photo`,
+        severity: 'minor',
+        detail: `Live: copy and photo bottoms are ${Math.round(delta)}px apart.\nDesign: they share a bottom edge.`,
+        anchors: [quote],
+        y: Math.min(p.d.y, live.y),
+        locatedHow: `measured on DOM: bottom delta ${Math.round(delta)}px vs aligned in Figma`,
+        measured: true,
+      },
+      box: {
+        x: Math.min(p.d.x, live.x),
+        y: Math.min(p.d.y, live.y),
+        w: Math.max(p.d.x + p.d.w, live.x + live.w) - Math.min(p.d.x, live.x),
+        h: Math.max(p.d.y + p.d.h, live.y + live.h) - Math.min(p.d.y, live.y),
+      },
+    });
+  }
+  return out;
+}
+
+/** Unique paired strings whose size, weight, or line-height drifted from the Figma style. */
+export function overlayTypeCompare(items: TextItem[], overlay: FigmaOverlay, viewportWidth: number): Measured[] {
+  if (!overlay.pageWidth || viewportWidth < 1200) return [];
+  const out: Measured[] = [];
+  for (const p of overlayPairs(items, overlay, viewportWidth)) {
+    if (out.length >= CAP.overlayType) break;
+    const wantSize = p.f.fontSize;
+    const gotSize = p.d.fontSize;
+    const wantW = p.f.fontWeight;
+    const gotW = p.d.fontWeight;
+    const wantRatio = p.f.fontSize && p.f.lineHeight ? p.f.lineHeight / p.f.fontSize : undefined;
+    const gotRatio = p.d.fontSize && p.d.lineHeight ? p.d.lineHeight / p.d.fontSize : undefined;
+    const quote = p.d.text.slice(0, 60);
+
+    if (wantSize != null && gotSize != null && Math.abs(gotSize - wantSize) >= SIZE_DELTA) {
+      out.push({
+        finding: {
+          title: `“${quote}” is a different size than the design`,
+          severity: 'minor',
+          detail: `Live: ${Math.round(gotSize)}px.\nDesign: ${Math.round(wantSize)}px.`,
+          anchors: [quote],
+          y: p.d.y,
+          locatedHow: `measured on DOM: font-size ${gotSize}px vs Figma ${wantSize.toFixed(1)}px`,
+          measured: true,
+        },
+        box: { x: p.d.x, y: p.d.y, w: p.d.w, h: p.d.h },
+      });
+      continue;
+    }
+    if (wantW != null && gotW != null && Math.abs(gotW - wantW) >= WEIGHT_DELTA) {
+      out.push({
+        finding: {
+          title: `“${quote}” is a different weight than the design`,
+          severity: 'minor',
+          detail: `Live: weight ${gotW}.\nDesign: weight ${wantW}.`,
+          anchors: [quote],
+          y: p.d.y,
+          locatedHow: `measured on DOM: font-weight ${gotW} vs Figma ${wantW}`,
+          measured: true,
+        },
+        box: { x: p.d.x, y: p.d.y, w: p.d.w, h: p.d.h },
+      });
+      continue;
+    }
+    if (wantRatio != null && gotRatio != null && Math.abs(gotRatio - wantRatio) >= LH_RATIO_DELTA) {
+      out.push({
+        finding: {
+          title:
+            gotRatio > wantRatio
+              ? `“${quote}” has looser line-height than the design`
+              : `“${quote}” has tighter line-height than the design`,
+          severity: 'minor',
+          detail: `Live: line-height ${gotRatio.toFixed(2)}.\nDesign: line-height ${wantRatio.toFixed(2)}.`,
+          anchors: [quote],
+          y: p.d.y,
+          locatedHow: `measured on DOM: line-height ratio ${gotRatio.toFixed(2)} vs Figma ${wantRatio.toFixed(2)}`,
+          measured: true,
+        },
+        box: { x: p.d.x, y: p.d.y, w: p.d.w, h: p.d.h },
+      });
+    }
+  }
+  return out;
 }
 
 /**
@@ -474,6 +870,138 @@ export function overlayBannerPad(
   return out;
 }
 
+export interface OverlayNeedleTrace {
+  needle: string;
+  figmaFound: boolean;
+  figmaText?: string;
+  figmaFontSize?: number;
+  figmaFontWeight?: number;
+  figmaLineHeight?: number;
+  figmaLineRatio?: number;
+  figmaY?: number;
+  figmaH?: number;
+  figmaX?: number;
+  domFound: boolean;
+  domText?: string;
+  domFontSize?: number;
+  domFontWeight?: number;
+  domLineHeight?: number;
+  domLineRatio?: number;
+  domY?: number;
+  domH?: number;
+  domX?: number;
+  pairScore: number;
+  paired: boolean;
+  skip: string;
+  sizeDelta?: number;
+  lhRatioDelta?: number;
+  gapToNextFigma?: number;
+  gapToNextDom?: number;
+}
+
+/** Why a Figma string did or did not become a measured finding — for pairing debug, not the report. */
+export function traceOverlayNeedle(
+  overlay: FigmaOverlay,
+  items: TextItem[],
+  viewportWidth: number,
+  needle: string,
+): OverlayNeedleTrace {
+  const n = normText(needle);
+  const vis = visibleCopy(items, viewportWidth);
+  let fi = -1;
+  let fScore = 0;
+  let fRank = -1;
+  for (let i = 0; i < overlay.texts.length; i++) {
+    const s = textScore(n, normText(overlay.texts[i].text));
+    const rank = overlay.texts[i].fontSize ?? overlay.texts[i].h;
+    if (s > fScore + 0.01 || (s >= 0.5 && Math.abs(s - fScore) <= 0.01 && rank > fRank)) {
+      fScore = s;
+      fi = i;
+      fRank = rank;
+    }
+  }
+  const f = fi >= 0 && fScore >= 0.5 ? overlay.texts[fi] : undefined;
+  let di = -1;
+  let dScore = 0;
+  let dRank = -1;
+  for (let i = 0; i < vis.length; i++) {
+    const s = textScore(n, normText(vis[i].text));
+    const rank = vis[i].fontSize ?? vis[i].h;
+    if (s > dScore + 0.01 || (s >= 0.5 && Math.abs(s - dScore) <= 0.01 && rank > dRank)) {
+      dScore = s;
+      di = i;
+      dRank = rank;
+    }
+  }
+  const d = di >= 0 && dScore >= 0.5 ? vis[di] : undefined;
+  const paired = f
+    ? uniqueTextPairs(overlay.texts, vis).some((p) => p.fi === fi && vis[p.di] === d)
+    : false;
+  const pairScore = f && d ? textScore(normText(f.text), normText(d.text)) : Math.max(fScore, dScore);
+  const fRatio = f?.fontSize && f.lineHeight ? f.lineHeight / f.fontSize : undefined;
+  const dRatio = d?.fontSize && d.lineHeight ? d.lineHeight / d.fontSize : undefined;
+  let skip = 'ok';
+  if (!f) skip = 'no Figma node (score < 0.5)';
+  else if (!d) skip = 'no DOM run (score < 0.5)';
+  else if (!paired) skip = `not a uniqueTextPair (score ${pairScore.toFixed(2)}; need 0.85 and unique)`;
+  else if (f.fontSize == null && f.lineHeight == null) skip = 'paired; Figma style missing (no fontSize/lineHeight on overlay)';
+  else skip = 'paired';
+
+  let gapToNextFigma: number | undefined;
+  let gapToNextDom: number | undefined;
+  if (f) {
+    let bestJ = -1;
+    let bestGap = Infinity;
+    for (let j = 0; j < overlay.texts.length; j++) {
+      if (j === fi) continue;
+      if (!sameColumn(f, overlay.texts[j])) continue;
+      const gapF = overlay.texts[j].y - (f.y + f.h);
+      if (gapF < 4 || gapF > 72) continue;
+      if (gapF < bestGap) {
+        bestGap = gapF;
+        bestJ = j;
+      }
+    }
+    if (bestJ >= 0) {
+      gapToNextFigma = bestGap;
+      const nextPair = uniqueTextPairs(overlay.texts, vis).find((p) => p.fi === bestJ);
+      if (d && nextPair) {
+        const nd = vis[nextPair.di];
+        gapToNextDom = nd.y - (d.y + d.h);
+      }
+    }
+  }
+
+  return {
+    needle,
+    figmaFound: Boolean(f),
+    figmaText: f?.text,
+    figmaFontSize: f?.fontSize,
+    figmaFontWeight: f?.fontWeight,
+    figmaLineHeight: f?.lineHeight,
+    figmaLineRatio: fRatio,
+    figmaY: f?.y,
+    figmaH: f?.h,
+    figmaX: f?.x,
+    domFound: Boolean(d),
+    domText: d?.text,
+    domFontSize: d?.fontSize,
+    domFontWeight: d?.fontWeight,
+    domLineHeight: d?.lineHeight,
+    domLineRatio: dRatio,
+    domY: d?.y,
+    domH: d?.h,
+    domX: d?.x,
+    pairScore,
+    paired,
+    skip,
+    sizeDelta: f?.fontSize != null && d?.fontSize != null ? Math.abs(d.fontSize - f.fontSize) : undefined,
+    lhRatioDelta: fRatio != null && dRatio != null ? Math.abs(dRatio - fRatio) : undefined,
+    gapToNextFigma,
+    gapToNextDom,
+  };
+}
+
 /** Every measured check for one viewport of one page. */
 export function detectAll(
   items: TextItem[],
@@ -487,6 +1015,16 @@ export function detectAll(
     ...(items.length ? [...overlaps(items, viewportWidth), ...typeHierarchy(items, viewportWidth)] : []),
     ...firstScreenGap(items, media, reserved, viewportWidth, viewportHeight),
     ...peerImageAspect(media, viewportWidth),
-    ...(overlay ? overlayBannerPad(items, media, overlay, viewportWidth) : []),
+    ...stretchedImages(media),
+    ...(overlay
+      ? [
+          ...missingUniqueFigmaText(items, overlay, viewportWidth),
+          ...overlayNeighborGap(items, overlay, viewportWidth),
+          ...overlayRowAlign(items, overlay, viewportWidth),
+          ...overlayTextImageBaseline(items, media, overlay, viewportWidth),
+          ...overlayTypeCompare(items, overlay, viewportWidth),
+          ...overlayBannerPad(items, media, overlay, viewportWidth),
+        ]
+      : []),
   ];
 }

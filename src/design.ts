@@ -54,10 +54,18 @@ export interface FigmaOverlayBox {
   h: number;
 }
 
-/** TEXT + image-fill surfaces from one mapped page frame. Used only by the overlay-gutter check. */
+export type FigmaOverlayText = FigmaOverlayBox & {
+  text: string;
+  fontSize?: number;
+  fontWeight?: number;
+  /** Line box in Figma pixels, when the file stored a px / % size. */
+  lineHeight?: number;
+};
+
+/** TEXT + image-fill surfaces from one mapped page frame. Used by measured overlay checks. */
 export interface FigmaOverlay {
   pageWidth: number;
-  texts: Array<FigmaOverlayBox & { text: string }>;
+  texts: FigmaOverlayText[];
   surfaces: FigmaOverlayBox[];
 }
 
@@ -65,9 +73,28 @@ type OverlayNode = {
   type?: string;
   characters?: string;
   fills?: Array<{ type?: string; visible?: boolean }>;
+  style?: {
+    fontSize?: number;
+    fontWeight?: number;
+    lineHeightPx?: number;
+    lineHeightPercentFontSize?: number;
+  };
   absoluteBoundingBox?: { x: number; y: number; width: number; height: number };
   children?: OverlayNode[];
 };
+
+function overlayTypeMetrics(n: OverlayNode): Pick<FigmaOverlayText, 'fontSize' | 'fontWeight' | 'lineHeight'> {
+  const s = n.style;
+  if (!s) return {};
+  const fontSize = typeof s.fontSize === 'number' && s.fontSize > 0 ? s.fontSize : undefined;
+  const fontWeight = typeof s.fontWeight === 'number' && s.fontWeight > 0 ? s.fontWeight : undefined;
+  let lineHeight: number | undefined;
+  if (typeof s.lineHeightPx === 'number' && s.lineHeightPx > 0) lineHeight = s.lineHeightPx;
+  else if (fontSize && typeof s.lineHeightPercentFontSize === 'number' && s.lineHeightPercentFontSize > 0) {
+    lineHeight = (fontSize * s.lineHeightPercentFontSize) / 100;
+  }
+  return { fontSize, fontWeight, lineHeight };
+}
 
 /** Keep TEXT and nodes with an image fill — enough to find a banner, not a geometry engine. */
 export function flattenFigmaOverlay(doc: OverlayNode): FigmaOverlay {
@@ -79,7 +106,7 @@ export function flattenFigmaOverlay(doc: OverlayNode): FigmaOverlay {
     const b = n.absoluteBoundingBox;
     if (n.type === 'TEXT' && n.characters && b) {
       const text = n.characters.replace(/\s+/g, ' ').trim();
-      if (text.length >= 3) texts.push({ text: text.slice(0, 120), x: b.x, y: b.y, w: b.width, h: b.height });
+      if (text.length >= 3) texts.push({ text: text.slice(0, 120), x: b.x, y: b.y, w: b.width, h: b.height, ...overlayTypeMetrics(n) });
     }
     const image = (n.fills ?? []).some((f) => f.visible !== false && f.type === 'IMAGE');
     if (image && b && b.width >= 400) surfaces.push({ x: b.x, y: b.y, w: b.width, h: b.height });
