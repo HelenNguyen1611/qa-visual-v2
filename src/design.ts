@@ -3,6 +3,8 @@ import { join, extname } from 'node:path';
 import { PNG } from 'pngjs';
 import { log } from './config.js';
 
+export type FrameRole = 'desktop' | 'mobile';
+
 export interface FigmaFrame {
   id: string;
   name: string;
@@ -10,6 +12,10 @@ export interface FigmaFrame {
   height: number;
   /** filled in once rendered */
   file?: string;
+  /** Figma file this node lives in — needed when desktop and mobile designs are different files */
+  fileKey?: string;
+  /** Which pairing pool this frame belongs to */
+  role?: FrameRole;
 }
 
 export interface DesignImage {
@@ -161,6 +167,7 @@ export async function listFigmaFrames(link: string, token: string): Promise<Figm
     name: c.name,
     width: Math.round(c.absoluteBoundingBox!.width),
     height: Math.round(c.absoluteBoundingBox!.height),
+    fileKey,
   }));
 }
 
@@ -181,7 +188,7 @@ export async function frameFromLink(link: string, token: string): Promise<FigmaF
   if (!doc) throw new Error(`node ${nodeId} not found in file ${fileKey}`);
   const box = doc.absoluteBoundingBox;
   if (!box) throw new Error(`node "${doc.name}" has no size — pick a frame, not a page or empty group`);
-  return { id: doc.id, name: doc.name, width: Math.round(box.width), height: Math.round(box.height) };
+  return { id: doc.id, name: doc.name, width: Math.round(box.width), height: Math.round(box.height), fileKey };
 }
 
 /** Render the frames we actually need. One API call for all ids, then download each PNG. */
@@ -229,6 +236,52 @@ export function framesFromFolder(dir: string): FigmaFrame[] {
     .map((f) => {
       const file = join(dir, f);
       const { width, height } = pngSize(file);
-      return { id: 'file:' + f, name: f.replace(/\.png$/i, ''), width, height, file };
+      return {
+        id: 'file:' + f,
+        name: f.replace(/\.png$/i, ''),
+        width,
+        height,
+        file,
+        role: width < 600 ? 'mobile' : 'desktop',
+      };
     });
+}
+
+function tag(frames: FigmaFrame[], role: FrameRole, fileKey?: string): FigmaFrame[] {
+  return frames.map((f) => ({ ...f, role, fileKey: f.fileKey ?? fileKey }));
+}
+
+/**
+ * Desktop frames from --figma (or a PNG folder), plus mobile frames from --figma-mobile.
+ *
+ * Two lists, not one: listFigmaFrames keeps the dominant width on a page, so a desktop Figma
+ * page will never yield the 390 frames sitting on the mobile page next to it. A second link
+ * (same file, different page — or a different file) is how those frames get in.
+ */
+export async function loadDesignFrames(
+  cfg: { figma?: string; figmaMobile?: string; designDir?: string; figmaToken: string },
+): Promise<FigmaFrame[]> {
+  const out: FigmaFrame[] = [];
+  try {
+    if (cfg.figma) {
+      const { fileKey } = parseFigmaLink(cfg.figma);
+      out.push(...tag(await listFigmaFrames(cfg.figma, cfg.figmaToken), 'desktop', fileKey));
+    } else if (cfg.designDir) {
+      out.push(...framesFromFolder(cfg.designDir));
+    }
+  } catch (e: any) {
+    log(`design: ${e?.message ?? e}`);
+  }
+  if (cfg.figmaMobile) {
+    try {
+      const { fileKey } = parseFigmaLink(cfg.figmaMobile);
+      out.push(...tag(await listFigmaFrames(cfg.figmaMobile, cfg.figmaToken), 'mobile', fileKey));
+    } catch (e: any) {
+      log(`design mobile: ${e?.message ?? e}`);
+    }
+  }
+  const desk = out.filter((f) => f.role !== 'mobile').length;
+  const mob = out.filter((f) => f.role === 'mobile').length;
+  if (out.length) log(`design frames: ${desk} desktop, ${mob} mobile`);
+  return out;
 }

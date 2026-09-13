@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { loadConfig, USAGE, log } from './config.js';
 import { markFindingAccepted, findingByNum } from './accepted.js';
 import { renderReport } from './report.js';
-import { listFigmaFrames, framesFromFolder, type FigmaFrame } from './design.js';
+import { loadDesignFrames, type FigmaFrame } from './design.js';
 import { launch } from './capture.js';
 import { findPages, runQa } from './core.js';
 import { prepareAuth } from './auth.js';
@@ -71,8 +71,7 @@ async function main() {
 
   let frames: FigmaFrame[] = [];
   try {
-    if (cfg.figma) frames = await listFigmaFrames(cfg.figma, cfg.figmaToken);
-    else if (cfg.designDir) frames = framesFromFolder(cfg.designDir);
+    frames = await loadDesignFrames(cfg);
   } catch (e: any) {
     log(`design: ${e?.message ?? e}`);
   }
@@ -93,16 +92,36 @@ async function main() {
     } finally {
       await browser.close().catch(() => {});
     }
-    log(`${urls.length} pages: ${urls.map((u) => new URL(u).pathname).join(', ')}`);
-    const { mapUrlsToFrames } = await import('./mapping.js');
-    const mapped = mapUrlsToFrames(urls, frames);
-    rows = mapped.map((m) => ({ url: m.url, figmaNodeId: m.figmaNodeId, frameName: m.frameName, how: m.how }) as PageTarget);
+    log(`${urls.length} pages: ${urls.map((u) => {
+      try {
+        const x = new URL(u);
+        return x.pathname + x.search;
+      } catch {
+        return u;
+      }
+    }).join(', ')}`);
+    const { pairDesktopAndMobile } = await import('./mapping.js');
+    const mapped = pairDesktopAndMobile(urls, frames);
+    rows = mapped.map(
+      (m) =>
+        ({
+          url: m.url,
+          figmaNodeId: m.figmaNodeId,
+          frameName: m.frameName,
+          figmaMobileNodeId: m.figmaMobileNodeId,
+          frameMobileName: m.frameMobileName,
+          how: m.how,
+        }) as PageTarget,
+    );
     if (frames.length) {
       writePagesJson(rows);
       log('wrote pages.json — edit any wrong pair; later runs keep this file');
     }
   }
-  for (const r of rows) log(`  ${new URL(r.url).pathname} → ${r.frameName ?? '(no design)'} · ${r.how ?? ''}`);
+  for (const r of rows)
+    log(
+      `  ${new URL(r.url).pathname} → ${r.frameName ?? '(no design)'}${r.frameMobileName ? ' · mobile ' + r.frameMobileName : ''} · ${r.how ?? ''}`,
+    );
 
   const out = await runQa(cfg, rows, frames);
   console.log(out.reportPath);

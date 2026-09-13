@@ -50,8 +50,18 @@ export interface PageReport {
   slug: string;
   title: string;
   viewports: ViewportReport[];
-  mapping: { frameName?: string; frameWidth?: number; how: string; score: number; isTemplate: boolean };
+  mapping: {
+    frameName?: string;
+    frameWidth?: number;
+    frameMobileName?: string;
+    frameMobileWidth?: number;
+    how: string;
+    score: number;
+    isTemplate: boolean;
+  };
   designFile?: string;
+  /** Mobile Figma render, when a second design was paired */
+  designMobileFile?: string;
   aiError?: string;
   /** the design pairing looks wrong — an implausible pile of structural findings */
   mispaired: boolean;
@@ -95,6 +105,32 @@ const path = (u: string) => {
     return u;
   }
 };
+
+/** Desktop (and mobile, when a second Figma page was paired) renders shown next to live shots. */
+function pageDesigns(p: PageReport): Array<{ file: string; label: string; detail: string }> {
+  const deskVp = p.viewports.find((v) => v.name === 'desktop')?.design;
+  const mobVp = p.viewports.find((v) => v.name === 'mobile')?.design;
+  const deskFile = deskVp?.file ?? p.designFile;
+  const mobFile = mobVp?.file ?? p.designMobileFile;
+  const detail = (name?: string, width?: number) => [name, width ? `${width}px` : ''].filter(Boolean).join(' · ');
+  const out: Array<{ file: string; label: string; detail: string }> = [];
+  if (deskFile) {
+    const two = Boolean(mobFile && mobFile !== deskFile);
+    out.push({
+      file: deskFile,
+      label: two ? 'desktop design' : 'design',
+      detail: detail(p.mapping.frameName ?? deskVp?.source, deskVp?.width ?? p.mapping.frameWidth),
+    });
+  }
+  if (mobFile && mobFile !== deskFile) {
+    out.push({
+      file: mobFile,
+      label: 'mobile design',
+      detail: detail(p.mapping.frameMobileName ?? mobVp?.source, mobVp?.width ?? p.mapping.frameMobileWidth),
+    });
+  }
+  return out;
+}
 
 /**
  * Editors talk to the local tool. Stamp is baked into the HTML so opening the file from Finder
@@ -370,7 +406,7 @@ export function renderReport(r: RunReport, stamp?: string): string {
     <details class="page"${mine.length || p.mispaired ? ' open' : ''}>
       <summary>
         <code>${esc(path(p.url))}</code>
-        <span class="tiny">${p.mapping.frameName ? '↔ ' + esc(p.mapping.frameName) : 'no design paired'}</span>
+        <span class="tiny">${p.mapping.frameName ? '↔ ' + esc(p.mapping.frameName) : 'no design paired'}${p.mapping.frameMobileName ? ' · mobile ' + esc(p.mapping.frameMobileName) : ''}</span>
         <span class="grow"></span>
         ${flags.length ? `<span class="tiny ${mine.length || p.mispaired ? 'bad' : ''}">${flags.join(' · ')}</span>` : '<span class="tiny ok">ok</span>'}
       </summary>
@@ -395,7 +431,12 @@ export function renderReport(r: RunReport, stamp?: string): string {
               </figure>`,
             )
             .join('')}
-          ${p.designFile ? `<figure><figcaption>design <span class="tiny">${p.mapping.frameWidth ?? ''}px</span></figcaption><a href="${esc(p.designFile)}" target="_blank"><img src="${esc(p.designFile)}" alt="" loading="lazy"></a></figure>` : ''}
+          ${pageDesigns(p)
+            .map(
+              (d) =>
+                `<figure><figcaption>${esc(d.label)}${d.detail ? ` <span class="tiny">${esc(d.detail)}</span>` : ''}</figcaption><a href="${esc(d.file)}" target="_blank"><img src="${esc(d.file)}" alt="" loading="lazy"></a></figure>`,
+            )
+            .join('')}
         </div>
       </div>
     </details>`;
@@ -718,7 +759,7 @@ ${
   perPage.length
     ? `<section id="pages">
   <h2>Page-only findings</h2>
-  <p class="lead">Open a page to see its findings with all 3 viewport screenshots.</p>
+  <p class="lead">Open a page to see its findings with all 3 viewport screenshots, plus desktop and mobile designs when both were paired.</p>
   ${r.pages.map(pageRow).join('')}
 </section>`
     : `<section id="pages">
@@ -767,7 +808,7 @@ ${
         .map(
           (p) => `<tr>
         <td><a href="${esc(p.url)}" target="_blank">${esc(path(p.url))}</a></td>
-        <td>${p.mapping.frameName ? esc(p.mapping.frameName) + (p.mapping.isTemplate ? ' <span class="tiny">template</span>' : '') : '<span class="warn">unpaired</span>'}</td>
+        <td>${p.mapping.frameName ? esc(p.mapping.frameName) + (p.mapping.isTemplate ? ' <span class="tiny">template</span>' : '') : '<span class="warn">unpaired</span>'}${p.mapping.frameMobileName ? `<div class="tiny">mobile: ${esc(p.mapping.frameMobileName)}</div>` : ''}</td>
         <td class="tiny">${esc(p.mapping.how)}</td>
       </tr>`,
         )

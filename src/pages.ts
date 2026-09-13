@@ -8,6 +8,9 @@ export interface PageTarget {
   figmaNodeId?: string;
   /** Frame name, kept for readability in pages.json */
   frameName?: string;
+  /** Mobile Figma frame, when a second design link was supplied */
+  figmaMobileNodeId?: string;
+  frameMobileName?: string;
   /** How the pairing was decided, or "thủ công" when the human edited it */
   how?: string;
 }
@@ -22,6 +25,32 @@ function sameHost(a: URL, b: URL) {
 }
 
 export type Fetcher = (url: string) => Promise<string | null>;
+
+/** Copy whitelisted keys from the seed onto `raw`. Other query is dropped. */
+export function withPreservedQuery(raw: string, seed: string | URL, names: string[]): string {
+  const u = new URL(raw);
+  u.hash = '';
+  if (!names.length) {
+    return u.toString();
+  }
+  const src = typeof seed === 'string' ? new URL(seed) : seed;
+  u.search = '';
+  for (const name of names) {
+    for (const value of src.searchParams.getAll(name)) u.searchParams.append(name, value);
+  }
+  return u.toString();
+}
+
+export function applyPreservedQuery(urls: string[], seed: string, names: string[]): string[] {
+  if (!names.length) return urls;
+  return urls.map((raw) => {
+    try {
+      return withPreservedQuery(raw, seed, names);
+    } catch {
+      return raw;
+    }
+  });
+}
 
 async function get(url: string, timeoutMs = 15000): Promise<string | null> {
   const c = new AbortController();
@@ -67,6 +96,7 @@ export async function fromLinks(
   siteUrl: string,
   limit: number,
   ctxOpts: import('playwright').BrowserContextOptions = {},
+  preserveQuery: string[] = [],
 ): Promise<string[]> {
   const base = new URL(siteUrl);
   const ctx = await browser.newContext({ ignoreHTTPSErrors: true, ...ctxOpts });
@@ -81,13 +111,13 @@ export async function fromLinks(
   } finally {
     await ctx.close().catch(() => {});
   }
-  const keep = normalise(hrefs, base, limit);
+  const keep = normalisePageUrls(hrefs, base, limit, preserveQuery);
   log(keep.length ? `homepage links → ${keep.length} pages` : 'no internal links found on the homepage');
   return keep;
 }
 
 /** Filter a raw URL list down to real, distinct pages of this site, most important first. */
-function normalise(urls: string[], base: URL, limit: number): string[] {
+export function normalisePageUrls(urls: string[], base: URL, limit: number, preserveQuery: string[] = []): string[] {
   const seen = new Set<string>();
   const keep: string[] = [];
   for (const raw of urls) {
@@ -102,6 +132,13 @@ function normalise(urls: string[], base: URL, limit: number): string[] {
     if (SKIP_EXT.test(u.pathname) || SKIP_PATH.test(u.pathname)) continue;
     u.hash = '';
     u.search = '';
+    if (preserveQuery.length) {
+      try {
+        u = new URL(withPreservedQuery(u.toString(), base, preserveQuery));
+      } catch {
+        /* keep the stripped URL */
+      }
+    }
     // http and https of one path are ONE page.
     const key = u.host.replace(/^www\./, '') + (u.pathname.replace(/\/+$/, '') || '/');
     if (seen.has(key)) continue;
@@ -138,7 +175,7 @@ const locs = (xml: string) => Array.from(xml.matchAll(/<loc>\s*([^<\s]+)\s*<\/lo
  * Read the site's own sitemap instead of crawling. One request (a few for a sitemap index),
  * no link-following logic, and it gives the pages the site itself considers real.
  */
-export async function fromSitemap(siteUrl: string, limit: number, fetcher: Fetcher = get): Promise<string[]> {
+export async function fromSitemap(siteUrl: string, limit: number, fetcher: Fetcher = get, preserveQuery: string[] = []): Promise<string[]> {
   const base = new URL(siteUrl);
   const candidates = ['/sitemap.xml', '/wp-sitemap.xml', '/sitemap_index.xml', '/sitemap-index.xml'];
   let xml: string | null = null;
@@ -173,7 +210,7 @@ export async function fromSitemap(siteUrl: string, limit: number, fetcher: Fetch
     log(`sitemap: ${used} → ${urls.length} URL`);
   }
 
-  return normalise(urls, base, limit);
+  return normalisePageUrls(urls, base, limit, preserveQuery);
 }
 
 /** A stable folder name for one URL, used to keep each page's approved baseline separate. */
@@ -207,7 +244,7 @@ export function readPagesJson(cwd = process.cwd()): PageTarget[] | null {
 
 export function writePagesJson(targets: PageTarget[], cwd = process.cwd()) {
   const body = {
-    _: 'Pairs each URL with a Figma frame. The tool writes this file the first time; edit a wrong row and later runs keep your edit. Drop figmaNodeId to skip design compare for that page.',
+    _: 'Pairs each URL with a Figma frame (desktop) and optionally a mobile frame. The tool writes this file the first time; edit a wrong row and later runs keep your edit. Drop figmaNodeId / figmaMobileNodeId to skip that compare.',
     pages: targets,
   };
   writeFileSync(pagesJsonPath(cwd), JSON.stringify(body, null, 2));

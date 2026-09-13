@@ -59,10 +59,12 @@ function configFor(
   maxPages: number,
   creds?: { user?: string; pass?: string },
   model?: string,
+  figmaMobile?: string,
 ): Config {
   const argv = [siteUrl, '--site', siteUrl, '--pages', String(maxPages)];
   // One field in the UI takes either: a figma.com link, or a folder of design PNGs.
   if (design) argv.push(/figma\.com\//.test(design) ? '--figma' : '--design', design);
+  if (figmaMobile && /figma\.com\//.test(figmaMobile)) argv.push('--figma-mobile', figmaMobile);
   const picked = sanitizeModel(model);
   if (picked === '') argv.push('--ai', 'none');
   else if (picked) argv.push('--model', picked);
@@ -229,10 +231,14 @@ const server = createServer(async (req, res) => {
       const body = await readBody(req);
       const siteUrl = String(body.siteUrl ?? '').trim();
       const figmaLink = String(body.figmaLink ?? '').trim() || undefined;
+      const figmaMobile = String(body.figmaMobile ?? '').trim() || undefined;
       const maxPages = Math.max(1, Math.min(80, Number(body.maxPages ?? 8)));
       if (!/^https?:\/\//i.test(siteUrl)) return json(res, 400, { error: 'homepage URL must start with http:// or https://' });
       if (figmaLink && !/figma\.com\//.test(figmaLink) && !figmaLink.startsWith('/')) {
         return json(res, 400, { error: 'design must be a figma.com/… link or an absolute path to a PNG folder' });
+      }
+      if (figmaMobile && !/figma\.com\//.test(figmaMobile)) {
+        return json(res, 400, { error: 'mobile design must be a figma.com/… link' });
       }
       if (busy) return json(res, 409, { error: 'a run is already in progress — wait for it to finish' });
 
@@ -241,10 +247,18 @@ const server = createServer(async (req, res) => {
       setLogSink((l) => lines.push(l));
       try {
         lastCreds = { user: String(body.user ?? '').trim() || undefined, pass: String(body.pass ?? '').trim() || undefined };
-        const cfg = configFor(siteUrl, figmaLink, maxPages, lastCreds, body.model);
+        const cfg = configFor(siteUrl, figmaLink, maxPages, lastCreds, body.model, figmaMobile);
         lastConfig = cfg;
         const d = await discover(cfg);
-        lastFrames = d.frames.map((f) => ({ id: f.id, name: f.name, width: f.width, height: f.height, file: f.file }));
+        lastFrames = d.frames.map((f) => ({
+          id: f.id,
+          name: f.name,
+          width: f.width,
+          height: f.height,
+          file: f.file,
+          role: f.role,
+          fileKey: f.fileKey,
+        }));
         return json(res, 200, {
           ...d,
           log: lines,
@@ -269,6 +283,7 @@ const server = createServer(async (req, res) => {
       if (!lastConfig) return json(res, 409, { error: 'no discover yet' });
       try {
         const f = await frameFromLink(link, lastConfig.figmaToken);
+        if (body.role === 'mobile' || body.role === 'desktop') f.role = body.role;
         // Render it so the row can show a thumbnail like every other row.
         const { renderFigmaFrames } = await import('./design.js');
         const rendered = await renderFigmaFrames(link, [f], lastConfig.figmaToken, designCache(lastConfig)).catch(() => new Map<string, string>());
@@ -303,7 +318,14 @@ const server = createServer(async (req, res) => {
         writePagesJson(
           catalog
             .filter((r) => typeof r?.url === 'string' && r.url.trim())
-            .map((r) => ({ url: r.url, figmaNodeId: r.figmaNodeId, frameName: r.frameName, how: r.how ?? 'paired on web' })),
+            .map((r) => ({
+              url: r.url,
+              figmaNodeId: r.figmaNodeId,
+              frameName: r.frameName,
+              figmaMobileNodeId: r.figmaMobileNodeId,
+              frameMobileName: r.frameMobileName,
+              how: r.how ?? 'paired on web',
+            })),
         );
       } catch {}
 
@@ -431,6 +453,7 @@ const server = createServer(async (req, res) => {
       const body = await readBody(req);
       const siteUrl = String(body.siteUrl ?? '').trim();
       const figmaLink = String(body.figmaLink ?? '').trim() || undefined;
+      const figmaMobile = String(body.figmaMobile ?? '').trim() || undefined;
       const maxPages = Math.max(1, Math.min(80, Number(body.maxPages ?? 8)));
       if (!/^https?:\/\//i.test(siteUrl)) return json(res, 400, { error: 'invalid homepage URL' });
 
@@ -442,12 +465,14 @@ const server = createServer(async (req, res) => {
           width: Number(f.width) || 0,
           height: Number(f.height) || 0,
           file: typeof f.file === 'string' ? f.file : undefined,
+          role: f.role === 'mobile' || f.role === 'desktop' ? f.role : undefined,
+          fileKey: typeof f.fileKey === 'string' ? f.fileKey : undefined,
         }))
         .slice(0, 200);
 
       const creds = { user: String(body.user ?? '').trim() || lastCreds?.user, pass: String(body.pass ?? '').trim() || lastCreds?.pass };
       lastCreds = creds.user || creds.pass ? creds : lastCreds;
-      const cfg = configFor(siteUrl, figmaLink, maxPages, lastCreds, body.model);
+      const cfg = configFor(siteUrl, figmaLink, maxPages, lastCreds, body.model, figmaMobile);
       lastConfig = cfg;
       lastFrames = frames;
       log(`reusing saved pairing (${frames.length} frames) — skipping discover`);

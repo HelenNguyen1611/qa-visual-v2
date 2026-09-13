@@ -172,6 +172,15 @@
         background: #fff;
         color: inherit;
       }
+      select {
+        appearance: none;
+        -webkit-appearance: none;
+        padding-right: 28px;
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='none' stroke='%235c6370' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' d='M2.5 4.5 6 8l3.5-3.5'/></svg>");
+        background-repeat: no-repeat;
+        background-position: right 6px center;
+        background-size: 12px 12px;
+      }
       input[type='url']:focus,
       input[type='text']:focus,
       input[type='number']:focus,
@@ -227,6 +236,11 @@
       .row2 {
         display: grid;
         grid-template-columns: 1fr 130px;
+        gap: 14px;
+      }
+      .rowfig {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
         gap: 14px;
       }
       button {
@@ -357,6 +371,14 @@
       }
       td.thumb {
         width: 96px;
+      }
+      td.thumb img,
+      td.thumb .none {
+        margin-bottom: 6px;
+      }
+      td.thumb img:last-child,
+      td.thumb .none:last-child {
+        margin-bottom: 0;
       }
       td.act {
         width: 44px;
@@ -737,6 +759,12 @@
         font-variant-numeric: tabular-nums;
         width: 72px;
       }
+      .history td.ai {
+        color: var(--dim);
+        font-size: 12.5px;
+        max-width: 220px;
+        word-break: break-word;
+      }
       .history .acts {
         display: flex;
         flex-wrap: wrap;
@@ -802,9 +830,9 @@
         <section class="card" id="s1">
           <h2>Site and design</h2>
           <p class="sub">
-            Enter the homepage URL and a Figma file link. The tool will discover
-            pages and guess matching frames — you can fix the pairing in the
-            next step.
+            Enter the homepage URL and Figma links. Desktop and mobile are
+            often different pages in the same file — paste each. The tool
+            guesses matching frames; you can fix the pairing next.
           </p>
           <div class="field">
             <label for="site">Homepage URL</label>
@@ -815,19 +843,33 @@
               autocomplete="url"
             />
           </div>
-          <div class="field">
-            <label for="figma"
-              >Figma link
-              <span style="font-weight: 400; color: var(--dim)"
-                >(or a folder of PNGs · leave empty if there is no design
-                yet)</span
-              ></label
-            >
-            <input
-              type="text"
-              id="figma"
-              placeholder="https://www.figma.com/design/…"
-            />
+          <div class="rowfig">
+            <div class="field">
+              <label for="figma"
+                >Figma desktop
+                <span style="font-weight: 400; color: var(--dim)"
+                  >(or a folder of PNGs)</span
+                ></label
+              >
+              <input
+                type="text"
+                id="figma"
+                placeholder="https://www.figma.com/design/… (desktop page)"
+              />
+            </div>
+            <div class="field">
+              <label for="figmaMobile"
+                >Figma mobile
+                <span style="font-weight: 400; color: var(--dim)"
+                  >(optional · mobile page or file)</span
+                ></label
+              >
+              <input
+                type="text"
+                id="figmaMobile"
+                placeholder="https://www.figma.com/design/… (mobile page)"
+              />
+            </div>
           </div>
           <details class="authbox" id="authbox">
             <summary>
@@ -893,7 +935,8 @@
                 <th></th>
                 <th>Design</th>
                 <th>Page URL</th>
-                <th>Figma frame</th>
+                <th>Desktop frame</th>
+                <th>Mobile frame</th>
                 <th></th>
               </tr>
             </thead>
@@ -906,7 +949,7 @@
                 <button id="back2">Change links</button>
                 <button id="picknew">Select unreviewed</button>
                 <button id="pickold">Select already QA’d</button>
-                <button id="pickall">Select all</button>
+                <button id="pickall">Check all</button>
               </div>
               <div class="toolbar-left-down">
                 <label class="fastlab" for="fast2"
@@ -1159,11 +1202,13 @@
       const LS_LAST = 'qav:v1:last';
       const LS_FAST = 'qav:v1:fast';
       const LS_MODEL = 'qav:v1:model';
-      const keyFor = (site, figma) =>
+      const keyFor = (site, figma, figmaMobile) =>
         LS_PREFIX +
         bareUrl((site || '').trim()).replace(/\/+$/, '') +
         '|' +
-        (figma || '').trim();
+        (figma || '').trim() +
+        '|' +
+        (figmaMobile || '').trim();
 
       function fastOn() {
         return Boolean($('fast') && $('fast').checked);
@@ -1228,12 +1273,13 @@
         try {
           const site = bareUrl($('site').value.trim());
           if (!site) return;
-          const key = keyFor(site, $('figma').value);
+          const key = keyFor(site, $('figma').value, $('figmaMobile').value);
           localStorage.setItem(
             key,
             JSON.stringify({
               siteUrl: site,
               figmaLink: $('figma').value.trim(),
+              figmaMobile: $('figmaMobile').value.trim(),
               maxPages: Number($('max').value) || 8,
               fast: fastOn(),
               model: modelOn(),
@@ -1248,9 +1294,9 @@
         }
       }
 
-      function loadSession(site, figma) {
+      function loadSession(site, figma, figmaMobile) {
         try {
-          const raw = localStorage.getItem(keyFor(site, figma));
+          const raw = localStorage.getItem(keyFor(site, figma, figmaMobile));
           if (!raw) return null;
           const d = JSON.parse(raw);
           return Array.isArray(d?.rows) && d.rows.length ? d : null;
@@ -1280,6 +1326,7 @@
         if (!d?.siteUrl) return;
         $('site').value = d.siteUrl;
         $('figma').value = d.figmaLink || '';
+        if ($('figmaMobile')) $('figmaMobile').value = '';
         if (d.maxPages) $('max').value = d.maxPages;
         offerSaved();
       }
@@ -1292,7 +1339,7 @@
        * cannot tell a stale table from a fresh one.
        */
       function offerSaved() {
-        const d = loadSession($('site').value, $('figma').value);
+        const d = loadSession($('site').value, $('figma').value, $('figmaMobile').value);
         const has = Boolean(d);
         $('saved').hidden = !has;
         $('redo').hidden = !has;
@@ -1346,17 +1393,19 @@
       /* ------------------------------ 1. discover ------------------------------ */
       $('redo').onclick = () => {
         try {
-          localStorage.removeItem(keyFor($('site').value, $('figma').value));
+          localStorage.removeItem(keyFor($('site').value, $('figma').value, $('figmaMobile').value));
         } catch {}
         offerSaved();
         $('go1').click();
       };
       $('site').addEventListener('input', offerSaved);
       $('figma').addEventListener('input', offerSaved);
+      $('figmaMobile').addEventListener('input', offerSaved);
 
       $('go1').onclick = async () => {
         const siteUrl = $('site').value.trim();
         const figmaLink = $('figma').value.trim();
+        const figmaMobile = $('figmaMobile').value.trim();
         showErr('e1', '');
         if (!/^https?:\/\//i.test(siteUrl))
           return showErr(
@@ -1370,17 +1419,20 @@
         )
           return showErr(
             'e1',
-            'Design must be a figma.com/… link or an absolute path to a PNG folder',
+            'Desktop design must be a figma.com/… link or an absolute path to a PNG folder',
           );
+        if (figmaMobile && !/figma\.com\//.test(figmaMobile))
+          return showErr('e1', 'Mobile design must be a figma.com/… link');
 
         // Saved pairing for exactly this (site, design)? Re-arm the server and go straight to the table.
-        const saved = loadSession(siteUrl, figmaLink);
+        const saved = loadSession(siteUrl, figmaLink, figmaMobile);
         if (saved) {
           busy($('go1'), true, 'Opening pairing…');
           try {
             const r = await post('/api/session', {
               siteUrl,
               figmaLink,
+              figmaMobile,
               maxPages: Number($('max').value) || 8,
               model: modelOn(),
               frames: saved.frames || [],
@@ -1413,6 +1465,7 @@
           const d = await post('/api/discover', {
             siteUrl,
             figmaLink,
+            figmaMobile,
             maxPages: Number($('max').value) || 8,
             model: modelOn(),
             user: $('auser').value.trim(),
@@ -1427,12 +1480,19 @@
             hostOf(siteUrl),
             d.aiModel ? 'AI: ' + d.aiModel : 'AI: off',
           ].join(' · ');
+          const deskN = FRAMES.filter((f) => f.role !== 'mobile').length;
+          const mobN = FRAMES.filter((f) => f.role === 'mobile').length;
           const bits = [
             ROWS.length + ' pages (' + d.pagesFrom + ')',
-            FRAMES.length + ' Figma frames',
+            deskN + ' desktop frames',
           ];
+          if (mobN) bits.push(mobN + ' mobile frames');
+          else if (figmaMobile) bits.push('no mobile frames found');
           if (d.authHow) bits.push('signed in via ' + d.authHow);
-          if (/figma\.com\//.test(figmaLink) && !d.hasFigmaToken)
+          if (
+            (/figma\.com\//.test(figmaLink) || /figma\.com\//.test(figmaMobile)) &&
+            !d.hasFigmaToken
+          )
             bits.push('⚠ FIGMA_TOKEN is missing from .env');
           $('s2sub').textContent =
             bits.join(' · ') +
@@ -1519,15 +1579,25 @@
           if (r.pendingLink)
             flags.push({
               level: 'warn',
-              text: 'Figma link not applied yet — click Fetch frame, or pick another frame',
+              text: 'Desktop Figma link not applied yet — click Fetch frame, or pick another frame',
+            });
+          if (r.pendingMobileLink)
+            flags.push({
+              level: 'warn',
+              text: 'Mobile Figma link not applied yet — click Fetch frame, or pick another frame',
             });
           return flags;
         });
       }
 
-      function frameOptions(sel) {
+      function frameOptions(sel, role) {
+        const list = FRAMES.filter((f) => {
+          if (!role) return true;
+          if (f.role) return f.role === role;
+          return role === 'desktop' || f.id === sel;
+        });
         let h = '<option value="">— no design compare</option>';
-        for (const f of FRAMES)
+        for (const f of list)
           h +=
             '<option value="' +
             esc(f.id) +
@@ -1543,6 +1613,20 @@
           (sel === '__paste' ? ' selected' : '') +
           '>+ paste Figma link…</option>';
         return h;
+      }
+
+      function thumbHtml(f, label) {
+        if (f && f.thumb)
+          return (
+            '<img src="/design/' +
+            encodeURIComponent(f.thumb) +
+            '" alt="' +
+            esc(f.name) +
+            '" data-zoom="' +
+            esc(f.name) +
+            '">'
+          );
+        return '<div class="none">' + (f ? 'not rendered' : label) + '</div>';
       }
 
       function qaLabel(url) {
@@ -1570,8 +1654,7 @@
           $('count').textContent = bad + ' rows need fixing before you can run';
           $('go2').disabled = true;
           if ($('go2top')) $('go2top').disabled = true;
-          return;
-        }
+        } else {
         $('count').textContent =
           n +
           '/' +
@@ -1586,6 +1669,11 @@
           $('go2top').disabled = off;
           $('go2top').textContent = label;
         }
+        }
+        if ($('pickall')) {
+          const allOn = ROWS.length > 0 && n === ROWS.length;
+          $('pickall').textContent = allOn ? 'Uncheck all' : 'Check all';
+        }
       }
 
       function render() {
@@ -1593,17 +1681,15 @@
         $('rows').innerHTML = ROWS.map((r, i) => {
           const f =
             FRAMES.find((x) => x.id === r.figmaNodeId) ||
+            (r.frameName ? FRAMES.find((x) => x.name === r.frameName && x.role !== 'mobile') : null) ||
             (r.frameName ? FRAMES.find((x) => x.name === r.frameName) : null);
-          const thumb =
-            f && f.thumb
-              ? '<img src="/design/' +
-                encodeURIComponent(f.thumb) +
-                '" alt="' +
-                esc(f.name) +
-                '" data-zoom="' +
-                esc(f.name) +
-                '">'
-              : '<div class="none">' + (f ? 'not rendered' : '—') + '</div>';
+          const fm =
+            FRAMES.find((x) => x.id === r.figmaMobileNodeId) ||
+            (r.frameMobileName
+              ? FRAMES.find((x) => x.name === r.frameMobileName && x.role === 'mobile')
+              : null) ||
+            (r.frameMobileName ? FRAMES.find((x) => x.name === r.frameMobileName) : null);
+          const thumb = thumbHtml(f, 'D') + thumbHtml(fm, 'M');
           const fl = flags[i]
             .map(
               (x) =>
@@ -1632,15 +1718,25 @@
             fl +
             '</td>' +
             '<td><select class="frame">' +
-            frameOptions(r.pendingLink ? '__paste' : f ? f.id : '') +
+            frameOptions(r.pendingLink ? '__paste' : f ? f.id : '', 'desktop') +
             '</select>' +
             '<div class="paste' +
             (r.pendingLink !== undefined ? ' on' : '') +
             '">' +
-            '<input type="text" class="link" placeholder="paste Figma frame link, then Enter" value="' +
+            '<input type="text" class="link" placeholder="paste desktop frame link, then Enter" value="' +
             esc(r.pendingLink || '') +
             '">' +
-            '<button class="getframe" style="margin-top:6px">Fetch frame</button></div></td>' +
+            '<button class="getframe" data-role="desktop" style="margin-top:6px">Fetch frame</button></div></td>' +
+            '<td><select class="frame-m">' +
+            frameOptions(r.pendingMobileLink ? '__paste' : fm ? fm.id : '', 'mobile') +
+            '</select>' +
+            '<div class="paste' +
+            (r.pendingMobileLink !== undefined ? ' on' : '') +
+            '">' +
+            '<input type="text" class="link-m" placeholder="paste mobile frame link, then Enter" value="' +
+            esc(r.pendingMobileLink || '') +
+            '">' +
+            '<button class="getframe" data-role="mobile" style="margin-top:6px">Fetch frame</button></div></td>' +
             '<td class="act"><button class="icon del" title="remove row">✕</button></td>' +
             '</tr>'
           );
@@ -1684,6 +1780,8 @@
         }
         if (e.target.classList.contains('link'))
           ROWS[i].pendingLink = e.target.value;
+        if (e.target.classList.contains('link-m'))
+          ROWS[i].pendingMobileLink = e.target.value;
       });
 
       $('rows').addEventListener('change', (e) => {
@@ -1693,13 +1791,35 @@
           updateCount();
           return;
         }
+        if (e.target.classList.contains('frame-m')) {
+          const i = +e.target.closest('tr').dataset.i;
+          const v = e.target.value;
+          if (v === '__paste') {
+            ROWS[i].pendingMobileLink = ROWS[i].pendingMobileLink || '';
+            render();
+            tryFocus(i, 'mobile');
+            return;
+          }
+          delete ROWS[i].pendingMobileLink;
+          const f = FRAMES.find((x) => x.id === v);
+          ROWS[i].figmaMobileNodeId = f ? f.id : undefined;
+          ROWS[i].frameMobileName = f ? f.name : undefined;
+          ROWS[i].how = f
+            ? (ROWS[i].how ? ROWS[i].how + ' · ' : '') +
+              'mobile picked: "' +
+              f.name +
+              '"'
+            : ROWS[i].how || 'no mobile design';
+          render();
+          return;
+        }
         if (!e.target.classList.contains('frame')) return;
         const i = +e.target.closest('tr').dataset.i;
         const v = e.target.value;
         if (v === '__paste') {
           ROWS[i].pendingLink = ROWS[i].pendingLink || '';
           render();
-          tryFocus(i);
+          tryFocus(i, 'desktop');
           return;
         }
         delete ROWS[i].pendingLink;
@@ -1712,15 +1832,20 @@
         render();
       });
 
-      function tryFocus(i) {
-        const el = document.querySelector('tr[data-i="' + i + '"] .link');
+      function tryFocus(i, role) {
+        const sel = role === 'mobile' ? '.link-m' : '.link';
+        const el = document.querySelector('tr[data-i="' + i + '"] ' + sel);
         if (el) el.focus();
       }
 
       $('rows').addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && e.target.classList.contains('link')) {
           e.preventDefault();
-          getFrame(+e.target.closest('tr').dataset.i);
+          getFrame(+e.target.closest('tr').dataset.i, 'desktop');
+        }
+        if (e.key === 'Enter' && e.target.classList.contains('link-m')) {
+          e.preventDefault();
+          getFrame(+e.target.closest('tr').dataset.i, 'mobile');
         }
       });
       $('rows').addEventListener('click', async (e) => {
@@ -1731,7 +1856,8 @@
           ROWS.splice(i, 1);
           render();
         }
-        if (e.target.classList.contains('getframe')) getFrame(i);
+        if (e.target.classList.contains('getframe'))
+          getFrame(i, e.target.getAttribute('data-role') || 'desktop');
         if (e.target.dataset.zoom !== undefined) {
           $('zoomImg').src = e.target.src;
           $('zoomName').textContent = e.target.dataset.zoom;
@@ -1739,19 +1865,29 @@
         }
       });
 
-      async function getFrame(i) {
-        const link = (ROWS[i].pendingLink || '').trim();
-        const btn = document.querySelector('tr[data-i="' + i + '"] .getframe');
+      async function getFrame(i, role) {
+        const mobile = role === 'mobile';
+        const link = ((mobile ? ROWS[i].pendingMobileLink : ROWS[i].pendingLink) || '').trim();
+        const btn = document.querySelector(
+          'tr[data-i="' + i + '"] .getframe[data-role="' + (mobile ? 'mobile' : 'desktop') + '"]',
+        );
         showErr('e2', '');
         if (!link) return showErr('e2', 'row ' + (i + 1) + ': no link pasted');
         if (btn) busy(btn, true, 'Fetching…');
         try {
-          const f = await post('/api/frame', { link });
-          if (!FRAMES.some((x) => x.id === f.id)) FRAMES.push(f);
-          delete ROWS[i].pendingLink;
-          ROWS[i].figmaNodeId = f.id;
-          ROWS[i].frameName = f.name;
-          ROWS[i].how = 'pasted link: "' + f.name + '"';
+          const f = await post('/api/frame', { link, role: mobile ? 'mobile' : 'desktop' });
+          if (!FRAMES.some((x) => x.id === f.id && x.role === f.role)) FRAMES.push(f);
+          if (mobile) {
+            delete ROWS[i].pendingMobileLink;
+            ROWS[i].figmaMobileNodeId = f.id;
+            ROWS[i].frameMobileName = f.name;
+            ROWS[i].how = 'pasted mobile link: "' + f.name + '"';
+          } else {
+            delete ROWS[i].pendingLink;
+            ROWS[i].figmaNodeId = f.id;
+            ROWS[i].frameName = f.name;
+            ROWS[i].how = 'pasted link: "' + f.name + '"';
+          }
           render();
         } catch (e) {
           showErr('e2', 'row ' + (i + 1) + ': ' + e.message);
@@ -1785,7 +1921,8 @@
         render();
       };
       $('pickall').onclick = () => {
-        for (const r of ROWS) r.include = true;
+        const allOn = ROWS.length > 0 && selectedRows().length === ROWS.length;
+        for (const r of ROWS) r.include = !allOn;
         render();
       };
 
@@ -1802,12 +1939,16 @@
           url: r.url.trim(),
           figmaNodeId: r.figmaNodeId,
           frameName: r.frameName,
+          figmaMobileNodeId: r.figmaMobileNodeId,
+          frameMobileName: r.frameMobileName,
           how: r.how,
         }));
         const catalog = ROWS.map((r) => ({
           url: r.url.trim(),
           figmaNodeId: r.figmaNodeId,
           frameName: r.frameName,
+          figmaMobileNodeId: r.figmaMobileNodeId,
+          frameMobileName: r.frameMobileName,
           how: r.how,
         }));
         saveSession();
@@ -2095,6 +2236,12 @@
       let histOffset = 0;
       let histTotal = 0;
 
+      function aiModeLabel(raw) {
+        const s = String(raw || '').trim();
+        if (!s || s === 'none' || /\/none$/i.test(s)) return 'No AI';
+        return s.replace(/^openrouter\//, '');
+      }
+
       function historyRow(r) {
         return (
           '<tr data-stamp="' +
@@ -2105,6 +2252,9 @@
           '</td>' +
           '<td class="when">' +
           esc(formatWhen(r.when, r.stamp)) +
+          '</td>' +
+          '<td class="ai">' +
+          esc(aiModeLabel(r.aiModel)) +
           '</td>' +
           '<td class="nfind ' +
           (r.findings ? 'bad' : 'ok') +
@@ -2168,7 +2318,7 @@
             return;
           }
           box.innerHTML =
-            '<table class="history"><thead><tr><th>Site</th><th>When</th><th>Findings</th><th></th></tr></thead><tbody>' +
+            '<table class="history"><thead><tr><th>Site</th><th>When</th><th>AI</th><th>Findings</th><th></th></tr></thead><tbody>' +
             rows.map(historyRow).join('') +
             '</tbody></table>';
           historyMeta();
@@ -2263,6 +2413,9 @@
         if (e.key === 'Enter') $('go1').click();
       });
       $('figma').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') $('go1').click();
+      });
+      $('figmaMobile').addEventListener('keydown', (e) => {
         if (e.key === 'Enter') $('go1').click();
       });
     </script>

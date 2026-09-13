@@ -86,6 +86,8 @@ export interface RunSummary {
   findings: number;
   hasShare: boolean;
   hasNotes: boolean;
+  /** e.g. openrouter/google/gemini-3.7-flash — empty when the run had AI off */
+  aiModel?: string;
 }
 
 export function summarizeRun(root: string, stamp: string): RunSummary | null {
@@ -94,6 +96,7 @@ export function summarizeRun(root: string, stamp: string): RunSummary | null {
     const r = JSON.parse(readFileSync(join(dir, 'report.json'), 'utf8'));
     const site = reportSite(r);
     const findings = Array.isArray(r.findings) ? r.findings.filter((f: { accepted?: boolean }) => !f.accepted).length : 0;
+    const aiModel = typeof r.aiModel === 'string' ? r.aiModel : '';
     return {
       stamp,
       site,
@@ -102,6 +105,7 @@ export function summarizeRun(root: string, stamp: string): RunSummary | null {
       findings,
       hasShare: existsSync(join(dir, 'report-share.html')),
       hasNotes: typeof r.humanNotes === 'string' && Boolean(r.humanNotes.trim()),
+      aiModel,
     };
   } catch {
     return null;

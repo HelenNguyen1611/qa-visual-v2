@@ -1,5 +1,7 @@
 import type { FigmaFrame } from './design.js';
 import type { PageTarget } from './pages.js';
+import type { ViewportName } from './config.js';
+import { VIEWPORTS } from './config.js';
 
 /**
  * Pair each URL with the Figma frame that is its design.
@@ -62,6 +64,7 @@ function score(url: string, frame: FigmaFrame): number {
 
 export interface Mapped extends PageTarget {
   frame?: FigmaFrame;
+  mobileFrame?: FigmaFrame;
   score: number;
   /** the runner-up score, so an ambiguous pairing is visible */
   runnerUp: number;
@@ -129,6 +132,44 @@ export function mapUrlsToFrames(urls: string[], frames: FigmaFrame[]): Mapped[] 
     });
   }
   return out;
+}
+
+/** Pair each URL independently against the desktop pool and the mobile pool. */
+export function pairDesktopAndMobile(urls: string[], frames: FigmaFrame[]): Mapped[] {
+  const desk = frames.filter((f) => f.role !== 'mobile');
+  const mob = frames.filter((f) => f.role === 'mobile');
+  const dMap = mapUrlsToFrames(urls, desk);
+  const mMap = mob.length ? mapUrlsToFrames(urls, mob) : null;
+  return dMap.map((d, i) => {
+    const m = mMap?.[i];
+    const mobileFrame = m?.frame;
+    const how = mobileFrame ? `${d.how} · mobile “${mobileFrame.name}”` : d.how;
+    return {
+      ...d,
+      how,
+      mobileFrame,
+      figmaMobileNodeId: mobileFrame?.id,
+      frameMobileName: mobileFrame?.name,
+    };
+  });
+}
+
+const CLOSE = 0.12;
+
+/** Which design image a viewport should be compared against, and whether the widths match. */
+export function pickDesign(
+  viewport: ViewportName,
+  target: { frame?: FigmaFrame; mobileFrame?: FigmaFrame },
+): { frame: FigmaFrame; mode: 'fidelity' | 'adaptation' } | undefined {
+  const vpW = VIEWPORTS.find((v) => v.name === viewport)?.width ?? 1440;
+  const modeOf = (f: FigmaFrame): 'fidelity' | 'adaptation' =>
+    Math.abs(f.width - vpW) / vpW <= CLOSE ? 'fidelity' : 'adaptation';
+  if (viewport === 'mobile') {
+    const f = target.mobileFrame ?? target.frame;
+    return f ? { frame: f, mode: modeOf(f) } : undefined;
+  }
+  const f = target.frame ?? target.mobileFrame;
+  return f ? { frame: f, mode: modeOf(f) } : undefined;
 }
 
 /**

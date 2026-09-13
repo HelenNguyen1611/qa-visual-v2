@@ -1,14 +1,14 @@
 import { mkdirSync, copyFileSync, existsSync, writeFileSync, readFileSync } from 'node:fs';
 import { join, relative, basename } from 'node:path';
 import type { Browser } from 'playwright';
-import { log, VIEWPORTS, progressTotal, progressTick, progressSay, type Config } from './config.js';
+import { log, VIEWPORTS, progressTotal, progressTick, progressSay, type Config, type ViewportName } from './config.js';
 import { launch, captureAll, type Capture } from './capture.js';
 import { sweep, type SweepResult } from './sweep.js';
 import { compare } from './compare.js';
 import { renderReport, type RunReport, type PageReport, type ViewportReport } from './report.js';
-import { listFigmaFrames, renderFigmaFrames, framesFromFolder, fetchFigmaOverlay, type FigmaFrame, type FigmaOverlay } from './design.js';
-import { fromSitemap, fromLinks, browserFetcher, dedupeUrls, slugOf, type PageTarget } from './pages.js';
-import { mapUrlsToFrames, looksMispaired, type Mapped } from './mapping.js';
+import { loadDesignFrames, renderFigmaFrames, fetchFigmaOverlay, parseFigmaLink, type FigmaFrame, type FigmaOverlay } from './design.js';
+import { fromSitemap, fromLinks, browserFetcher, dedupeUrls, slugOf, applyPreservedQuery, withPreservedQuery, type PageTarget } from './pages.js';
+import { pairDesktopAndMobile, pickDesign, looksMispaired, type Mapped } from './mapping.js';
 import { detectShared } from './shared.js';
 import { groupFindings, markDrift, type Occurrence, type GroupedFinding } from './group.js';
 import { createProvider, aiStopped, resetAiCircuit, aiMaxInflight, preflight, type VisionProvider } from './provider.js';
@@ -56,6 +56,8 @@ export interface DiscoveredFrame {
   file?: string;
   /** basename the server can serve as a thumbnail */
   thumb?: string;
+  role?: FigmaFrame['role'];
+  fileKey?: string;
 }
 
 export interface Discovery {
@@ -70,13 +72,15 @@ export async function findPages(browser: Browser, siteUrl: string, maxPages: num
   // The sitemap and the homepage's nav are the first two things a login gate hides, so both have
   // to be fetched as a logged-in visitor — otherwise a protected site looks like a one-page site.
   const opts = authOptions(cfg?.authState);
-  let urls = await fromSitemap(siteUrl, maxPages, browserFetcher(browser, opts));
+  const preserveQuery = cfg?.preserveQuery ?? [];
+  let urls = await fromSitemap(siteUrl, maxPages, browserFetcher(browser, opts), preserveQuery);
   let from = 'sitemap.xml';
   if (!urls.length) {
-    urls = await fromLinks(browser, siteUrl, maxPages, opts);
+    urls = await fromLinks(browser, siteUrl, maxPages, opts, preserveQuery);
     from = 'homepage links';
   }
-  urls = dedupeUrls([siteUrl, ...urls]).slice(0, maxPages);
+  urls = applyPreservedQuery(dedupeUrls([siteUrl, ...urls]), siteUrl, preserveQuery).slice(0, maxPages);
+  if (preserveQuery.length) log(`preserve query: ${preserveQuery.join(', ')}`);
 
   if (urls.length <= 1) {
     log('⚠ only found 1 page. Three common causes, in order:');
@@ -103,21 +107,28 @@ export async function discover(cfg: Config): Promise<Discovery> {
     const site = cfg.site ?? cfg.url;
     cfg.authState = await prepareAuth(browser, site, cfg.auth);
     const { urls, from } = await findPages(browser, site, cfg.maxPages, cfg);
-    log(`${urls.length} pages: ${urls.map((u) => new URL(u).pathname).join(', ')}`);
+    log(`${urls.length} pages: ${urls.map((u) => {
+      try {
+        const x = new URL(u);
+        return x.pathname + x.search;
+      } catch {
+        return u;
+      }
+    }).join(', ')}`);
 
-    let frames: FigmaFrame[] = [];
-    try {
-      if (cfg.figma) frames = await listFigmaFrames(cfg.figma, cfg.figmaToken);
-      else if (cfg.designDir) frames = framesFromFolder(cfg.designDir);
-    } catch (e: any) {
-      log(`design: ${e?.message ?? e}`);
-    }
-
-    const mapped = mapUrlsToFrames(urls, frames);
+    const frames = await loadDesignFrames(cfg);
+    const mapped = pairDesktopAndMobile(urls, frames);
     const rendered = await renderAll(cfg, frames);
 
     return {
-      pages: mapped.map((m) => ({ url: m.url, figmaNodeId: m.figmaNodeId, frameName: m.frameName, how: m.how })),
+      pages: mapped.map((m) => ({
+        url: m.url,
+        figmaNodeId: m.figmaNodeId,
+        frameName: m.frameName,
+        figmaMobileNodeId: m.figmaMobileNodeId,
+        frameMobileName: m.frameMobileName,
+        how: m.how,
+      })),
       frames: frames.map((f) => withThumb(f, rendered)),
       pagesFrom: from,
     };
@@ -128,21 +139,54 @@ export async function discover(cfg: Config): Promise<Discovery> {
 
 function withThumb(f: FigmaFrame, rendered: Map<string, string>): DiscoveredFrame {
   const file = f.file ?? rendered.get(f.id);
-  return { id: f.id, name: f.name, width: f.width, height: f.height, file, thumb: file ? basename(file) : undefined };
+  return {
+    id: f.id,
+    name: f.name,
+    width: f.width,
+    height: f.height,
+    file,
+    thumb: file ? basename(file) : undefined,
+    role: f.role,
+    fileKey: f.fileKey,
+  };
+}
+
+function figmaLinkFor(cfg: Config, f: FigmaFrame): string | undefined {
+  const key = f.fileKey;
+  if (f.role === 'mobile') {
+    if (cfg.figmaMobile && (!key || parseFigmaLink(cfg.figmaMobile).fileKey === key)) return cfg.figmaMobile;
+    if (cfg.figma && key && parseFigmaLink(cfg.figma).fileKey === key) return cfg.figma;
+    return cfg.figmaMobile ?? cfg.figma;
+  }
+  if (cfg.figma && (!key || parseFigmaLink(cfg.figma).fileKey === key)) return cfg.figma;
+  if (cfg.figmaMobile && key && parseFigmaLink(cfg.figmaMobile).fileKey === key) return cfg.figmaMobile;
+  return cfg.figma ?? cfg.figmaMobile;
 }
 
 /** Render frames to PNG (Figma) or take the files as they are (design folder). */
 export async function renderAll(cfg: Config, frames: FigmaFrame[]): Promise<Map<string, string>> {
   if (!frames.length) return new Map();
-  if (!cfg.figma) {
-    const out = new Map<string, string>();
-    for (const f of frames) if (f.file) out.set(f.id, f.file);
-    return out;
+  const out = new Map<string, string>();
+  for (const f of frames) if (f.file) out.set(f.id, f.file);
+  if (!cfg.figma && !cfg.figmaMobile) return out;
+
+  const groups = new Map<string, FigmaFrame[]>();
+  for (const f of frames) {
+    if (f.file) continue;
+    const link = figmaLinkFor(cfg, f);
+    if (!link) continue;
+    const list = groups.get(link) ?? [];
+    list.push(f);
+    groups.set(link, list);
   }
-  return renderFigmaFrames(cfg.figma, frames, cfg.figmaToken, designCache(cfg)).catch((e) => {
-    log(`Figma render: ${e?.message ?? e}`);
-    return new Map<string, string>();
-  });
+  for (const [link, list] of groups) {
+    const part = await renderFigmaFrames(link, list, cfg.figmaToken, designCache(cfg)).catch((e) => {
+      log(`Figma render: ${e?.message ?? e}`);
+      return new Map<string, string>();
+    });
+    for (const [k, v] of part) out.set(k, v);
+  }
+  return out;
 }
 
 export const designCache = (cfg: Config) => join(cfg.stateDir, '_design');
@@ -200,6 +244,22 @@ function findingTouchesBatch(g: GroupedFinding, batch: Set<string>): boolean {
 
 /* ================================== run =================================== */
 
+function designRef(runDir: string, rendered: Map<string, string>, target: Mapped, viewport: ViewportName): ViewportReport['design'] {
+  const pick = pickDesign(viewport, target);
+  if (!pick) return undefined;
+  const file = rendered.get(pick.frame.id);
+  if (!file) return undefined;
+  return { file: relative(runDir, file), mode: pick.mode, source: pick.frame.name, width: pick.frame.width };
+}
+
+function resolveFrame(frames: FigmaFrame[], id?: string, name?: string, role?: FigmaFrame['role']): FigmaFrame | undefined {
+  const pool = role ? frames.filter((f) => f.role === role) : frames;
+  const search = pool.length ? pool : frames;
+  const byName = name ? search.find((f) => f.name === name) : undefined;
+  const byId = id ? search.find((f) => f.id === id) : undefined;
+  return byName ?? byId ?? (name ? frames.find((f) => f.name === name) : undefined) ?? (id ? frames.find((f) => f.id === id) : undefined);
+}
+
 /** Phase 1 for one URL: capture the three viewports and diff each against that URL's own baseline. */
 async function capturePage(
   browser: Browser,
@@ -207,7 +267,7 @@ async function capturePage(
   runDir: string,
   approvedRoot: string,
   target: Mapped,
-  designFile: string | undefined,
+  rendered: Map<string, string>,
 ): Promise<{ page: PageReport; caps: Capture[]; pageDir: string }> {
   const slug = slugOf(target.url);
   const pageDir = join(runDir, slug);
@@ -215,6 +275,7 @@ async function capturePage(
   // Each URL keeps its OWN approved baseline — one shared folder would have every page
   // overwriting the previous one's reference.
   const approvedDir = join(approvedRoot, slug);
+  const deskFile = target.frame ? rendered.get(target.frame.id) : undefined;
 
   const viewports: ViewportReport[] = [];
   for (const cap of caps) {
@@ -227,7 +288,7 @@ async function capturePage(
       shot: relative(runDir, cap.file),
       pageHeight: cap.pageHeight,
       diff: { ...diff, diffRel: diff.diffFile ? relative(runDir, diff.diffFile) : undefined },
-      design: designFile ? { file: relative(runDir, designFile), mode: 'x' as any, source: target.frameName ?? '', width: target.frame?.width ?? 0 } : undefined,
+      design: designRef(runDir, rendered, target, cap.viewport),
       brokenImages: cap.media.filter((m) => m.kind === 'img' && m.broken),
       distortedImages: cap.media.filter((m) => m.kind === 'img' && (m.distortion ?? 0) > 0.15),
       failedBackgrounds: cap.media
@@ -249,8 +310,19 @@ async function capturePage(
       slug,
       title: caps[0]?.title ?? '',
       viewports,
-      mapping: { frameName: target.frameName, frameWidth: target.frame?.width, how: target.how, score: target.score, isTemplate: target.isTemplate },
-      designFile: designFile ? relative(runDir, designFile) : undefined,
+      mapping: {
+        frameName: target.frameName,
+        frameWidth: target.frame?.width,
+        frameMobileName: target.frameMobileName,
+        frameMobileWidth: target.mobileFrame?.width,
+        how: target.how,
+        score: target.score,
+        isTemplate: target.isTemplate,
+      },
+      designFile: deskFile ? relative(runDir, deskFile) : undefined,
+      designMobileFile: target.mobileFrame && rendered.get(target.mobileFrame.id)
+        ? relative(runDir, rendered.get(target.mobileFrame.id)!)
+        : undefined,
       mispaired: false,
       failedRequests: caps[0]?.failedRequests ?? [],
       jsErrors: caps[0]?.jsErrors ?? [],
@@ -292,7 +364,7 @@ async function analysePage(
   pageDir: string,
   page: PageReport,
   target: Mapped,
-  designFile: string | undefined,
+  rendered: Map<string, string>,
   provider: VisionProvider,
   skipBands: Array<{ from: number; to: number; where: string }>,
 ): Promise<{ occurrences: Occurrence[]; aiError?: string; mispaired: boolean }> {
@@ -300,15 +372,31 @@ async function analysePage(
   let aiError: string | undefined;
   let mispaired = false;
   const viewports = page.viewports;
+  const hasAnyDesign = Boolean((target.frame && rendered.get(target.frame.id)) || (target.mobileFrame && rendered.get(target.mobileFrame.id)));
 
-  if (designFile && target.frame) {
+  if (hasAnyDesign) {
     const titles: string[] = [];
     await Promise.all(
       viewports.map(async (v) => {
+        const pick = pickDesign(v.name as ViewportName, target);
+        const designFile = pick ? rendered.get(pick.frame.id) : undefined;
+        if (!pick || !designFile) {
+          progressTick(`AI vs design · ${v.name} · ${shortPath(page.url)}`, 'ai');
+          return;
+        }
         const vpH = VIEWPORTS.find((x) => x.name === v.name)?.height ?? 900;
-        const mode = Math.abs(target.frame!.width - v.width) / v.width <= 0.12 ? 'fidelity' : 'adaptation';
         try {
-          const found = await compareWithDesign(provider, join(runDir, v.shot), designFile, mode, v.width, target.frame!.width, vpH, v.mediaRegions, skipBands);
+          const found = await compareWithDesign(
+            provider,
+            join(runDir, v.shot),
+            designFile,
+            pick.mode,
+            v.width,
+            pick.frame.width,
+            vpH,
+            v.mediaRegions,
+            skipBands,
+          );
           for (const f of found) {
             titles.push(f.title);
             const loc = locate(f.anchors, v.textIndex, f.y);
@@ -333,7 +421,7 @@ async function analysePage(
   // ONLY check available — a page with no design frame. That is 4 calls per page down to 3.
   const d = viewports.find((v) => v.name === 'desktop');
   const m = viewports.find((v) => v.name === 'mobile');
-  if (d && m && !(designFile && target.frame)) {
+  if (d && m && !hasAnyDesign) {
     try {
       const mH = VIEWPORTS.find((x) => x.name === 'mobile')?.height ?? 844;
       const found = await compareSelf(provider, join(runDir, d.shot), join(runDir, m.shot), mH, m.mediaRegions);
@@ -373,27 +461,45 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
   const stamp = clock.stamp;
   const runDir = join(cfg.stateDir, stamp);
   const approvedRoot = join(cfg.stateDir, '_approved');
+  const seed = cfg.site ?? cfg.url;
+  if (cfg.preserveQuery.length) {
+    rows = rows.map((p) => {
+      try {
+        return { ...p, url: withPreservedQuery(p.url, seed, cfg.preserveQuery) };
+      } catch {
+        return p;
+      }
+    });
+    log(`preserve query: ${cfg.preserveQuery.join(', ')}`);
+  }
 
   const mapped: Mapped[] = rows.map((p) => {
     // A hand-edited row names the frame; the id is what the tool wrote. Name wins, because the
     // name is the part a person can actually pick correctly.
-    const byName = p.frameName ? frames.find((f) => f.name === p.frameName) : undefined;
-    const byId = p.figmaNodeId ? frames.find((f) => f.id === p.figmaNodeId) : undefined;
-    const frame = byName ?? byId;
+    const frame = resolveFrame(frames, p.figmaNodeId, p.frameName, 'desktop');
+    const mobileFrame = resolveFrame(frames, p.figmaMobileNodeId, p.frameMobileName, 'mobile');
+    const how =
+      p.how ??
+      (frame || mobileFrame
+        ? `hand-paired: "${frame?.name ?? '—'}"${mobileFrame ? ` · mobile “${mobileFrame.name}”` : ''}`
+        : 'no design pair → responsive checks only');
     return {
       ...p,
       frame,
+      mobileFrame,
       frameName: frame?.name ?? p.frameName,
       figmaNodeId: frame?.id ?? p.figmaNodeId,
+      frameMobileName: mobileFrame?.name ?? p.frameMobileName,
+      figmaMobileNodeId: mobileFrame?.id ?? p.figmaMobileNodeId,
       score: 1,
       runnerUp: 0,
       isTemplate: false,
-      how: p.how ?? (frame ? `hand-paired: "${frame.name}"` : 'no design pair → responsive checks only'),
+      how,
     } as Mapped;
   });
   const urls = mapped.map((m) => m.url);
 
-  const usedFrames = mapped.map((m) => m.frame).filter(Boolean) as FigmaFrame[];
+  const usedFrames = mapped.flatMap((m) => [m.frame, m.mobileFrame]).filter(Boolean) as FigmaFrame[];
   const rendered = await renderAll(cfg, usedFrames);
 
   const provider = createProvider(cfg);
@@ -406,11 +512,15 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
   // Size the bar before starting: 3 screenshots per page, then the model calls that page will
   // actually make (3 when it has a design to compare against, 1 self-check when it does not),
   // plus the closing steps.
-  const aiPerPage = (m: Mapped) => (provider ? (m.frame && rendered.get(m.frame.id) ? VIEWPORTS.length : 1) : 0);
+  const aiPerPage = (m: Mapped) => {
+    if (!provider) return 0;
+    const has = (m.frame && rendered.get(m.frame.id)) || (m.mobileFrame && rendered.get(m.mobileFrame.id));
+    return has ? VIEWPORTS.length : 1;
+  };
   const plan = {
     capture: mapped.length * VIEWPORTS.length,
     ai: mapped.reduce((n, m) => n + aiPerPage(m), 0),
-    wrap: 2,
+    wrap: mapped.length + 1,
   };
   progressTotal(plan);
   log(`plan: ${mapped.length} pages × ${VIEWPORTS.length} viewports = ${plan.capture} shots · ${plan.ai} AI calls · ${plan.wrap} wrap-up steps = ${plan.capture + plan.ai + plan.wrap} steps`);
@@ -424,9 +534,7 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
 
   try {
     // ---- phase 1: capture everything first. The template can only be identified by comparing pages.
-    const captured = await pool(mapped, cfg.concurrency, (m) =>
-      capturePage(browser, cfg, runDir, approvedRoot, m, m.frame ? rendered.get(m.frame.id) : undefined),
-    );
+    const captured = await pool(mapped, cfg.concurrency, (m) => capturePage(browser, cfg, runDir, approvedRoot, m, rendered));
 
     // ---- what is template chrome, from counting text across pages
     const shared = detectShared(
@@ -471,7 +579,7 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
         const m = mapped[i];
         const bands = reviewedTemplate ? (shared.bands.get(r.page.url) ?? []) : [];
         if (!reviewedTemplate) reviewedTemplate = true;
-        const res = await analysePage(runDir, r.pageDir, r.page, m, m.frame ? rendered.get(m.frame.id) : undefined, provider, bands);
+        const res = await analysePage(runDir, r.pageDir, r.page, m, rendered, provider, bands);
         r.page.aiError = res.aiError;
         r.page.mispaired = res.mispaired;
         allOccurrences.push(...res.occurrences);
@@ -521,12 +629,17 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
       `grouped: ${allOccurrences.length} raw notes → ${grouped.length} findings (${templateCount} on shared components, ${measuredGroups} with measured proof)`,
     );
 
-    // ---- sweep the homepage for the width where layout breaks
+    // ---- sweep every page in this run for the width where layout breaks
+    // Homepage-only missed overflow that only exists on an inner URL (and only between the
+    // three screenshot widths). The detector is unchanged; it just sees the same URLs capture used.
     progressSay('Sweeping widths for the layout break point', 'wrap');
     const sweeps: Array<{ url: string } & SweepResult> = [];
-    const s = await sweep(browser, urls[0], authOptions(cfg.authState)).catch(() => null);
-    if (s) sweeps.push({ url: urls[0], ...s });
-    progressTick('Width sweep done', 'wrap');
+    for (const url of urls) {
+      progressSay(`Sweeping widths · ${shortPath(url)}`, 'wrap');
+      const s = await sweep(browser, url, authOptions(cfg.authState)).catch(() => null);
+      if (s) sweeps.push({ url, ...s });
+      progressTick(`Width sweep · ${shortPath(url)}`, 'wrap');
+    }
 
     // ---- approve
     const firstEver = !existsSync(join(approvedRoot, slugOf(urls[0]), 'meta.json'));

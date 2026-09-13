@@ -46,11 +46,13 @@ Kết quả: `.qa-visual/runs/<thời gian>/report.html`. Đường dẫn đư�
 
 **So với bản duyệt.** Diff pixel với lần chạy đã `--approve`. Ngưỡng **150 pixel tuyệt đối** — không dùng tỉ lệ, vì tỉ lệ theo diện tích sẽ cho trang mobile cao 3000px lọt lỗi lệch 12px. Vùng video/iframe/canvas được **tự động che** ở cả hai ảnh nên không bao giờ sinh diff. Report chỉ ra dải y có thay đổi.
 
-**Sweep.** Quét từ 1600px xuống 320px, binary-search ra đúng chiều rộng layout bắt đầu tràn ngang. Phủ khoảng giữa các breakpoint — nơi không có design để so.
+**Sweep.** Quét từ 1600px xuống 320px trên **mỗi page của run**, binary-search ra đúng chiều rộng layout bắt đầu tràn ngang. Phủ khoảng giữa các breakpoint — nơi không có design để so.
 
 ## Cấu hình duy nhất
 
 `mask.json` — selector của vùng động cần bỏ qua khi so bản duyệt (carousel, marquee, số liệu chạy). Video/iframe/canvas **đã tự phát hiện**, không cần liệt kê.
+
+`QA_PRESERVE_QUERY` (hoặc `--preserve-query`) — danh sách query key giữ lại từ URL gốc khi discover page. Mặc định **xoá hết query** (kể cả `utm_*`). Cần flag kiểu `?qa-showcase=1` trên mọi URL thì set `QA_PRESERVE_QUERY=qa-showcase`.
 
 ## Chi phí và thời gian
 

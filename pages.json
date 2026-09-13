@@ -1,71 +1,47 @@
 {
-  "_": "Pairs each URL with a Figma frame. The tool writes this file the first time; edit a wrong row and later runs keep your edit. Drop figmaNodeId to skip design compare for that page.",
+  "_": "Pairs each URL with a Figma frame (desktop) and optionally a mobile frame. The tool writes this file the first time; edit a wrong row and later runs keep your edit. Drop figmaNodeId / figmaMobileNodeId to skip that compare.",
   "pages": [
     {
-      "url": "https://exect.wootech.com.au/",
-      "figmaNodeId": "883:4311",
+      "url": "http://new-wooagency:8888/?qa-showcase=1",
+      "figmaNodeId": "2366:8900",
       "frameName": "01 / Homepage",
       "how": "name match \"01 / Homepage\" (score 1.00, next 0.00)"
     },
     {
-      "url": "https://exect.wootech.com.au/contact/",
-      "figmaNodeId": "883:4785",
-      "frameName": "09 / Contact",
-      "how": "name match \"09 / Contact\" (score 1.00, next 0.00)"
+      "url": "http://new-wooagency:8888/about/",
+      "figmaNodeId": "2430:13484",
+      "frameName": "07 / About us",
+      "how": "name match \"07 / About us\" (score 0.85, next 0.00)"
     },
     {
-      "url": "https://exect.wootech.com.au/disclaimer/",
-      "how": "no frame similar enough (best 0.00 < 0.5) — skip design compare"
+      "url": "http://new-wooagency:8888/contact/",
+      "figmaNodeId": "2468:13996",
+      "frameName": "08 / Contact",
+      "how": "name match \"08 / Contact\" (score 1.00, next 0.00)"
     },
     {
-      "url": "https://exect.wootech.com.au/hello-world/",
-      "how": "no frame similar enough (best 0.00 < 0.5) — skip design compare"
+      "url": "http://new-wooagency:8888/giant-lygon-street-turns-35/",
+      "figmaNodeId": "2430:12945",
+      "frameName": "06 / Journal / Inside Page",
+      "how": "picked by hand: \"06 / Journal / Inside Page\""
     },
     {
-      "url": "https://exect.wootech.com.au/our-services/",
-      "figmaNodeId": "883:4390",
-      "frameName": "02 / Our Services",
-      "how": "name match \"02 / Our Services\" (score 1.00, next 0.50)"
+      "url": "http://new-wooagency:8888/journal/",
+      "figmaNodeId": "2430:11986",
+      "frameName": "05 / Insights",
+      "how": "picked by hand: \"05 / Insights\""
     },
     {
-      "url": "https://exect.wootech.com.au/privacy-policy/",
-      "how": "no frame similar enough (best 0.00 < 0.5) — skip design compare"
+      "url": "http://new-wooagency:8888/projects/",
+      "figmaNodeId": "2430:9420",
+      "frameName": "03 / Projects",
+      "how": "name match \"03 / Projects\" (score 1.00, next 0.85)"
     },
     {
-      "url": "https://exect.wootech.com.au/test/",
-      "how": "no frame similar enough (best 0.00 < 0.5) — skip design compare"
-    },
-    {
-      "url": "https://exect.wootech.com.au/thank-you/",
-      "how": "no frame similar enough (best 0.00 < 0.5) — skip design compare"
-    },
-    {
-      "url": "https://exect.wootech.com.au/who-we-are/",
-      "figmaNodeId": "883:4674",
-      "frameName": "08 / Who We Are",
-      "how": "name match \"08 / Who We Are\" (score 1.00, next 0.67)"
-    },
-    {
-      "url": "https://exect.wootech.com.au/who-we-help/",
-      "figmaNodeId": "883:4631",
-      "frameName": "07 / Who We Help",
-      "how": "name match \"07 / Who We Help\" (score 1.00, next 0.67)"
-    },
-    {
-      "url": "https://exect.wootech.com.au/our-services/estate-administration/",
-      "how": "ambiguous: two frames nearly tied (0.85 vs 0.68) — skip design compare to avoid a wrong pair"
-    },
-    {
-      "url": "https://exect.wootech.com.au/our-services/estate-litigation/",
-      "how": "ambiguous: two frames nearly tied (0.85 vs 0.68) — skip design compare to avoid a wrong pair"
-    },
-    {
-      "url": "https://exect.wootech.com.au/our-services/estate-planning/",
-      "how": "ambiguous: two frames nearly tied (0.85 vs 0.68) — skip design compare to avoid a wrong pair"
-    },
-    {
-      "url": "https://exect.wootech.com.au/our-services/executor-trustee-services/",
-      "how": "ambiguous: two frames nearly tied (0.85 vs 0.68) — skip design compare to avoid a wrong pair"
+      "url": "http://new-wooagency:8888/services/",
+      "figmaNodeId": "2417:2710",
+      "frameName": "02 / Services",
+      "how": "name match \"02 / Services\" (score 1.00, next 0.00)"
     }
   ]
 }

@@ -24,6 +24,8 @@ export interface Config {
   aiFast?: boolean;
   /** Figma file/frame link, if the design lives in Figma */
   figma?: string;
+  /** Optional second Figma link — usually the mobile page of the same file, or a mobile file */
+  figmaMobile?: string;
   /** Folder of design PNGs (desktop.png / tablet.png / mobile.png), if not using Figma */
   designDir?: string;
   /** Promote this run to the approved baseline after comparing */
@@ -35,6 +37,11 @@ export interface Config {
   auth?: import('./auth.js').AuthConfig;
   /** filled in once the gate is open — every browser context is created with it */
   authState?: import('./auth.js').AuthState;
+  /**
+   * Query keys copied from the seed URL onto every discovered page.
+   * Empty = strip all query (default). Tracking params are never kept unless listed here.
+   */
+  preserveQuery: string[];
   figmaToken: string;
   mask: { mask: string[]; hide: string[] };
   verbose: boolean;
@@ -68,8 +75,14 @@ qa-visual accept <finding#> "reason"  Sign off a finding on the latest run as IN
   --pages <n>        Max pages (default 8)
   --concurrency <n>  Pages in parallel (default 2)
   --fast             Up to 3 AI calls at once (same number of calls, finishes sooner)
+  --preserve-query <keys>  Keep these query keys from the seed URL on every discovered
+                     page (comma-separated). Example: --preserve-query qa-showcase
+                     so /?qa-showcase=1 becomes /about/?qa-showcase=1. Default: strip all.
+                     Also: QA_PRESERVE_QUERY in .env
   --figma <link>     Figma file / page / frame link. Frames are paired to URLs by name;
                      the pairing is written to pages.json so you can edit it.
+  --figma-mobile <link>  Figma page (or file) of mobile frames. Without this, only the
+                     dominant (usually desktop) width from --figma is kept.
   --design <folder>  Folder with desktop.png / tablet.png / mobile.png (alternative to --figma)
   --approve          Make this run the approved baseline for future comparisons
   --ai <provider>    openrouter | openai | anthropic | none   (default: from .env, else none)
@@ -110,13 +123,36 @@ export function stripCredentials(raw: string): { url: string; user?: string; pas
 }
 
 
+/**
+ * Query keys to copy from the seed URL onto every discovered page.
+ *
+ * Empty (the default) strips all query, including tracking. A listed key is kept with the
+ * value from the seed — `/?qa-showcase=1` becomes `/about/?qa-showcase=1`. Names not listed
+ * are still dropped, even if they were on the seed.
+ */
+export function parsePreserveQuery(raw?: string | null): string[] {
+  if (!raw) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const part of raw.split(/[\s,]+/)) {
+    const name = part.trim();
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    out.push(name);
+  }
+  return out;
+}
+
 export function loadConfig(argv: string[], cwd = process.cwd()): Config {
   loadDotEnv(cwd);
   const url = argv.find((a) => /^https?:\/\//i.test(a) && !a.includes('figma.com'));
   const siteArg = arg(['--site'], argv);
   if (!url && !siteArg) throw new Error('Missing URL (or --site).\n\n' + USAGE);
 
-  const figma = arg(['--figma'], argv) ?? argv.find((a) => /figma\.com\//.test(a));
+  const figmaMobile = arg(['--figma-mobile'], argv);
+  const figma =
+    arg(['--figma'], argv) ??
+    argv.find((a) => /figma\.com\//.test(a) && a !== figmaMobile);
   const provider = (arg(['--ai'], argv) ?? process.env.QA_AI_PROVIDER ?? 'none') as AiProvider;
 
   let apiKey = '';
@@ -164,6 +200,7 @@ export function loadConfig(argv: string[], cwd = process.cwd()): Config {
     concurrency: Math.max(1, Math.min(4, Number(arg(['--concurrency'], argv) ?? 2))),
     aiFast: argv.includes('--fast'),
     figma,
+    figmaMobile,
     designDir: arg(['--design'], argv),
     approve: argv.includes('--approve'),
     stateDir: resolve(cwd, 'reports'),
@@ -171,6 +208,7 @@ export function loadConfig(argv: string[], cwd = process.cwd()): Config {
     figmaToken: process.env.FIGMA_TOKEN ?? '',
     mask: { mask: mask.mask ?? [], hide: mask.hide ?? [] },
     verbose: argv.includes('--verbose'),
+    preserveQuery: parsePreserveQuery(arg(['--preserve-query'], argv) ?? process.env.QA_PRESERVE_QUERY),
   };
 }
 
