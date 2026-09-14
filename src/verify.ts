@@ -24,7 +24,9 @@ export interface Measured {
 /** Per viewport, so one pathological page cannot fill the report with crops. */
 const CAP = { overlap: 4, type: 2, gap: 1, aspect: 2, banner: 1, missing: 4, distort: 2, overlayGap: 3, overlayAlign: 3, overlayType: 3, overlayBase: 2 };
 
-const GAP_DELTA = 12;
+/** Neighbour-gap vs Figma TEXT bounds. CSS line-height makes the DOM box taller, so a 20–30px
+ * “closer” reading is box-model noise, not a spacing bug a designer would fix. */
+const NEIGHBOR_GAP_MIN = 28;
 const ALIGN_DELTA = 16;
 const BASE_DELTA = 20;
 const SIZE_DELTA = 2.5;
@@ -424,16 +426,18 @@ function textScore(a: string, b: string): number {
   return 0;
 }
 
-/** Pairs that win clearly — a repeated CTA is not a pair. Identical labels with the same count (nav + H1) zip by Y. */
+/** Pairs that win clearly — a repeated CTA is not a pair. Same label, different sizes (nav vs H1) match by fontSize then Y; 1-vs-many same size stays skipped. */
 export function uniqueTextPairs(
-  figma: Array<{ text: string; y?: number }>,
-  dom: Array<{ text: string; y?: number }>,
+  figma: Array<{ text: string; y?: number; fontSize?: number }>,
+  dom: Array<{ text: string; y?: number; fontSize?: number }>,
 ): Array<{ fi: number; di: number }> {
   const fn = figma.map((t) => normText(t.text));
   const dn = dom.map((t) => normText(t.text));
   const usedF = new Set<number>();
   const usedD = new Set<number>();
   const pairs: Array<{ fi: number; di: number }> = [];
+  const yOf = (row: { y?: number } | undefined) => row?.y ?? 0;
+  const sizeOf = (row: { fontSize?: number } | undefined) => row?.fontSize ?? 0;
 
   const groups = new Map<string, { f: number[]; d: number[] }>();
   for (let i = 0; i < fn.length; i++) {
@@ -446,15 +450,31 @@ export function uniqueTextPairs(
     const g = groups.get(dn[j]);
     if (g) g.d.push(j);
   }
-  const yOf = (row: { y?: number } | undefined) => row?.y ?? 0;
+
   for (const g of groups.values()) {
-    if (g.f.length === 0 || g.d.length === 0 || g.f.length !== g.d.length) continue;
-    const fs = g.f.slice().sort((a, b) => yOf(figma[a]) - yOf(figma[b]) || a - b);
-    const ds = g.d.slice().sort((a, b) => yOf(dom[a]) - yOf(dom[b]) || a - b);
-    for (let k = 0; k < fs.length; k++) {
-      usedF.add(fs[k]);
-      usedD.add(ds[k]);
-      pairs.push({ fi: fs[k], di: ds[k] });
+    if (!g.f.length || !g.d.length) continue;
+    const unusedD = new Set(g.d);
+    const fs = g.f.slice().sort((a, b) => sizeOf(figma[b]) - sizeOf(figma[a]) || yOf(figma[a]) - yOf(figma[b]));
+    for (const fi of fs) {
+      const want = sizeOf(figma[fi]);
+      const cands = [...unusedD];
+      if (!cands.length) break;
+      cands.sort((a, b) => {
+        const da = Math.abs(sizeOf(dom[a]) - want);
+        const db = Math.abs(sizeOf(dom[b]) - want);
+        if (da !== db) return da - db;
+        return yOf(dom[a]) - yOf(dom[b]);
+      });
+      const best = cands[0];
+      const second = cands[1];
+      const bestDiff = Math.abs(sizeOf(dom[best]) - want);
+      const secondDiff = second != null ? Math.abs(sizeOf(dom[second]) - want) : Infinity;
+      if (g.f.length === 1 && second != null && bestDiff <= 8 && secondDiff <= 8 && Math.abs(bestDiff - secondDiff) < 4) continue;
+      if (want >= 20 && sizeOf(dom[best]) >= 20 && bestDiff > 8) continue;
+      unusedD.delete(best);
+      usedF.add(fi);
+      usedD.add(best);
+      pairs.push({ fi, di: best });
     }
   }
 
@@ -504,15 +524,113 @@ function sameColumn(a: Rect, b: Rect): boolean {
   return o >= Math.min(a.w, b.w) * 0.35;
 }
 
+/** True when the px delta is Figma-bounds vs line-height, not a layout break. */
+export function skipNeighborGap(gapD: number, gapF: number): boolean {
+  const delta = Math.abs(gapD - gapF);
+  if (delta < NEIGHBOR_GAP_MIN) return true;
+  const lo = Math.min(gapD, gapF);
+  const hi = Math.max(gapD, gapF);
+  // Both still look like paragraph spacing (this page: 27 live vs 53 Figma).
+  if (lo >= 16 && hi <= 72 && delta <= 32) return true;
+  return false;
+}
+
 function scaledBox(f: FigmaOverlayBox, scale: number): Box {
   return { x: Math.round(f.x * scale), y: Math.round(f.y * scale), w: Math.round(f.w * scale), h: Math.round(f.h * scale) };
 }
 
 type OverlayPair = { f: FigmaOverlayText; d: TextItem };
 
+function mergeWrappedHeading(vis: TextItem[], start: TextItem): TextItem {
+  const band = vis
+    .filter(
+      (t) =>
+        t.heading === start.heading &&
+        t.fontSize === start.fontSize &&
+        t.y >= start.y - 2 &&
+        t.y <= start.y + Math.max(80, start.h * 2) &&
+        Math.abs(t.x - start.x) < 48,
+    )
+    .sort((a, b) => a.y - b.y || a.x - b.x);
+  if (band.length <= 1) return start;
+  const x0 = Math.min(...band.map((t) => t.x));
+  const y0 = Math.min(...band.map((t) => t.y));
+  const x1 = Math.max(...band.map((t) => t.x + t.w));
+  const y1 = Math.max(...band.map((t) => t.y + t.h));
+  return { ...start, text: band.map((t) => t.text).join(' '), x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+}
+
+function headingRolePair(overlay: FigmaOverlay, vis: TextItem[], taken: OverlayPair[]): OverlayPair | undefined {
+  const f = overlay.texts
+    .filter((t) => (t.fontSize ?? 0) >= 32 && t.y >= 80)
+    .sort((a, b) => (b.fontSize ?? 0) - (a.fontSize ?? 0) || a.y - b.y)[0];
+  const h1 = vis
+    .filter((t) => t.heading === 'h1' && (t.fontSize ?? 0) >= 28 && !t.ariaHidden)
+    .sort((a, b) => (b.fontSize ?? 0) - (a.fontSize ?? 0) || a.y - b.y)[0];
+  if (!f || !h1) return undefined;
+  if (taken.some((p) => p.f === f || p.d === h1)) return undefined;
+  return { f, d: mergeWrappedHeading(vis, h1) };
+}
+
+function twoColRows<T extends Rect>(cands: T[]): T[][] {
+  const rows: T[][] = [];
+  const seen = new Set<T>();
+  for (const a of cands) {
+    if (seen.has(a)) continue;
+    const row = cands.filter((b) => sameFigmaRow(a, b)).sort((x, y) => x.x - y.x);
+    if (row.length !== 2) continue;
+    if (Math.abs(row[1].x - row[0].x) < 180) continue;
+    row.forEach((t) => seen.add(t));
+    rows.push(row);
+  }
+  return rows.sort((a, b) => a[0].y - b[0].y);
+}
+
+function sameRowStructuralPairs(overlay: FigmaOverlay, vis: TextItem[], taken: OverlayPair[]): OverlayPair[] {
+  const usedF = new Set(taken.map((p) => p.f));
+  const usedD = new Set(taken.map((p) => p.d));
+  const candF = overlay.texts.filter(
+    (t) =>
+      !usedF.has(t) &&
+      t.y >= 200 &&
+      (t.fontSize ?? 0) >= 14 &&
+      (t.fontSize ?? 0) <= 28 &&
+      !isNonContentChrome(t.text) &&
+      t.w >= 40,
+  );
+  const candD = vis.filter((t) => !usedD.has(t) && !t.ariaHidden && t.w >= 40 && !isNonContentChrome(t.text));
+  const out: OverlayPair[] = [];
+  const fRows = twoColRows(candF);
+  const buckets = new Map<number, typeof fRows>();
+  for (const row of fRows) {
+    const size = Math.round(row[0].fontSize ?? 16);
+    const list = buckets.get(size) ?? [];
+    list.push(row);
+    buckets.set(size, list);
+  }
+  for (const [size, rows] of buckets) {
+    const dRows = twoColRows(
+      candD.filter((t) => t.fontSize == null || Math.abs((t.fontSize ?? 0) - size) <= 6),
+    ).filter((dr) => !usedD.has(dr[0]) && !usedD.has(dr[1]));
+    if (rows.length !== dRows.length || !rows.length) continue;
+    for (let i = 0; i < rows.length; i++) {
+      out.push({ f: rows[i][0], d: dRows[i][0] }, { f: rows[i][1], d: dRows[i][1] });
+      usedD.add(dRows[i][0]);
+      usedD.add(dRows[i][1]);
+    }
+  }
+  return out;
+}
+
 function overlayPairs(items: TextItem[], overlay: FigmaOverlay, viewportWidth: number): OverlayPair[] {
   const vis = visibleCopy(items, viewportWidth);
-  return uniqueTextPairs(overlay.texts, vis).map(({ fi, di }) => ({ f: overlay.texts[fi], d: vis[di] }));
+  const unique = uniqueTextPairs(overlay.texts, vis).map(({ fi, di }) => ({ f: overlay.texts[fi], d: vis[di] }));
+  const role = headingRolePair(overlay, vis, unique);
+  const taken = role ? [...unique, role] : unique;
+  const row = sameRowStructuralPairs(overlay, vis, taken);
+  const first = [...(role ? [role] : []), ...row];
+  const rest = unique.filter((p) => !first.some((q) => q.f === p.f || q.d === p.d));
+  return [...first, ...rest];
 }
 
 function bestDomScore(needle: string, items: TextItem[]): number {
@@ -525,15 +643,40 @@ function bestDomScore(needle: string, items: TextItem[]): number {
 }
 
 /**
+ * Same card, different CMS sentence.
+ *
+ * “Content to match cultural trends” vs “Designed at pace to match cultural trends”.
+ * “AI business consulting & transformation” vs live split “AI transformation” + “Business consulting”.
+ * Short CTAs (“See all”) stay out: they have fewer than 3 content words.
+ */
+export function rewrittenFigmaCopy(figmaNorm: string, hay: string): boolean {
+  const words = figmaNorm.split(' ').filter((w) => w.length >= 4);
+  if (words.length < 3) return false;
+  const hit = words.filter((w) => hay.includes(w)).length;
+  return hit / words.length >= 0.6;
+}
+
+/**
  * A short unique string in the Figma frame with no counterpart on the page.
  *
  * Body copy is allowed to differ (placeholder vs CMS). This is for chrome the design names once:
  * “See all”, a section CTA, a heading that display:none removed.
  */
-export function missingUniqueFigmaText(items: TextItem[], overlay: FigmaOverlay, viewportWidth: number): Measured[] {
+export function missingUniqueFigmaText(
+  items: TextItem[],
+  overlay: FigmaOverlay,
+  viewportWidth: number,
+  siteItems: TextItem[] = [],
+  siteHay = '',
+): Measured[] {
   if (!overlay.pageWidth || viewportWidth < 1200) return [];
   const copy = visibleCopy(items, viewportWidth);
-  const hay = copy.map((t) => normText(t.text)).join(' ');
+  // Other pages in the same run count: Figma inner frames reuse homepage teasers
+  // (“How we help you” lives on Home, but the Services file still draws the instance).
+  const present = siteItems.length ? [...copy, ...siteItems] : copy;
+  const hay = normText(
+    present.map((t) => t.text).join(' ') + ' ' + siteHay,
+  );
   const norms = overlay.texts.map((t) => normText(t.text));
   const scale = overlayScale(overlay, viewportWidth);
   const out: Measured[] = [];
@@ -545,8 +688,9 @@ export function missingUniqueFigmaText(items: TextItem[], overlay: FigmaOverlay,
     if (n.split(' ').filter(Boolean).length > 8) continue;
     if (isNonContentChrome(f.text)) continue;
     if (norms.some((other, j) => j !== i && textScore(n, other) >= 0.85)) continue;
-    if (bestDomScore(n, copy) >= 0.85) continue;
+    if (bestDomScore(n, present) >= 0.85) continue;
     if (n.length >= 12 && hay.includes(n)) continue;
+    if (rewrittenFigmaCopy(n, hay)) continue;
     const quote = f.text.replace(/\s+/g, ' ').trim().slice(0, 60);
     out.push({
       finding: {
@@ -604,13 +748,17 @@ function sameFigmaRow(a: Rect, b: Rect): boolean {
 export function overlayNeighborGap(items: TextItem[], overlay: FigmaOverlay, viewportWidth: number): Measured[] {
   if (!overlay.pageWidth || viewportWidth < 1200) return [];
   const vis = visibleCopy(items, viewportWidth);
-  const byFi = new Map<number, OverlayPair>();
-  for (const { fi, di } of uniqueTextPairs(overlay.texts, vis)) {
-    byFi.set(fi, { f: overlay.texts[fi], d: vis[di] });
-  }
+  const pairs = overlayPairs(items, overlay, viewportWidth);
+  const byF = new Map<FigmaOverlayText, OverlayPair>();
+  for (const p of pairs) byF.set(p.f, p);
+  const usedDom = new Set(pairs.map((p) => p.d));
   const out: Measured[] = [];
   const used = new Set<string>();
-  for (let i = 0; i < overlay.texts.length && out.length < CAP.overlayGap; i++) {
+  const order = overlay.texts
+    .map((_, i) => i)
+    .sort((i, j) => (overlay.texts[j].fontSize ?? 0) - (overlay.texts[i].fontSize ?? 0) || i - j);
+  for (const i of order) {
+    if (out.length >= CAP.overlayGap) break;
     const aF = overlay.texts[i];
     let bestJ = -1;
     let bestGap = Infinity;
@@ -628,12 +776,39 @@ export function overlayNeighborGap(items: TextItem[], overlay: FigmaOverlay, vie
     const key = i < bestJ ? `${i}:${bestJ}` : `${bestJ}:${i}`;
     if (used.has(key)) continue;
     used.add(key);
-    const a = byFi.get(i);
-    const b = byFi.get(bestJ);
-    if (!a || !b) continue;
-    const gapD = b.d.y - (a.d.y + a.d.h);
+    const a = byF.get(aF);
+    if (!a) continue;
+    const bF = overlay.texts[bestJ];
+    if (isNonContentChrome(aF.text) || isNonContentChrome(bF.text)) continue;
+    let b = byF.get(bF);
+    if (!b) {
+      const want = bF.fontSize ?? 0;
+      const geo = vis
+        .filter(
+          (t) =>
+            !usedDom.has(t) &&
+            t.y >= a.d.y + a.d.h - 2 &&
+            t.y <= a.d.y + a.d.h + bestGap + 48 &&
+            sameColumn(a.d, t) &&
+            (want < 8 || t.fontSize == null || Math.abs((t.fontSize ?? 0) - want) <= 8),
+        )
+        .sort((x, y) => x.y - y.y)[0];
+      if (geo) {
+        b = { f: bF, d: geo };
+        usedDom.add(geo);
+      }
+    }
+    if (!b) continue;
+    if (isNonContentChrome(a.d.text) || isNonContentChrome(b.d.text)) continue;
+    const aDom = a.d.heading ? mergeWrappedHeading(vis, a.d) : a.d;
+    const bDom = b.d.heading ? mergeWrappedHeading(vis, b.d) : b.d;
+    const aLines = linesOf(aDom);
+    const bLines = linesOf(bDom);
+    const aLast = aLines[aLines.length - 1];
+    const gapD = bLines[0].y - (aLast.y + aLast.h);
     if (gapD < 0) continue;
-    if (Math.abs(gapD - bestGap) < GAP_DELTA) continue;
+    if (gapD > 96 || gapD > bestGap + 48) continue;
+    if (skipNeighborGap(gapD, bestGap)) continue;
     const qa = a.d.text.slice(0, 40);
     const qb = b.d.text.slice(0, 40);
     out.push({
@@ -658,7 +833,6 @@ export function overlayNeighborGap(items: TextItem[], overlay: FigmaOverlay, vie
 /** Two unique strings that share a Figma row, but not the same relative alignment on the page. */
 export function overlayRowAlign(items: TextItem[], overlay: FigmaOverlay, viewportWidth: number): Measured[] {
   if (!overlay.pageWidth || viewportWidth < 1200) return [];
-  const scale = overlayScale(overlay, viewportWidth);
   const pairs = overlayPairs(items, overlay, viewportWidth);
   const out: Measured[] = [];
   for (let i = 0; i < pairs.length && out.length < CAP.overlayAlign; i++) {
@@ -666,29 +840,26 @@ export function overlayRowAlign(items: TextItem[], overlay: FigmaOverlay, viewpo
       const a = pairs[i];
       const b = pairs[j];
       if (!sameFigmaRow(a.f, b.f)) continue;
-      const dxF = (b.f.x - a.f.x) * scale;
-      const dyF = (b.f.y - a.f.y) * scale;
+      if (Math.min(a.f.y, b.f.y) < 120) continue;
+      if ((a.f.fontSize ?? 0) >= 32 || (b.f.fontSize ?? 0) >= 32) continue;
+      if (isNonContentChrome(a.f.text) || isNonContentChrome(b.f.text)) continue;
+      if (isNonContentChrome(a.d.text) || isNonContentChrome(b.d.text)) continue;
+      const dxF = b.f.x - a.f.x;
       const dxD = b.d.x - a.d.x;
-      const dyD = b.d.y - a.d.y;
-      const offX = Math.abs(dxD - dxF) >= ALIGN_DELTA;
-      const offY = Math.abs(dyD - dyF) >= ALIGN_DELTA;
-      if (!offX && !offY) continue;
+      const miss = Math.abs(dxD - dxF);
+      if (miss < ALIGN_DELTA || miss > 80) continue;
+      if (Math.abs(dxF) > 720) continue;
+      if (Math.abs(dxD) < 48 && Math.abs(dxF) >= 180) continue;
       const qa = a.d.text.slice(0, 40);
       const qb = b.d.text.slice(0, 40);
-      const live = offX
-        ? `their left edges are ${Math.round(Math.abs(dxD))}px apart`
-        : `their tops are ${Math.round(Math.abs(dyD))}px apart`;
-      const design = offX
-        ? `their left edges are ${Math.round(Math.abs(dxF))}px apart`
-        : `their tops are ${Math.round(Math.abs(dyF))}px apart`;
       out.push({
         finding: {
           title: `“${qa}” and “${qb}” do not line up`,
           severity: 'minor',
-          detail: `Live: ${live}.\nDesign: ${design}.`,
+          detail: `Live: their left edges are ${Math.round(Math.abs(dxD))}px apart.\nDesign: their left edges are ${Math.round(Math.abs(dxF))}px apart.`,
           anchors: [a.d.text.slice(0, 60), b.d.text.slice(0, 60)],
           y: Math.min(a.d.y, b.d.y),
-          locatedHow: `measured on DOM: ${offX ? 'x' : 'y'} delta ${Math.round(Math.abs(offX ? dxD - dxF : dyD - dyF))}px vs Figma`,
+          locatedHow: `measured on DOM: x delta ${Math.round(miss)}px vs Figma`,
           measured: true,
         },
         box: union(a.d, b.d),
@@ -752,11 +923,23 @@ export function overlayTextImageBaseline(
 }
 
 /** Unique paired strings whose size, weight, or line-height drifted from the Figma style. */
+function overlayTypeRank(p: OverlayPair): number {
+  if ((p.f.fontSize ?? 0) >= 32) return 0;
+  if (/^(submit|see all|discover|learn more)$/i.test(normText(p.d.text))) return 1;
+  return 2;
+}
+
 export function overlayTypeCompare(items: TextItem[], overlay: FigmaOverlay, viewportWidth: number): Measured[] {
   if (!overlay.pageWidth || viewportWidth < 1200) return [];
   const out: Measured[] = [];
-  for (const p of overlayPairs(items, overlay, viewportWidth)) {
+  const ranked = overlayPairs(items, overlay, viewportWidth)
+    .slice()
+    .sort((a, b) => overlayTypeRank(a) - overlayTypeRank(b) || (b.f.fontSize ?? 0) - (a.f.fontSize ?? 0));
+  for (const p of ranked) {
     if (out.length >= CAP.overlayType) break;
+    if (isNonContentChrome(p.f.text) || isNonContentChrome(p.d.text)) continue;
+    const cta = /^(submit|see all|discover|learn more)$/i.test(normText(p.d.text));
+    if ((p.f.fontSize ?? 0) < 32 && !cta) continue;
     const wantSize = p.f.fontSize;
     const gotSize = p.d.fontSize;
     const wantW = p.f.fontWeight;
@@ -1010,6 +1193,8 @@ export function detectAll(
   viewportWidth: number,
   viewportHeight: number,
   overlay?: FigmaOverlay,
+  siteItems: TextItem[] = [],
+  siteHay = '',
 ): Measured[] {
   return [
     ...(items.length ? [...overlaps(items, viewportWidth), ...typeHierarchy(items, viewportWidth)] : []),
@@ -1018,7 +1203,7 @@ export function detectAll(
     ...stretchedImages(media),
     ...(overlay
       ? [
-          ...missingUniqueFigmaText(items, overlay, viewportWidth),
+          ...missingUniqueFigmaText(items, overlay, viewportWidth, siteItems, siteHay),
           ...overlayNeighborGap(items, overlay, viewportWidth),
           ...overlayRowAlign(items, overlay, viewportWidth),
           ...overlayTextImageBaseline(items, media, overlay, viewportWidth),

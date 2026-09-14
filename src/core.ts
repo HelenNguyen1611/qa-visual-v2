@@ -13,6 +13,7 @@ import { detectShared } from './shared.js';
 import { groupFindings, markDrift, type Occurrence, type GroupedFinding } from './group.js';
 import { createProvider, aiStopped, resetAiCircuit, aiMaxInflight, preflight, type VisionProvider } from './provider.js';
 import { detectAll, traceOverlayNeedle } from './verify.js';
+import type { TextItem } from './browser.js';
 import { applyAccepted, readAccepted } from './accepted.js';
 import { compareWithDesign, compareSelf, looksNonEnglish } from './ai.js';
 import { annotateCrop } from './annotate.js';
@@ -301,6 +302,7 @@ async function capturePage(
       mediaRegions: cap.media,
       reserved: cap.reserved,
       textIndex: cap.textIndex,
+      pageCopy: cap.pageCopy,
     });
   }
 
@@ -339,7 +341,14 @@ async function capturePage(
  * point. These findings carry their own box, so they never depend on `locate` matching quoted
  * text, and they are the part of the report that reads the same on every run.
  */
-function measurePage(runDir: string, pageDir: string, page: PageReport, overlay?: FigmaOverlay): Occurrence[] {
+function measurePage(
+  runDir: string,
+  pageDir: string,
+  page: PageReport,
+  overlay: FigmaOverlay | undefined,
+  siteItems: TextItem[],
+  siteHay: string,
+): Occurrence[] {
   const out: Occurrence[] = [];
   for (const v of page.viewports) {
     const vpH = VIEWPORTS.find((x) => x.name === v.name)?.height ?? 900;
@@ -366,7 +375,7 @@ function measurePage(runDir: string, pageDir: string, page: PageReport, overlay?
         if (t.figmaFound || t.domFound) log(`trace ${page.slug} “${needle}”: ${t.skip} · pair=${t.paired} score=${t.pairScore.toFixed(2)} figma=${t.figmaFontSize ?? '—'}px/${t.figmaLineRatio?.toFixed(2) ?? '—'}lh @y${t.figmaY} → dom=${t.domFontSize ?? '—'}px/${t.domLineRatio?.toFixed(2) ?? '—'}lh @y${t.domY} Δsize=${t.sizeDelta ?? '—'} Δlh=${t.lhRatioDelta?.toFixed(2) ?? '—'} gapF=${t.gapToNextFigma ?? '—'} gapD=${t.gapToNextDom ?? '—'}`);
       }
     }
-    for (const m of detectAll(v.textIndex, v.mediaRegions, v.reserved, v.width, vpH, design)) {
+    for (const m of detectAll(v.textIndex, v.mediaRegions, v.reserved, v.width, vpH, design, siteItems, siteHay)) {
       const n = out.length + 1;
       const res = annotateCrop(join(runDir, v.shot), m.box, n, join(pageDir, `${v.name}.m${n}.png`));
       if (res) m.finding.crop = relative(runDir, res.file);
@@ -582,13 +591,21 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
       }
     }
 
+    const siteItems: TextItem[] = captured.flatMap(
+      (r) => r.page.viewports.find((v) => v.name === 'desktop')?.textIndex ?? [],
+    );
+    const siteHay = captured
+      .map((r) => r.page.viewports.find((v) => v.name === 'desktop')?.pageCopy ?? '')
+      .filter(Boolean)
+      .join('\n');
+
     const allOccurrences: Occurrence[] = [];
 
     // ---- the measured pass: what the browser's numbers prove, with or without a model
     for (let i = 0; i < captured.length; i++) {
       const r = captured[i];
       const id = mapped[i]?.figmaNodeId;
-      allOccurrences.push(...measurePage(runDir, r.pageDir, r.page, id ? overlays.get(id) : undefined));
+      allOccurrences.push(...measurePage(runDir, r.pageDir, r.page, id ? overlays.get(id) : undefined, siteItems, siteHay));
     }
     const measuredCount = allOccurrences.length;
     if (measuredCount) log(`measured on DOM: ${measuredCount} findings with numeric proof (overlap, type hierarchy, first-screen gap, peer aspect, stretch, missing Figma text, overlay gap/align/type, banner inset)`);
@@ -716,7 +733,7 @@ export async function runQa(cfg: Config, rows: PageTarget[], frames: FigmaFrame[
   progressSay('Building report', 'wrap');
   const reportPath = join(runDir, 'report.html');
   writeFileSync(reportPath, renderReport(report, stamp));
-  const slim = { ...report, pages: report.pages.map((p) => ({ ...p, viewports: p.viewports.map(({ textIndex, reserved, ...rest }) => rest) })) };
+  const slim = { ...report, pages: report.pages.map((p) => ({ ...p, viewports: p.viewports.map(({ textIndex, reserved, pageCopy, ...rest }) => rest) })) };
   writeFileSync(join(runDir, 'report.json'), JSON.stringify(slim, null, 2));
 
   progressTick('Done', 'wrap');

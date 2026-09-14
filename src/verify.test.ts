@@ -15,9 +15,11 @@ import {
   overlayRowAlign,
   overlayTextImageBaseline,
   overlayTypeCompare,
+  skipNeighborGap,
   peerImageAspect,
   stretchedImages,
   uniqueTextPairs,
+  rewrittenFigmaCopy,
 } from './verify.js';
 
 function img(id: string, x: number, y: number, w: number, h: number, card = 'article.card'): MediaRegion {
@@ -181,6 +183,26 @@ describe('uniqueTextPairs', () => {
       { fi: 1, di: 1 },
     ]);
   });
+
+  it('pairs a display title with the matching-size DOM run when counts differ', () => {
+    const pairs = uniqueTextPairs(
+      [
+        { text: 'Projects', y: 40, fontSize: 16 },
+        { text: 'Projects', y: 200, fontSize: 45 },
+      ],
+      [
+        { text: 'Projects', y: 48, fontSize: 16 },
+        { text: 'Projects', y: 240, fontSize: 42 },
+      ],
+    );
+    assert.deepEqual(
+      pairs.sort((a, b) => a.fi - b.fi),
+      [
+        { fi: 0, di: 0 },
+        { fi: 1, di: 1 },
+      ],
+    );
+  });
 });
 
 describe('overlayBannerPad', () => {
@@ -304,6 +326,114 @@ describe('missingUniqueFigmaText', () => {
     assert.equal(hits.length, 1);
     assert.match(hits[0].finding.title, /See all/);
   });
+
+  it('does not flag a homepage teaser that Figma copied onto another frame', () => {
+    const hits = missingUniqueFigmaText(
+      [run('Built for how brands actually grow today.', 80, 200, 600, 40)],
+      {
+        pageWidth: 1440,
+        texts: [
+          { text: 'How we help you', x: 80, y: 400, w: 200, h: 24 },
+          { text: 'See all', x: 400, y: 80, w: 80, h: 20 },
+        ],
+        surfaces: [],
+      },
+      1440,
+      [run('How we help you', 1100, 800, 180, 24)],
+    );
+    assert.equal(
+      hits.some((h) => /How we help you/.test(h.finding.title)),
+      false,
+    );
+    assert.equal(hits.some((h) => /See all/.test(h.finding.title)), true);
+  });
+
+  it('does not flag a card title the CMS rewrote', () => {
+    const hits = missingUniqueFigmaText(
+      [run('Designed at pace to match cultural trends', 80, 400, 280, 40)],
+      {
+        pageWidth: 1440,
+        texts: [
+          { text: 'Content to match cultural trends', x: 80, y: 400, w: 280, h: 40 },
+          { text: 'See all', x: 400, y: 80, w: 80, h: 20 },
+        ],
+        surfaces: [],
+      },
+      1440,
+    );
+    assert.equal(
+      hits.some((h) => /cultural trends/.test(h.finding.title)),
+      false,
+    );
+    assert.equal(hits.some((h) => /See all/.test(h.finding.title)), true);
+    assert.equal(
+      rewrittenFigmaCopy(
+        'content to match cultural trends',
+        'designed at pace to match cultural trends',
+      ),
+      true,
+    );
+  });
+
+  it('does not flag a title the CMS split across heading and description', () => {
+    const hits = missingUniqueFigmaText(
+      [
+        run('AI transformation', 80, 400, 280, 24),
+        run('Business consulting', 80, 428, 280, 20),
+      ],
+      {
+        pageWidth: 1440,
+        texts: [
+          { text: 'AI business consulting & transformation', x: 80, y: 400, w: 280, h: 40 },
+          { text: 'See all', x: 400, y: 80, w: 80, h: 20 },
+        ],
+        surfaces: [],
+      },
+      1440,
+    );
+    assert.equal(
+      hits.some((h) => /consulting/.test(h.finding.title)),
+      false,
+    );
+    assert.equal(hits.some((h) => /See all/.test(h.finding.title)), true);
+    assert.equal(
+      rewrittenFigmaCopy(
+        'ai business consulting transformation',
+        'ai transformation business consulting',
+      ),
+      true,
+    );
+  });
+
+  it('does not flag copy that lives in a closed filter or on another page of the run', () => {
+    const overlay: FigmaOverlay = {
+      pageWidth: 1440,
+      texts: [
+        { text: 'Marketing strategy', x: 80, y: 120, w: 200, h: 20 },
+        { text: 'Management, monitoring & reporting', x: 80, y: 160, w: 320, h: 20 },
+        { text: 'AI transformation', x: 80, y: 200, w: 180, h: 20 },
+        { text: 'See all', x: 400, y: 80, w: 80, h: 20 },
+      ],
+      surfaces: [],
+    };
+    const hits = missingUniqueFigmaText(
+      [run('Flagship projects', 80, 80, 300, 40)],
+      overlay,
+      1440,
+      [],
+      [
+        'Filter by All Brand Experience Marketing strategy Integrity',
+        '02 Marketing strategy Driven by intelligent systems',
+        '05 Management, monitoring & reporting',
+        '06 AI transformation Business consulting',
+      ].join(' '),
+    );
+    assert.equal(
+      hits.some((h) => /Marketing strategy|Management|AI transformation/.test(h.finding.title)),
+      false,
+    );
+    assert.equal(hits.some((h) => /See all/.test(h.finding.title)), true);
+  });
 });
 
 describe('isNonContentChrome', () => {
@@ -331,22 +461,22 @@ describe('stretchedImages', () => {
 });
 
 describe('overlayNeighborGap', () => {
-  it('flags a title-to-lead gap that grew by 12px', () => {
+  it('flags a title-to-lead gap that grew by a full line', () => {
     const overlay: FigmaOverlay = {
       pageWidth: 1440,
       texts: [
-        { text: 'Insights', x: 80, y: 100, w: 400, h: 40 },
+        { text: 'Insight archive', x: 80, y: 100, w: 400, h: 40 },
         { text: 'Stories from the studio', x: 80, y: 160, w: 500, h: 24 },
       ],
       surfaces: [],
     };
     const hits = overlayNeighborGap(
-      [run('Insights', 80, 100, 400, 40), run('Stories from the studio', 80, 172, 500, 24)],
+      [run('Insight archive', 80, 100, 400, 40), run('Stories from the studio', 80, 204, 500, 24)],
       overlay,
       1440,
     );
     assert.equal(hits.length, 1);
-    assert.match(hits[0].finding.detail, /32px/);
+    assert.match(hits[0].finding.detail, /64px/);
     assert.match(hits[0].finding.detail, /20px/);
   });
 
@@ -354,7 +484,7 @@ describe('overlayNeighborGap', () => {
     const overlay: FigmaOverlay = {
       pageWidth: 1280,
       texts: [
-        { text: 'Insights', x: 80, y: 100, w: 400, h: 40 },
+        { text: 'Insight archive', x: 80, y: 100, w: 400, h: 40 },
         { text: 'Unrelated sidebar', x: 700, y: 130, w: 200, h: 20 },
         { text: 'Stories from the studio', x: 80, y: 160, w: 500, h: 24 },
       ],
@@ -362,16 +492,100 @@ describe('overlayNeighborGap', () => {
     };
     const hits = overlayNeighborGap(
       [
-        run('Insights', 80, 100, 400, 40),
+        run('Insight archive', 80, 100, 400, 40),
         run('Unrelated sidebar', 900, 400, 200, 20),
-        run('Stories from the studio', 80, 172, 500, 24),
+        run('Stories from the studio', 80, 204, 500, 24),
       ],
       overlay,
       1440,
     );
     assert.equal(hits.length, 1);
-    assert.match(hits[0].finding.detail, /32px/);
+    assert.match(hits[0].finding.detail, /64px/);
     assert.match(hits[0].finding.detail, /20px/);
+  });
+
+  it('measures H1→lead gap after a role pair when copy is wrapped', () => {
+    const overlay: FigmaOverlay = {
+      pageWidth: 1280,
+      texts: [
+        { text: 'We keep our finger on the modern marketing pulse so you don’t have to.', x: 80, y: 180, w: 800, h: 100, fontSize: 45 },
+        { text: 'Learn more about AI for marketing in the journal lead.', x: 80, y: 300, w: 700, h: 40, fontSize: 16 },
+      ],
+      surfaces: [],
+    };
+    const hits = overlayNeighborGap(
+      [
+        run('We keep our finger on the modern', 80, 186, 700, 50, { heading: 'h1', fontSize: 45 }),
+        run('marketing pulse so you don’t have to.', 80, 240, 700, 50, { heading: 'h1', fontSize: 45 }),
+        run('Different live lead copy about the studio.', 80, 352, 700, 40, { fontSize: 16 }),
+      ],
+      overlay,
+      1440,
+    );
+    assert.equal(hits.length, 1);
+    assert.match(hits[0].finding.detail, /20px/);
+  });
+
+  it('does not treat a same-column pair thousands of pixels apart as a neighbour', () => {
+    const overlay: FigmaOverlay = {
+      pageWidth: 1280,
+      texts: [
+        { text: 'Software development and cyber security', x: 80, y: 400, w: 400, h: 24, fontSize: 16 },
+        { text: '226 Lygon Street,', x: 80, y: 429, w: 200, h: 20, fontSize: 16 },
+      ],
+      surfaces: [],
+    };
+    const hits = overlayNeighborGap(
+      [
+        run('Software development and cyber security', 80, 400, 400, 24, { fontSize: 16 }),
+        run('226 Lygon Street,', 80, 2900, 200, 20, { fontSize: 16 }),
+      ],
+      overlay,
+      1440,
+    );
+    assert.equal(hits.length, 0);
+  });
+
+  it('does not flag 27px live vs 53px Figma — line-height vs TEXT bounds, not a spacing bug', () => {
+    const overlay: FigmaOverlay = {
+      pageWidth: 1440,
+      texts: [
+        { text: 'If so, you know introducing AI into your business', x: 720, y: 200, w: 480, h: 140, fontSize: 32 },
+        { text: 'You operate under tight legal and compliance controls', x: 720, y: 393, w: 480, h: 80, fontSize: 16 },
+      ],
+      surfaces: [],
+    };
+    const hits = overlayNeighborGap(
+      [
+        run('If so, you know introducing AI into your business', 720, 200, 480, 166, { heading: 'h1', fontSize: 32 }),
+        run('You operate under tight legal and compliance controls', 720, 393, 480, 80, { fontSize: 16 }),
+      ],
+      overlay,
+      1440,
+    );
+    assert.equal(hits.length, 0);
+    assert.equal(skipNeighborGap(27, 53), true);
+  });
+
+  it('does not flag 47px live vs 24px Figma on a stacked service list', () => {
+    const overlay: FigmaOverlay = {
+      pageWidth: 1440,
+      texts: [
+        { text: 'Full-stack web & mobile development — frontend, backend', x: 80, y: 400, w: 600, h: 22, fontSize: 16 },
+        { text: 'Cloud infrastructure, CI/CD & DevOps for continuous delivery', x: 80, y: 446, w: 600, h: 22, fontSize: 16 },
+      ],
+      surfaces: [],
+    };
+    const hits = overlayNeighborGap(
+      [
+        run('Full-stack web & mobile development — frontend, backend', 80, 400, 600, 22, { fontSize: 16 }),
+        run('Cloud infrastructure, CI/CD & DevOps for continuous delivery', 80, 469, 600, 22, { fontSize: 16 }),
+      ],
+      overlay,
+      1440,
+    );
+    assert.equal(hits.length, 0);
+    assert.equal(skipNeighborGap(47, 24), true);
   });
 });
 
@@ -410,6 +624,44 @@ describe('overlayRowAlign', () => {
     );
     assert.equal(hits.length, 0);
   });
+
+  it('pairs two-up card titles by row even when the names differ', () => {
+    const overlay: FigmaOverlay = {
+      pageWidth: 1280,
+      texts: [
+        { text: 'Integrity Oversight Victoria', x: 80, y: 500, w: 400, h: 24, fontSize: 16 },
+        { text: 'Hume Proud', x: 700, y: 500, w: 200, h: 24, fontSize: 16 },
+      ],
+      surfaces: [],
+    };
+    const hits = overlayRowAlign(
+      [
+        run('Live project alpha', 80, 520, 400, 24, { fontSize: 16 }),
+        run('Live project beta', 716, 520, 200, 24, { fontSize: 16 }),
+      ],
+      overlay,
+      1440,
+    );
+    assert.equal(hits.length, 1);
+    assert.match(hits[0].finding.title, /line up/);
+  });
+
+  it('does not compare header nav labels on the same Figma row', () => {
+    const overlay: FigmaOverlay = {
+      pageWidth: 1280,
+      texts: [
+        { text: 'Menu', x: 80, y: 24, w: 60, h: 20, fontSize: 16 },
+        { text: 'Projects', x: 344, y: 24, w: 80, h: 20, fontSize: 16 },
+      ],
+      surfaces: [],
+    };
+    const hits = overlayRowAlign(
+      [run('Menu', 80, 24, 60, 20, { fontSize: 16 }), run('Projects', 215, 24, 80, 20, { fontSize: 16 })],
+      overlay,
+      1440,
+    );
+    assert.equal(hits.length, 0);
+  });
 });
 
 describe('overlayTextImageBaseline', () => {
@@ -434,11 +686,11 @@ describe('overlayTypeCompare', () => {
   it('flags a heading that rendered 3px smaller', () => {
     const overlay: FigmaOverlay = {
       pageWidth: 1440,
-      texts: [{ text: 'Projects', x: 80, y: 100, w: 400, h: 50, fontSize: 45, fontWeight: 400, lineHeight: 58 }],
+      texts: [{ text: 'Our work stretches across the mix', x: 80, y: 100, w: 400, h: 50, fontSize: 45, fontWeight: 400, lineHeight: 58 }],
       surfaces: [],
     };
     const hits = overlayTypeCompare(
-      [run('Projects', 80, 100, 400, 50, { fontSize: 42, fontWeight: 400, lineHeight: 54 })],
+      [run('Our work stretches across the mix', 80, 100, 400, 50, { fontSize: 42, fontWeight: 400, lineHeight: 54 })],
       overlay,
       1440,
     );
@@ -464,20 +716,66 @@ describe('overlayTypeCompare', () => {
   it('compares CSS px, not a 1280→1440 scaled size', () => {
     const overlay: FigmaOverlay = {
       pageWidth: 1280,
-      texts: [{ text: 'Projects', x: 80, y: 100, w: 400, h: 50, fontSize: 45, fontWeight: 400, lineHeight: 58 }],
+      texts: [{ text: 'Our work stretches across the mix', x: 80, y: 100, w: 400, h: 50, fontSize: 45, fontWeight: 400, lineHeight: 58 }],
       surfaces: [],
     };
     const miss = overlayTypeCompare(
-      [run('Projects', 80, 100, 400, 50, { fontSize: 42, fontWeight: 400, lineHeight: 54 })],
+      [run('Our work stretches across the mix', 80, 100, 400, 50, { fontSize: 42, fontWeight: 400, lineHeight: 54 })],
       overlay,
       1440,
     );
     assert.equal(miss.length, 1);
     const match = overlayTypeCompare(
-      [run('Projects', 80, 100, 400, 50, { fontSize: 45, fontWeight: 400, lineHeight: 58 })],
+      [run('Our work stretches across the mix', 80, 100, 400, 50, { fontSize: 45, fontWeight: 400, lineHeight: 58 })],
       overlay,
       1440,
     );
     assert.equal(match.length, 0);
+  });
+
+  it('pairs a display heading to the page H1 when the copy differs', () => {
+    const overlay: FigmaOverlay = {
+      pageWidth: 1280,
+      texts: [
+        { text: 'Our work stretches across the entire mix.', x: 80, y: 180, w: 900, h: 50, fontSize: 45, fontWeight: 500, lineHeight: 58 },
+      ],
+      surfaces: [],
+    };
+    const hits = overlayTypeCompare(
+      [run('A totally different headline that wraps', 80, 186, 900, 50, { heading: 'h1', fontSize: 42, fontWeight: 500, lineHeight: 54 })],
+      overlay,
+      1440,
+    );
+    assert.equal(hits.length, 1);
+    assert.match(hits[0].finding.title, /size/);
+    assert.match(hits[0].finding.detail, /42px/);
+    assert.match(hits[0].finding.detail, /45px/);
+  });
+
+  it('keeps the display heading and Submit when smaller type diffs also exist', () => {
+    const overlay: FigmaOverlay = {
+      pageWidth: 1280,
+      texts: [
+        { text: 'Tiny one', x: 80, y: 80, w: 80, h: 16, fontSize: 14, fontWeight: 400 },
+        { text: 'Tiny two', x: 80, y: 100, w: 80, h: 16, fontSize: 14, fontWeight: 400 },
+        { text: 'Tiny three', x: 80, y: 120, w: 80, h: 16, fontSize: 14, fontWeight: 400 },
+        { text: 'Our work stretches across the mix.', x: 80, y: 200, w: 900, h: 50, fontSize: 45, fontWeight: 500 },
+        { text: 'Submit', x: 80, y: 800, w: 120, h: 24, fontSize: 16, fontWeight: 500 },
+      ],
+      surfaces: [],
+    };
+    const hits = overlayTypeCompare(
+      [
+        run('Tiny one', 80, 80, 80, 16, { fontSize: 18, fontWeight: 400 }),
+        run('Tiny two', 80, 100, 80, 16, { fontSize: 18, fontWeight: 400 }),
+        run('Tiny three', 80, 120, 80, 16, { fontSize: 18, fontWeight: 400 }),
+        run('A totally different headline that wraps', 80, 210, 900, 50, { heading: 'h1', fontSize: 42, fontWeight: 500 }),
+        run('Submit', 80, 800, 120, 24, { fontSize: 16, fontWeight: 400 }),
+      ],
+      overlay,
+      1440,
+    );
+    assert.ok(hits.some((h) => /size/.test(h.finding.title) && /42px/.test(h.finding.detail)));
+    assert.ok(hits.some((h) => /weight/.test(h.finding.title) && /Submit/.test(h.finding.title)));
   });
 });

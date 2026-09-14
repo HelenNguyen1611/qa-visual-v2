@@ -60,6 +60,8 @@ export type FigmaOverlayText = FigmaOverlayBox & {
   fontWeight?: number;
   /** Line box in Figma pixels, when the file stored a px / % size. */
   lineHeight?: number;
+  id?: string;
+  depth?: number;
 };
 
 /** TEXT + image-fill surfaces from one mapped page frame. Used by measured overlay checks. */
@@ -70,6 +72,7 @@ export interface FigmaOverlay {
 }
 
 type OverlayNode = {
+  id?: string;
   type?: string;
   characters?: string;
   fills?: Array<{ type?: string; visible?: boolean }>;
@@ -102,17 +105,30 @@ export function flattenFigmaOverlay(doc: OverlayNode): FigmaOverlay {
   const pageWidth = page?.width ?? 0;
   const texts: FigmaOverlay['texts'] = [];
   const surfaces: FigmaOverlayBox[] = [];
-  const walk = (n: OverlayNode) => {
+  const pageX = page?.x ?? 0;
+  const pageY = page?.y ?? 0;
+  const walk = (n: OverlayNode, depth: number) => {
     const b = n.absoluteBoundingBox;
     if (n.type === 'TEXT' && n.characters && b) {
       const text = n.characters.replace(/\s+/g, ' ').trim();
-      if (text.length >= 3) texts.push({ text: text.slice(0, 120), x: b.x, y: b.y, w: b.width, h: b.height, ...overlayTypeMetrics(n) });
+      if (text.length >= 3) {
+        texts.push({
+          text: text.slice(0, 120),
+          x: b.x - pageX,
+          y: b.y - pageY,
+          w: b.width,
+          h: b.height,
+          id: n.id,
+          depth,
+          ...overlayTypeMetrics(n),
+        });
+      }
     }
     const image = (n.fills ?? []).some((f) => f.visible !== false && f.type === 'IMAGE');
-    if (image && b && b.width >= 400) surfaces.push({ x: b.x, y: b.y, w: b.width, h: b.height });
-    for (const c of n.children ?? []) walk(c);
+    if (image && b && b.width >= 400) surfaces.push({ x: b.x - pageX, y: b.y - pageY, w: b.width, h: b.height });
+    for (const c of n.children ?? []) walk(c, depth + 1);
   };
-  walk(doc);
+  walk(doc, 0);
   return { pageWidth, texts, surfaces };
 }
 

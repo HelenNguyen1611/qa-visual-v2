@@ -43,6 +43,8 @@ export interface ViewportReport {
   reserved: ReservedRegion[];
   /** kept for locating findings; stripped before the JSON dump */
   textIndex: TextItem[];
+  /** unpainted copy haystack; stripped before the JSON dump */
+  pageCopy?: string;
 }
 
 export interface PageReport {

@@ -293,6 +293,33 @@ export interface TextItem {
  * names the text involved in a finding and we look up where that text actually is.
  * Runs in the page.
  */
+/**
+ * All copy in the document, including text that is not painted (closed <details> filters,
+ * off-screen drawers). Used only as a haystack for “is this Figma string on the site?”, never
+ * for geometry. `innerText` / checkVisibility both skip a closed filter list, which is how
+ * “Marketing strategy” on /projects was flagged while sitting in the taxonomy.
+ */
+export function collectPageCopy(max = 80000): string {
+  const root = document.body;
+  if (!root) return '';
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const parts: string[] = [];
+  let len = 0;
+  let node: Node | null;
+  while ((node = walker.nextNode())) {
+    const parent = node.parentElement;
+    if (!parent) continue;
+    const tag = parent.tagName;
+    if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT' || tag === 'SVG') continue;
+    const t = (node.textContent || '').replace(/\s+/g, ' ').trim();
+    if (!t) continue;
+    parts.push(t);
+    len += t.length + 1;
+    if (len >= max) break;
+  }
+  return parts.join(' ').slice(0, max);
+}
+
 export function collectTextIndex(max = 800): TextItem[] {
   const out: TextItem[] = [];
   const seen = new Set<string>();

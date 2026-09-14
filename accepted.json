@@ -320,6 +320,133 @@
       ],
       "why": "reponsive",
       "at": "2026-09-12"
+    },
+    {
+      "id": "13goc1l",
+      "title": "“Integrity Oversight Victoria” and “Hume Proud” do not line up",
+      "anchors": [
+        "Integrity Oversight Victoria",
+        "Hume Proud"
+      ],
+      "detail": "Live: their left edges are 636px apart.\nDesign: their left edges are 620px apart.",
+      "pages": [
+        "http://new-wooagency:8888/?qa-showcase=1",
+        "http://new-wooagency:8888/projects/hume-proud-2/?qa-showcase=1"
+      ],
+      "why": "not bug, checked live web - they in line up",
+      "at": "2026-09-14"
+    },
+    {
+      "id": "0sq5adi",
+      "title": "“How we help you” is missing",
+      "anchors": [
+        "How we help you"
+      ],
+      "detail": "Live: “How we help you” is not on the page.\nDesign: “How we help you” is in the frame.",
+      "pages": [
+        "http://new-wooagency:8888/services/?qa-showcase=1"
+      ],
+      "why": "Not bug",
+      "at": "2026-09-14"
+    },
+    {
+      "id": "0z2ax5i",
+      "title": "Empty gap on the first screen",
+      "anchors": [
+        "Services",
+        "Where imagination and intelligence work as one.",
+        "Learn more"
+      ],
+      "detail": "Live: 562px empty gap (55% of the first screen).\nDesign: The first screen should be filled with content.",
+      "pages": [
+        "http://new-wooagency:8888/?qa-showcase=1"
+      ],
+      "why": "Animation",
+      "at": "2026-09-14"
+    },
+    {
+      "id": "1ol2qm1",
+      "title": "Article body text, second image and CTA link are missing",
+      "anchors": [
+        "Giant Lygon Street Turns 35",
+        "You may also like",
+        "See all"
+      ],
+      "detail": "Design: article includes two paragraphs of body copy, a second image, a subheading, more copy and an \"Explore the Report\" link before the related articles section.\nLive: after the main image the page jumps straight to \"You may also like\", with no body copy, second image, subheading or CTA link shown.",
+      "pages": [
+        "http://new-wooagency:8888/giant-lygon-street-turns-35/?qa-showcase=1"
+      ],
+      "why": "Miss content",
+      "at": "2026-09-14"
+    },
+    {
+      "id": "03ydr8m",
+      "title": "“AI business consulting & transformation​” is missing",
+      "anchors": [
+        "AI business consulting & transformation​"
+      ],
+      "detail": "Live: “AI business consulting & transformation​” is not on the page.\nDesign: “AI business consulting & transformation​” is in the frame.",
+      "pages": [
+        "http://new-wooagency:8888/?qa-showcase=1"
+      ],
+      "why": "False positive",
+      "at": "2026-09-14"
+    },
+    {
+      "id": "1v4zapy",
+      "title": "“Content to match cultural trends​” is missing",
+      "anchors": [
+        "Content to match cultural trends​"
+      ],
+      "detail": "Live: “Content to match cultural trends​” is not on the page.\nDesign: “Content to match cultural trends​” is in the frame.",
+      "pages": [
+        "http://new-wooagency:8888/?qa-showcase=1"
+      ],
+      "why": "false positive",
+      "at": "2026-09-14"
+    },
+    {
+      "id": "1rs12l1",
+      "title": "“Driven by intelligent systems” and “Software development and cyber security” sit farther apart than in the design",
+      "anchors": [
+        "Driven by intelligent systems",
+        "Software development and cyber security"
+      ],
+      "detail": "Live: 73px between them.\nDesign: 34px between them.",
+      "pages": [
+        "http://new-wooagency:8888/?qa-showcase=1",
+        "http://new-wooagency:8888/projects/?qa-showcase=1"
+      ],
+      "why": "false positive",
+      "at": "2026-09-14"
+    },
+    {
+      "id": "13ea6vp",
+      "title": "“Designed through deep insights” and “Marketing strategy” sit farther apart than in the design",
+      "anchors": [
+        "Designed through deep insights",
+        "Marketing strategy"
+      ],
+      "detail": "Live: 65px between them.\nDesign: 40px between them.",
+      "pages": [
+        "http://new-wooagency:8888/?qa-showcase=1"
+      ],
+      "why": "false positive",
+      "at": "2026-09-14"
+    },
+    {
+      "id": "1svvexv",
+      "title": "Empty gap on the first screen",
+      "anchors": [
+        "Provide your details and we’ll come back to you as soon as w",
+        "Submit"
+      ],
+      "detail": "Live: 323px empty gap (36% of the first screen).\nDesign: The first screen should be filled with content.",
+      "pages": [
+        "http://new-wooagency:8888/contact/?qa-showcase=1"
+      ],
+      "why": "design intend",
+      "at": "2026-09-14"
     }
   ]
 }

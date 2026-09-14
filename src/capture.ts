@@ -8,6 +8,7 @@ import {
   triggerLazyLoad,
   collectMedia,
   collectTextIndex,
+  collectPageCopy,
   collectReservedSpace,
   type MediaRegion,
   type TextItem,
@@ -25,6 +26,8 @@ export interface Capture {
   reserved: ReservedRegion[];
   /** every visible text run with its real box — used to locate AI findings precisely */
   textIndex: TextItem[];
+  /** unpainted copy too (closed filters, etc.) — haystack for missing-Figma-text only */
+  pageCopy: string;
   failedRequests: string[];
   jsErrors: string[];
   title: string;
@@ -85,10 +88,11 @@ export async function captureAll(browser: Browser, cfg: Config, outDir: string):
       const media = await page.evaluate(collectMedia).catch(() => [] as MediaRegion[]);
       const reserved = await page.evaluate(collectReservedSpace, 200).catch(() => [] as ReservedRegion[]);
       const textIndex = await page.evaluate(collectTextIndex, 800).catch(() => [] as TextItem[]);
+      const pageCopy = await page.evaluate(collectPageCopy, 80000).catch(() => '');
       const pageHeight = await page.evaluate(() => document.documentElement.scrollHeight);
       const file = join(outDir, `${vp.name}.png`);
       await page.screenshot({ path: file, fullPage: true, animations: 'disabled', caret: 'hide', timeout: 20000 });
-      out.push({ viewport: vp.name, width: vp.width, file, pageHeight, media, reserved, textIndex, failedRequests: dedupe(failed), jsErrors: dedupe(jsErrors), title });
+      out.push({ viewport: vp.name, width: vp.width, file, pageHeight, media, reserved, textIndex, pageCopy, failedRequests: dedupe(failed), jsErrors: dedupe(jsErrors), title });
       const nAv = media.filter((m) => m.kind === 'video' || m.kind === 'iframe' || m.kind === 'canvas').length;
       const nImg = media.filter((m) => m.kind === 'img').length;
       const nBg = media.filter((m) => m.kind === 'background').length;
