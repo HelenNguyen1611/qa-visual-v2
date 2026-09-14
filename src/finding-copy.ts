@@ -91,6 +91,44 @@ export function findingTitle(title: string, detail: string, anchors?: string[]):
   return title;
 }
 
+/**
+ * What a finding rests on — the thing a reader needs before deciding how much to trust it.
+ *
+ * Three bases, not two, because "measured" covers two very different situations. A text box that
+ * intersects another text box is a fact of this page: nothing outside the screenshot can make it
+ * wrong. A 27px gap that Figma calls 53px is only as good as the pairing that decided those two
+ * strings are the same two strings — and pairing is the part that gets it wrong. Showing both
+ * under one "measured" badge is what makes a wrong one discredit a right one.
+ */
+export type FindingBasis = 'page' | 'design' | 'ai';
+
+export const BASIS: Record<FindingBasis, { short: string; label: string; caveat?: string }> = {
+  page: {
+    short: 'page',
+    label: 'Measured on the page',
+    caveat: 'Taken from the page’s own numbers — no design reference involved.',
+  },
+  design: {
+    short: 'design',
+    label: 'Compared with the design',
+    caveat: 'Depends on this text being matched to the right element in the Figma frame. Check the pairing before treating it as a bug.',
+  },
+  ai: {
+    short: 'AI',
+    label: 'Reported by the AI',
+    caveat: 'Described by the model from the screenshots, not measured.',
+  },
+};
+
+export function findingBasis(f: { measured?: boolean; locatedHow?: string }): FindingBasis {
+  if (!f.measured) return 'ai';
+  const how = f.locatedHow ?? '';
+  // No `locatedHow` means the crop was never resolved, so the basis is unknown. Unknown goes to
+  // the tier that asks for a second look, never to the one that claims proof.
+  if (!how) return 'design';
+  return /figma|design/i.test(how) ? 'design' : 'page';
+}
+
 export function findingStatus(f: {
   severity: string;
   viewports: string[];

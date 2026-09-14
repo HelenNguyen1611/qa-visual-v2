@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { findingCompare, findingStatus, findingTitle } from './finding-copy.js';
+import { findingBasis, findingCompare, findingStatus, findingTitle } from './finding-copy.js';
 
 describe('findingCompare', () => {
   it('keeps Design / Live lines', () => {
@@ -44,5 +44,43 @@ describe('findingStatus', () => {
       findingStatus({ severity: 'minor', viewports: ['desktop'], isNew: true }),
       'Minor · Desktop · new this run',
     );
+  });
+});
+
+describe('findingBasis', () => {
+  it('keeps a page-only measurement out of the design tier', () => {
+    assert.equal(
+      findingBasis({ measured: true, locatedHow: 'measured on DOM: two text boxes intersect' }),
+      'page',
+    );
+    assert.equal(
+      findingBasis({ measured: true, locatedHow: 'measured on DOM: 323px empty on the first screen' }),
+      'page',
+    );
+    assert.equal(
+      findingBasis({ measured: true, locatedHow: 'measured on DOM: aspect distortion 22%' }),
+      'page',
+    );
+  });
+
+  it('sends every Figma comparison to the tier that asks for a second look', () => {
+    assert.equal(
+      findingBasis({ measured: true, locatedHow: 'measured on DOM: gap 27px vs Figma 53px' }),
+      'design',
+    );
+    assert.equal(
+      findingBasis({ measured: true, locatedHow: 'measured on DOM: unique Figma text has no matching run' }),
+      'design',
+    );
+    assert.equal(
+      findingBasis({ measured: true, locatedHow: 'measured on DOM: x delta 16px vs Figma' }),
+      'design',
+    );
+  });
+
+  it('treats an unproved or unlocated finding conservatively', () => {
+    assert.equal(findingBasis({ measured: false }), 'ai');
+    assert.equal(findingBasis({}), 'ai');
+    assert.equal(findingBasis({ measured: true }), 'design');
   });
 });

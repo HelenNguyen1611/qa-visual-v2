@@ -2,7 +2,7 @@ import type { DiffResult } from './compare.js';
 import type { SweepResult } from './sweep.js';
 import type { MediaRegion, TextItem, ReservedRegion } from './browser.js';
 import type { GroupedFinding } from './group.js';
-import { findingCompare, findingStatus, findingTitle } from './finding-copy.js';
+import { BASIS, findingBasis, findingCompare, findingStatus, findingTitle } from './finding-copy.js';
 import { formatQaWhen } from './time.js';
 
 export interface AiFinding {
@@ -272,7 +272,13 @@ export function renderReport(r: RunReport, stamp?: string): string {
   const unmapped = r.pages.filter((p) => !p.mapping.frameName);
   const mispaired = r.pages.filter((p) => p.mispaired);
   const majors = open.filter((f) => f.severity === 'major').length;
+  const byBasis = {
+    page: open.filter((f) => findingBasis(f) === 'page'),
+    design: open.filter((f) => findingBasis(f) === 'design'),
+    ai: open.filter((f) => findingBasis(f) === 'ai'),
+  };
   const SEV = { major: 'major', minor: 'minor', note: 'note' } as Record<string, string>;
+  const BASIS_RANK = { page: 0, design: 1, ai: 2 } as const;
   const VP_COLS = ['mobile', 'tablet', 'desktop'] as const;
   const VP_W = { mobile: 390, tablet: 768, desktop: 1440 } as const;
 
@@ -311,15 +317,19 @@ export function renderReport(r: RunReport, stamp?: string): string {
       : `<div class="tablewrap">
   <table class="grid">
     <thead><tr>
-      <th class="c">#</th><th>Finding</th><th>Severity</th><th>Scope</th>
+      <th class="c">#</th><th>Finding</th><th>Basis</th><th>Severity</th><th>Scope</th>
       ${VP_COLS.map((v) => `<th class="c">${v[0].toUpperCase() + v.slice(1)}<br><span class="tiny">${VP_W[v]}px</span></th>`).join('')}
       <th class="c">Pages</th>
     </tr></thead>
     <tbody>${open
+      .map((f) => ({ f, basis: findingBasis(f) }))
+      // Facts of the page first, then the tiers that can be wrong for reasons outside the page.
+      .sort((a, b) => BASIS_RANK[a.basis] - BASIS_RANK[b.basis] || (a.f.num ?? 0) - (b.f.num ?? 0))
       .map(
-        (f) => `<tr>
+        ({ f, basis }) => `<tr>
         <td class="c tnum">${f.num}</td>
         <td><a href="#f${f.num}">${esc(findingTitle(f.title, f.detail, f.anchors))}</a>${f.isNew === true ? ' <span class="mark">new</span>' : ''}</td>
+        <td class="tiny"><span class="basis b-${basis}">${BASIS[basis].short}</span></td>
         <td class="${f.severity}">${SEV[f.severity]}</td>
         <td class="tiny">${f.scope === 'template' ? 'shared' : 'page'}</td>
         ${VP_COLS.map((v) => `<td class="c ${f.viewports.includes(v) ? 'yes ' + f.severity : 'no'}">${f.viewports.includes(v) ? '●' : '·'}</td>`).join('')}
@@ -328,7 +338,10 @@ export function renderReport(r: RunReport, stamp?: string): string {
       )
       .join('')}</tbody>
   </table>
-  <p class="note">● = seen at that screen size. An empty cell means it was not reported there.</p>
+  <p class="note">● = seen at that screen size. An empty cell means it was not reported there.
+  <b>Basis</b>: <span class="basis b-page">page</span> = the page’s own numbers, nothing else can make it wrong.
+  <span class="basis b-design">design</span> = compared with the Figma frame, so a wrong pairing shows up here as a wrong finding.
+  <span class="basis b-ai">AI</span> = described by the model from the screenshots.</p>
 </div>`;
 
   /**
@@ -357,13 +370,14 @@ export function renderReport(r: RunReport, stamp?: string): string {
         <span class="num">${f.num}</span>
         <h3>${esc(findingTitle(f.title, f.detail, f.anchors))}</h3>
       </div>
-      <p class="fmeta">${esc(findingStatus(f))}</p>
+      <p class="fmeta">${esc(findingStatus(f))} · <span class="basis b-${findingBasis(f)}">${BASIS[findingBasis(f)].label}</span></p>
       ${findingBody(f)}
       ${
         !f.crop && f.anchors?.length
           ? `<p class="noloc">Could not crop a region — quoted: <code>${esc(f.anchors.slice(0, 2).join('</code> <code>'))}</code></p>`
           : ''
       }
+      ${BASIS[findingBasis(f)].caveat ? `<p class="fbasis">${esc(BASIS[findingBasis(f)].caveat!)}</p>` : ''}
       <p class="where">${
         f.scope === 'template'
           ? `On <b>${f.pages.length}/${r.pages.length} pages</b> — fix once and it is gone everywhere: ${f.pages.map((p) => `<code>${esc(path(p))}</code>`).join(' ')}`
@@ -585,6 +599,11 @@ table.grid td.note{color:var(--mute);font-weight:400}
 .find p{margin:0 0 10px;font-size:15px;color:var(--ink)}
 .find p.fextra{font-size:13px;color:var(--mute)}
 .find p.where{margin:0 0 16px;font-size:13px;color:var(--mute)}
+.find p.fbasis{margin:0 0 8px;font-size:13px;color:var(--faint)}
+.basis{display:inline-block;font-size:12px;font-weight:500;padding:1px 6px;border:1px solid;border-radius:var(--radius);white-space:nowrap}
+.basis.b-page{color:var(--ok);background:var(--ok-bg);border-color:var(--ok-line)}
+.basis.b-design{color:var(--warn);background:var(--warn-bg);border-color:var(--warn-line)}
+.basis.b-ai{color:var(--accent-ink);background:var(--accent-bg);border-color:var(--accent)}
 .shot img{max-width:100%;max-height:340px;width:auto;display:block}
 @media (min-width:800px){ .shot img{max-height:480px} }
 .shot .zoom{position:absolute;bottom:10px;right:10px;color:var(--faint);background:var(--bg);
@@ -742,6 +761,13 @@ ${
   <p class="lead">Click a title to jump to the cropped screenshot.${
     r.drift ? ` vs last run: ${open.filter((f) => f.isNew).length} new · ${open.filter((f) => f.isNew === false).length} still present.` : ''
   }${r.rawFindingCount > open.length ? ` Merged ${r.rawFindingCount} raw comments into ${open.length} findings.` : ''}</p>
+  <p class="lead">Read them in this order: <b>${byBasis.page.length}</b> measured on the page,
+  <b>${byBasis.design.length}</b> compared with the design (a wrong pairing reads as a wrong finding here),
+  <b>${byBasis.ai.length}</b> reported by the AI.${
+    hasOverflow
+      ? ` The <a href="#overflow">overflow ranges</a> are measured on the page too — they are listed separately because they are a width range, not a spot on one screenshot.`
+      : ''
+  }</p>
   ${indexTable()}
 </section>`
     : ''
@@ -794,7 +820,7 @@ ${
           .map((b) => `<li>From <b>${b.from}px</b> down to <b>${b.to}px</b>: ${b.overflowPx}px wider than the screen — add a media query around ${b.from}px.</li>`)
           .join('')}</ul>`,
     )
-    .join('')}<p class="tiny" style="margin:0">Swept on the homepage only — overflow breakpoints belong to the template.</p></div>
+    .join('')}<p class="tiny" style="margin:0">Every page in this run was swept from 1600px down to 320px, then the exact breaking width was found by bisection. Measured on the page — no design reference involved.</p></div>
 </section>`
     : ''
 }
@@ -824,6 +850,9 @@ ${
     <table class="plain">
       <tbody>
         <tr><td>Major findings</td><td class="${majors ? 'bad' : 'ok'}">${majors}</td></tr>
+        <tr><td>Measured on the page</td><td>${byBasis.page.length}</td></tr>
+        <tr><td>Compared with the design</td><td>${byBasis.design.length}</td></tr>
+        <tr><td>Reported by the AI</td><td>${byBasis.ai.length}</td></tr>
         <tr><td>Shared-component findings</td><td>${template.length}</td></tr>
         <tr><td>Page-only findings</td><td>${perPage.length}</td></tr>
         <tr><td>Pages that differ from baseline</td><td class="${changedPages.length ? 'bad' : 'ok'}">${changedPages.length}/${r.pages.length}</td></tr>

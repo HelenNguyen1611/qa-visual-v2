@@ -1,0 +1,89 @@
+{
+  "_": "Pairs each URL with a Figma frame (desktop) and optionally a mobile frame. The tool writes this file the first time; edit a wrong row and later runs keep your edit. Drop figmaNodeId / figmaMobileNodeId to skip that compare.",
+  "pages": [
+    {
+      "url": "https://copiapartners.com.au/",
+      "figmaNodeId": "3164:6530",
+      "frameName": "Homepage",
+      "figmaMobileNodeId": "3923:7183",
+      "frameMobileName": "Home",
+      "how": "pasted mobile link: \"Home\""
+    },
+    {
+      "url": "https://copiapartners.com.au/about-us/",
+      "figmaNodeId": "3164:7888",
+      "frameName": "About Us",
+      "how": "name match \"About Us\" (score 1.00, next 0.50)"
+    },
+    {
+      "url": "https://copiapartners.com.au/complaints/",
+      "how": "no frame similar enough (best 0.00 < 0.5) — skip design compare"
+    },
+    {
+      "url": "https://copiapartners.com.au/contact-us/",
+      "figmaNodeId": "3164:7575",
+      "frameName": "Contact Us",
+      "how": "name match \"Contact Us\" (score 1.00, next 0.50)"
+    },
+    {
+      "url": "https://copiapartners.com.au/corporate-responsibility/",
+      "figmaNodeId": "3164:6705",
+      "frameName": "Corporate Responsibility ",
+      "how": "name match \"Corporate Responsibility \" (score 1.00, next 0.00)"
+    },
+    {
+      "url": "https://copiapartners.com.au/documents-and-forms/",
+      "figmaNodeId": "3164:7374",
+      "frameName": "Documents and Forms ",
+      "how": "name match \"Documents and Forms \" (score 1.00, next 0.85)"
+    },
+    {
+      "url": "https://copiapartners.com.au/funds-overview/",
+      "figmaNodeId": "3205:11812",
+      "frameName": "Funds Overview",
+      "how": "name match \"Funds Overview\" (score 1.00, next 0.00)"
+    },
+    {
+      "url": "https://copiapartners.com.au/governance/",
+      "how": "no frame similar enough (best 0.00 < 0.5) — skip design compare"
+    },
+    {
+      "url": "https://copiapartners.com.au/how-to-invest/",
+      "how": "no frame similar enough (best 0.33 < 0.5) — skip design compare"
+    },
+    {
+      "url": "https://copiapartners.com.au/insights/",
+      "how": "no frame similar enough (best 0.00 < 0.5) — skip design compare"
+    },
+    {
+      "url": "https://copiapartners.com.au/investment-partners/",
+      "figmaNodeId": "3164:8135",
+      "frameName": "Investment Partners ",
+      "how": "name match \"Investment Partners \" (score 1.00, next 0.23)"
+    },
+    {
+      "url": "https://copiapartners.com.au/maintenance/",
+      "how": "no frame similar enough (best 0.00 < 0.5) — skip design compare"
+    },
+    {
+      "url": "https://copiapartners.com.au/our-people/",
+      "figmaNodeId": "3164:7831",
+      "frameName": "Our People",
+      "how": "name match \"Our People\" (score 1.00, next 0.00)"
+    },
+    {
+      "url": "https://copiapartners.com.au/our-value/",
+      "how": "ambiguous: two frames nearly tied (0.50 vs 0.00) — skip design compare to avoid a wrong pair"
+    },
+    {
+      "url": "https://copiapartners.com.au/partner-with-us/",
+      "figmaNodeId": "3164:6879",
+      "frameName": "Partner with us",
+      "how": "name match \"Partner with us\" (score 1.00, next 0.67)"
+    },
+    {
+      "url": "https://copiapartners.com.au/privacy-policy/",
+      "how": "no frame similar enough (best 0.00 < 0.5) — skip design compare"
+    }
+  ]
+}
