@@ -12,6 +12,7 @@ import { buildShare } from './share.js';
 import { renderReport, type RunReport } from './report.js';
 import { listPageCoverage, listRunSummaries, reportSite, siteKey } from './site.js';
 import { findingByNum, markFindingAccepted } from './accepted.js';
+import { readStarred, setStarred } from './starred.js';
 
 /**
  * The web front end: one page, a few JSON endpoints, and a log stream.
@@ -402,16 +403,28 @@ const server = createServer(async (req, res) => {
       const site = url.searchParams.get('site') ?? '';
       const offset = Math.max(0, Math.floor(Number(url.searchParams.get('offset') ?? 0) || 0));
       const limit = Math.min(50, Math.max(1, Math.floor(Number(url.searchParams.get('limit') ?? 12) || 12)));
+      const starred = readStarred();
       const rows = listRunSummaries(root, { site: site || undefined }).reverse();
+      rows.sort((a, b) => Number(starred.has(b.stamp)) - Number(starred.has(a.stamp)));
       return json(res, 200, {
         runs: rows.slice(offset, offset + limit).map((r) => ({
           ...r,
+          starred: starred.has(r.stamp),
           reportUrl: '/reports/' + r.stamp + '/report.html',
         })),
         total: rows.length,
         offset,
         limit,
       });
+    }
+
+    if (req.method === 'POST' && path === '/api/runs/star') {
+      const body = await readBody(req);
+      const stamp = String(body.stamp ?? '').trim();
+      const on = body.starred !== false;
+      if (!runDirFor(stamp)) return json(res, 400, { error: 'invalid run id' });
+      const starred = setStarred(stamp, on);
+      return json(res, 200, { ok: true, stamp, starred });
     }
 
     if (req.method === 'GET' && path === '/api/coverage') {

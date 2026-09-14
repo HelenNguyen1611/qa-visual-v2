@@ -726,6 +726,39 @@
       .done .big.bad {
         color: var(--bad);
       }
+      .history th.mark,
+      .history td.mark {
+        width: 36px;
+        padding-left: 4px;
+        padding-right: 0;
+      }
+      .history .starbtn {
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: #c5cad3;
+        display: grid;
+        place-items: center;
+        border-radius: 8px;
+      }
+      .history .starbtn:hover:not(:disabled) {
+        background: #f4f5f7;
+        border: 0;
+        color: #eab308;
+      }
+      .history .starbtn[aria-pressed='true'] {
+        color: #eab308;
+      }
+      .history .starbtn[aria-pressed='true'] path {
+        fill: currentColor;
+      }
+      .history .starbtn svg {
+        width: 18px;
+        height: 18px;
+        display: block;
+      }
       .history td.nfind.ok {
         color: var(--ok);
         font-weight: 650;
@@ -1021,7 +1054,8 @@
           <h2>Previous runs</h2>
           <p class="sub" id="historySub">
             Each row is a saved report — the host tells you which project, so
-            you do not need to open timestamp folders.
+            you do not need to open timestamp folders. Star a run to keep it at
+            the top.
           </p>
           <div id="historyBody"><p class="hint">Loading…</p></div>
           <p class="hint" id="historyMoreWrap" hidden>
@@ -2242,11 +2276,30 @@
         return s.replace(/^openrouter\//, '');
       }
 
+      const STAR_SVG =
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.4 14.6 8.7l5.9.9-4.3 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9L12 3.4z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>';
+
+      function paintStar(btn, on) {
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        btn.title = on ? 'Remove star' : 'Mark as important';
+        btn.setAttribute('aria-label', btn.title);
+      }
+
       function historyRow(r) {
+        const on = Boolean(r.starred);
         return (
           '<tr data-stamp="' +
           esc(r.stamp) +
           '">' +
+          '<td class="mark"><button type="button" class="starbtn" data-act="star" aria-pressed="' +
+          (on ? 'true' : 'false') +
+          '" title="' +
+          (on ? 'Remove star' : 'Mark as important') +
+          '" aria-label="' +
+          (on ? 'Remove star' : 'Mark as important') +
+          '">' +
+          STAR_SVG +
+          '</button></td>' +
           '<td class="host">' +
           esc(r.host) +
           '</td>' +
@@ -2281,7 +2334,7 @@
         const more = $('histmore');
         if (!histTotal) {
           sub.textContent =
-            'Each row is a saved report — the host tells you which project, so you do not need to open timestamp folders.';
+            'Each row is a saved report — the host tells you which project, so you do not need to open timestamp folders. Star a run to keep it at the top.';
           wrap.hidden = true;
           return;
         }
@@ -2318,7 +2371,7 @@
             return;
           }
           box.innerHTML =
-            '<table class="history"><thead><tr><th>Site</th><th>When</th><th>AI</th><th>Findings</th><th></th></tr></thead><tbody>' +
+            '<table class="history"><thead><tr><th class="mark" aria-label="Star"></th><th>Site</th><th>When</th><th>AI</th><th>Findings</th><th></th></tr></thead><tbody>' +
             rows.map(historyRow).join('') +
             '</tbody></table>';
           historyMeta();
@@ -2358,6 +2411,21 @@
         const tr = btn.closest('tr');
         const stamp = tr && tr.getAttribute('data-stamp');
         if (!stamp) return;
+        if (btn.getAttribute('data-act') === 'star') {
+          const on = btn.getAttribute('aria-pressed') !== 'true';
+          paintStar(btn, on);
+          fetch('/api/runs/star', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ stamp: stamp, starred: on }),
+          })
+            .then((r) => r.json())
+            .then((d) => {
+              if (!d || !d.ok) throw new Error((d && d.error) || 'save failed');
+            })
+            .catch(() => paintStar(btn, !on));
+          return;
+        }
         if (btn.getAttribute('data-act') === 'open') {
           window.open(
             '/reports/' + encodeURIComponent(stamp) + '/report.html',
