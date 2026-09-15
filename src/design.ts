@@ -62,6 +62,10 @@ export type FigmaOverlayText = FigmaOverlayBox & {
   lineHeight?: number;
   id?: string;
   depth?: number;
+  /** Immediate parent node — two texts in the same card share this, two cards do not. */
+  parentId?: string;
+  /** Innermost INSTANCE this text sits in. A reused homepage block on another frame has one. */
+  instanceId?: string;
 };
 
 /** TEXT + image-fill surfaces from one mapped page frame. Used by measured overlay checks. */
@@ -74,6 +78,7 @@ export interface FigmaOverlay {
 type OverlayNode = {
   id?: string;
   type?: string;
+  componentId?: string;
   characters?: string;
   fills?: Array<{ type?: string; visible?: boolean }>;
   style?: {
@@ -107,7 +112,8 @@ export function flattenFigmaOverlay(doc: OverlayNode): FigmaOverlay {
   const surfaces: FigmaOverlayBox[] = [];
   const pageX = page?.x ?? 0;
   const pageY = page?.y ?? 0;
-  const walk = (n: OverlayNode, depth: number) => {
+  const walk = (n: OverlayNode, depth: number, parentId?: string, instanceId?: string) => {
+    const nextInstance = n.type === 'INSTANCE' ? n.id ?? instanceId : instanceId;
     const b = n.absoluteBoundingBox;
     if (n.type === 'TEXT' && n.characters && b) {
       const text = n.characters.replace(/\s+/g, ' ').trim();
@@ -120,13 +126,15 @@ export function flattenFigmaOverlay(doc: OverlayNode): FigmaOverlay {
           h: b.height,
           id: n.id,
           depth,
+          parentId,
+          instanceId: nextInstance,
           ...overlayTypeMetrics(n),
         });
       }
     }
     const image = (n.fills ?? []).some((f) => f.visible !== false && f.type === 'IMAGE');
     if (image && b && b.width >= 400) surfaces.push({ x: b.x - pageX, y: b.y - pageY, w: b.width, h: b.height });
-    for (const c of n.children ?? []) walk(c, depth + 1);
+    for (const c of n.children ?? []) walk(c, depth + 1, n.id ?? parentId, nextInstance);
   };
   walk(doc, 0);
   return { pageWidth, texts, surfaces };

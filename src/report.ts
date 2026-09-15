@@ -204,7 +204,7 @@ const ACCEPT_SCRIPT = [
   '</script>',
 ].join('\n');
 
-/** Jump links + open a closed <details> when the hash points inside it. Runs on share files too. */
+/** Jump links + highlight the TOC item for the section under the spy line. Runs on share files too. */
 const TOC_SCRIPT = [
   '<script>',
   '(function () {',
@@ -225,24 +225,41 @@ const TOC_SCRIPT = [
   '    if (!a) return;',
   '    openTarget((a.getAttribute("href") || "").slice(1));',
   '  });',
-  '  var map = {};',
+  '  var links = [];',
   '  nav.querySelectorAll(\'a[href^="#"]\').forEach(function (a) {',
   '    var id = (a.getAttribute("href") || "").slice(1);',
-  '    if (id && document.getElementById(id)) map[id] = a;',
+  '    if (id && document.getElementById(id)) links.push({ id: id, a: a });',
   '  });',
-  '  var ids = Object.keys(map);',
-  '  if (!ids.length || !("IntersectionObserver" in window)) return;',
+  '  if (!links.length) return;',
   '  var current = "";',
-  '  var io = new IntersectionObserver(function (entries) {',
-  '    var vis = entries.filter(function (e) { return e.isIntersecting; })',
-  '      .sort(function (a, b) { return a.boundingClientRect.top - b.boundingClientRect.top; });',
-  '    if (!vis.length) return;',
-  '    var id = vis[0].target.id;',
+  '  function mark(id) {',
   '    if (id === current) return;',
   '    current = id;',
-  '    ids.forEach(function (k) { if (map[k]) map[k].toggleAttribute("aria-current", k === id); });',
-  '  }, { rootMargin: "-20% 0px -60% 0px", threshold: 0 });',
-  '  ids.forEach(function (id) { io.observe(document.getElementById(id)); });',
+  '    links.forEach(function (item) {',
+  '      if (item.id === id) item.a.setAttribute("aria-current", "true");',
+  '      else item.a.removeAttribute("aria-current");',
+  '    });',
+  '  }',
+  '  function spy() {',
+  '    var line = window.matchMedia("(min-width: 1100px)").matches ? 48 : 80;',
+  '    var best = links[0].id;',
+  '    for (var i = 0; i < links.length; i++) {',
+  '      var el = document.getElementById(links[i].id);',
+  '      if (el && el.getBoundingClientRect().top - line <= 0) best = links[i].id;',
+  '    }',
+  '    mark(best);',
+  '  }',
+  '  var ticking = false;',
+  '  function onScroll() {',
+  '    if (ticking) return;',
+  '    ticking = true;',
+  '    requestAnimationFrame(function () { ticking = false; spy(); });',
+  '  }',
+  '  window.addEventListener("scroll", onScroll, { passive: true });',
+  '  window.addEventListener("resize", onScroll);',
+  '  window.addEventListener("hashchange", function () { requestAnimationFrame(spy); });',
+  '  nav.addEventListener("click", function () { requestAnimationFrame(function () { requestAnimationFrame(spy); }); });',
+  '  spy();',
   '})();',
   '</script>',
 ].join('\n');
@@ -475,6 +492,10 @@ export function renderReport(r: RunReport, stamp?: string): string {
 
   return `<!doctype html><html lang="en"${stamp ? ` data-stamp="${esc(stamp)}"` : ''}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>QA Visual — ${esc(host)}</title>
+<link rel="icon" href="http://new-wooagency:8888/wp-content/themes/woo-agency/assets/img/favicon.svg" type="image/svg+xml" sizes="any">
+<link rel="icon" href="http://new-wooagency:8888/wp-content/themes/woo-agency/assets/img/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="http://new-wooagency:8888/wp-content/themes/woo-agency/assets/img/favicon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="http://new-wooagency:8888/wp-content/themes/woo-agency/assets/img/apple-touch-icon.png" sizes="180x180">
 <style>
 /* Status-first bug report: green = ok, orange = warning, red = error. */
 :root{
@@ -507,7 +528,7 @@ header,section,details.tech,details.fold,.find{scroll-margin-top:56px}
 .toc a{flex:0 0 auto;font-size:13px;font-weight:400;line-height:1.4;
   padding:0;border:0;text-decoration:none;color:var(--faint);white-space:nowrap}
 .toc a .n{margin-left:4px}
-.toc a[aria-current="true"]{color:var(--ink)}
+.toc a[aria-current="true"]{color:var(--ink);font-weight:600}
 @media (min-width:1100px){
   html{scroll-padding-top:16px}
   header,section,details.tech,details.fold,.find{scroll-margin-top:16px}
@@ -515,7 +536,8 @@ header,section,details.tech,details.fold,.find{scroll-margin-top:56px}
   .toc{position:fixed;left:0;top:0;bottom:0;width:176px;flex-direction:column;align-items:flex-start;
     gap:10px;overflow-x:hidden;overflow-y:auto;padding:40px 28px;
     border-bottom:0;border-right:1px solid var(--line)}
-  .toc a{font-size:13px}
+  .toc a{font-size:13px;padding:2px 0 2px 10px;margin-left:-12px;border-left:2px solid transparent}
+  .toc a[aria-current="true"]{border-left-color:var(--ink)}
 }
 
 /* ---------------------------------- head --------------------------------- */

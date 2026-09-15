@@ -14,7 +14,8 @@
     "start": "node dist/server.js",
     "web": "node dist/server.js",
     "share": "node dist/share.js",
-    "models": "node dist/models.js"
+    "models": "node dist/models.js",
+    "harness": "node dist/cli.js harness"
   },
   "engines": {
     "node": ">=20"

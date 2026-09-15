@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Can AI really QA a website?</title>
+<style>
+:root{
+  --bg:#f6f7f1;--ink:#191e1a;--muted:#626b63;--avo:#adc76d;--avo2:#e1ebc5;
+  --moss:#546f36;--dark:#191e1a;--card:#fff;--line:#d2d7cd;--red:#ce4e43;
+  --ease:cubic-bezier(.22,1,.36,1)
+}
+*{box-sizing:border-box} html,body{margin:0;background:#111;color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow:hidden}
+button,a{font:inherit}
+.deck{width:100vw;height:100vh;position:relative;background:#111}
+.slide{position:absolute;inset:0;display:grid;grid-template-rows:auto 1fr auto;padding:5.5vh 5.2vw 3.6vh;background:var(--bg);opacity:0;pointer-events:none;transform:translateX(3vw) scale(.985);transition:opacity .65s var(--ease),transform .8s var(--ease);overflow:hidden}
+.slide.active{opacity:1;pointer-events:auto;transform:none;z-index:2}
+.slide.prev{transform:translateX(-3vw) scale(.985)}
+.dark{background:var(--dark);color:white}.warm{background:#fcf7f4}
+.top{display:flex;justify-content:space-between;align-items:center;position:relative;z-index:5}
+.kicker{display:inline-flex;padding:.48rem .8rem;border-radius:999px;background:var(--avo2);color:var(--moss);font-size:.72rem;font-weight:800;letter-spacing:.08em}
+.dark .kicker{background:var(--avo);color:var(--dark)}
+.count{font-size:.72rem;letter-spacing:.14em;color:#9aa39b;font-weight:800}
+h1{font-size:clamp(3rem,5.6vw,6rem);line-height:.94;letter-spacing:-.055em;margin:0;font-weight:780}
+h2{font-size:clamp(2.6rem,4.4vw,4.8rem);line-height:.98;letter-spacing:-.05em;margin:0;font-weight:760}
+p{line-height:1.5}.accent{color:var(--moss)}.dark .accent{color:var(--avo)}.muted{color:var(--muted)}.dark .muted{color:#b7c0b8}
+.footer{display:flex;justify-content:space-between;align-items:end;color:#9aa39b;font-size:.68rem;letter-spacing:.1em;font-weight:700}
+.brand{opacity:.75}.progress{position:absolute;bottom:0;left:0;height:4px;background:var(--avo);width:0;transition:width .6s var(--ease);z-index:20}
+.stage{display:flex;align-items:center;position:relative}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:4vw;width:100%;align-items:center}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:1.3vw;width:100%}
+.card{background:white;border:1px solid var(--line);border-radius:24px;padding:1.5rem;box-shadow:0 18px 50px rgba(25,30,26,.06)}
+.dark .card{background:#2e352f;border-color:#465047;box-shadow:none}
+.browser{border:1px solid #495249;border-radius:22px;background:#2d342e;overflow:hidden;box-shadow:0 35px 90px rgba(0,0,0,.3)}
+.chrome{height:44px;background:#343c35;display:flex;align-items:center;gap:7px;padding:0 14px}
+.dot{width:9px;height:9px;border-radius:50%;background:#718074}.url{margin-left:12px;height:24px;border-radius:12px;background:#414a42;flex:1;color:#aab4ab;font-size:.66rem;display:flex;align-items:center;padding:0 12px}
+.page{padding:24px;min-height:360px;background:#f7f8f4;color:var(--ink)}
+.fakebar{height:10px;border-radius:10px;background:#cbd1c8;margin-bottom:10px}.fakehero{height:150px;border-radius:16px;background:linear-gradient(135deg,#e4edca,#b5c978);margin:18px 0}
+.tag{display:inline-flex;padding:.34rem .58rem;border-radius:999px;font-size:.65rem;font-weight:800;letter-spacing:.04em;background:var(--avo2);color:var(--moss)}
+.dark .tag{background:var(--avo);color:var(--dark)}
+.hero-copy{max-width:700px}.subtitle{font-size:clamp(1rem,1.55vw,1.45rem);max-width:580px;color:#b9c2ba;margin-top:1.7rem}
+.hero-visual{position:relative}
+.compare{display:grid;grid-template-columns:1fr 1fr;gap:18px}.mini{background:#f8f9f5;border-radius:14px;padding:14px;min-height:250px;position:relative}.bbox{position:absolute;border:2px solid var(--avo);left:12px;right:38%;top:62px;height:72px}
+.neq{position:absolute;left:50%;top:49%;transform:translate(-50%,-50%);width:54px;height:54px;border-radius:50%;display:grid;place-items:center;background:var(--avo);color:var(--dark);font-weight:900;font-size:1.5rem;z-index:3}
+.metric{font-size:clamp(2.2rem,4vw,4rem);font-weight:800;letter-spacing:-.05em}
+.qa-list{display:grid;gap:10px}.qa-row{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border:1px solid var(--line);border-radius:15px;background:#fff}.qa-row b{font-size:.95rem}.icon{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:var(--avo2);color:var(--moss);font-weight:900;margin-right:12px}.qa-left{display:flex;align-items:center}
+.panel-title{font-size:1.15rem;font-weight:800;margin:.8rem 0 1rem}.checks{display:grid;grid-template-columns:1fr 1fr;gap:.65rem}.check{font-size:.9rem;color:var(--muted)}.check:before{content:"✓";display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--avo2);color:var(--moss);font-weight:900;margin-right:8px}
+.gap-card{background:var(--dark);color:white}.gap-card .check{color:#d0d7d1}.gap-card .check:before{content:"?";background:#343c35;color:var(--avo)}
+.bridge{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);width:58px;height:58px;border-radius:50%;display:grid;place-items:center;background:var(--avo);font-size:1.5rem;font-weight:900;z-index:4}
+.ai-flow{display:grid;grid-template-columns:1.2fr .65fr 1.7fr;gap:2vw;align-items:center;width:100%}.inputs{display:grid;gap:16px}.inputbox{padding:1.2rem;border-radius:18px;background:#2d342e;border:1px solid #465047;font-weight:800;text-align:center}.ai-orb{width:120px;height:120px;border-radius:50%;display:grid;place-items:center;background:var(--avo);color:var(--dark);font-size:2rem;font-weight:900;box-shadow:0 0 0 18px rgba(173,199,109,.08)}
+.quote{padding:2rem;border-radius:24px;background:#2d342e;border:1px solid #465047}.quote strong{font-size:1.7rem}.question{color:var(--avo);font-size:1.2rem;font-weight:800;margin-top:1.3rem}
+.pipeline{display:grid;grid-template-columns:minmax(150px,1fr) 42px minmax(150px,1fr) 42px minmax(150px,1fr) 42px minmax(150px,1fr) 42px minmax(150px,1fr) 42px minmax(150px,1fr);gap:0;width:100%;align-items:stretch}
+.node{min-height:120px;border-radius:20px;border:1px solid var(--line);background:white;padding:1.2rem;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center}
+.node strong{font-size:.9rem}.node small{margin-top:.4rem;color:var(--muted)}
+.flow-arrow{display:flex;align-items:center;justify-content:center;color:var(--moss);font-size:1.7rem;font-weight:900;line-height:1}
+.node.darknode{background:var(--dark);color:white;border-color:var(--dark)}.node.darknode small{color:var(--avo)}
+.viewport{display:flex;gap:.5rem;justify-content:center;margin-top:1.3rem}.viewport span{background:var(--avo2);color:var(--moss);font-size:.7rem;font-weight:800;border-radius:999px;padding:.35rem .65rem}
+.evidence{min-height:320px}.evidence h3{font-size:1rem;margin:.8rem 0 1.5rem}.vals{display:grid;grid-template-columns:1fr 1fr;gap:1rem}.label{font-size:.65rem;color:var(--muted);font-weight:800;letter-spacing:.08em}.bigval{font-size:2rem;font-weight:800;margin-top:.25rem}.delta{border-top:1px solid var(--line);margin-top:1.2rem;padding-top:1rem;font-size:1.3rem;color:var(--moss);font-weight:850}
+.demo-grid{display:grid;grid-template-columns:2.5fr 1fr;gap:2vw;width:100%;align-items:center}.report-row{display:flex;justify-content:space-between;padding:12px 14px;border-radius:12px;background:#333b34;margin:9px 0;font-size:.8rem}.report-row span:last-child{color:var(--avo);font-weight:800}.demo-actions{display:grid;gap:18px}.demo-btn{display:block;text-decoration:none;padding:1.5rem;border-radius:20px;background:var(--avo);color:var(--dark);font-size:1.25rem;font-weight:900;transition:transform .25s var(--ease),box-shadow .25s}.demo-btn:hover{transform:translateY(-5px);box-shadow:0 18px 40px rgba(173,199,109,.18)}.demo-btn.secondary{background:#2d342e;color:white;border:1px solid #465047}.placeholder{font-size:.72rem;color:#9eaaa0;margin-top:.6rem}
+.pairing{display:grid;grid-template-columns:1fr 1fr;gap:3vw;position:relative}.pair-col{display:grid;gap:12px}.pair{background:white;border:1px solid var(--line);padding:14px;border-radius:14px;font-weight:750}.cross{position:absolute;inset:0;pointer-events:none}.false-card{border-color:#efc6c1}.false-card .tag{background:#f4dcd8;color:var(--red)}
+.poster{text-align:center;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center}.poster .line1{font-size:clamp(2.5rem,4.5vw,5rem);font-weight:800;letter-spacing:-.05em}.poster .line2{font-size:clamp(3rem,5vw,5.7rem);font-weight:850;letter-spacing:-.06em;color:var(--avo);margin-top:.3rem}.duo{display:grid;grid-template-columns:1fr 64px 1fr;gap:2.2vw;margin:3rem auto 0;max-width:1100px;width:100%;align-items:stretch}.duo .card{text-align:left;display:flex;flex-direction:column;justify-content:center;min-height:220px}.arrow-center{display:flex;align-items:center;justify-content:center;color:var(--avo);font-size:2.5rem;font-weight:900}
+.arch{display:grid;grid-template-columns:1.2fr 1fr;gap:4vw;width:100%;align-items:center}.steps{display:grid;gap:10px}.step{display:grid;grid-template-columns:42px 1.2fr 1.4fr;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}.num{width:32px;height:32px;border-radius:50%;background:var(--avo);display:grid;place-items:center;font-size:.68rem;font-weight:900}.step b{font-size:.9rem}.step span:last-child{font-size:.8rem;color:var(--muted)}.decision{display:grid;grid-template-columns:1fr 1fr;gap:14px}.decision .card{text-align:center}.later{margin-top:14px;background:var(--dark);color:white}.later b{color:var(--avo)}
+.roles{display:grid;grid-template-columns:repeat(3,1fr);gap:1.2vw;margin-top:2.5rem}.role{text-align:center;min-height:170px}.role h3{color:var(--avo);font-size:1rem}.role p{font-size:1.05rem;color:#e0e5e1}
+.ribbon{margin:2rem auto 0;max-width:1000px;background:var(--avo);color:var(--dark);border-radius:18px;padding:1rem 1.4rem;font-size:1.5rem;font-weight:900;text-align:center}
+.navhint{position:fixed;right:18px;bottom:18px;z-index:50;color:#889189;font-size:.68rem;background:rgba(17,17,17,.6);backdrop-filter:blur(12px);padding:8px 10px;border-radius:10px}
+.notes{position:fixed;left:2vw;right:2vw;bottom:2vh;max-height:32vh;overflow:auto;background:rgba(10,12,10,.94);color:#f3f5f2;border:1px solid #394139;border-radius:18px;padding:1.2rem 1.4rem;z-index:100;display:none;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.notes.show{display:block}.notes b{color:var(--avo)}.notes p{margin:.5rem 0;font-size:.95rem}
+.reveal{opacity:0;transform:translateY(24px);transition:opacity .7s var(--ease),transform .8s var(--ease)}
+.active .reveal{opacity:1;transform:none}.active .d1{transition-delay:.12s}.active .d2{transition-delay:.24s}.active .d3{transition-delay:.36s}.active .d4{transition-delay:.48s}.active .d5{transition-delay:.60s}
+.float{animation:float 5s ease-in-out infinite}.pulse{animation:pulse 2.4s ease-in-out infinite}
+@keyframes float{50%{transform:translateY(-10px)}} @keyframes pulse{50%{box-shadow:0 0 0 22px rgba(173,199,109,.02),0 0 45px rgba(173,199,109,.25)}}
+@media(max-width:900px){.grid2,.grid3,.demo-grid,.arch{gap:2vw}.slide{padding:4vh 4vw 3vh}.checks{grid-template-columns:1fr}.pipeline{gap:.5vw}.node{padding:.6rem}.roles{gap:.7vw}}
+</style>
+</head>
+<body>
+<div class="deck" id="deck">
+
+<section class="slide dark active">
+ <div class="top"><span class="kicker">AI SHOWCASE · SEPTEMBER 2026</span><span class="count">01 / 11</span></div>
+ <div class="stage grid2">
+  <div class="hero-copy">
+   <h1 class="reveal">Can AI really<br><span class="accent">QA a website?</span></h1>
+   <p class="subtitle reveal d1">Comparing an implemented UI against a trusted visual reference with AI + deterministic evidence.</p>
+   <p class="muted reveal d2" style="margin-top:3rem;font-size:.8rem;font-weight:700">HELEN NGUYEN · SENIOR FRONTEND DEVELOPER</p>
+  </div>
+  <div class="hero-visual reveal d2 float">
+   <div class="browser"><div class="chrome"><i class="dot"></i><i class="dot"></i><i class="dot"></i><div class="url">Visual reference ↔ Implemented UI</div></div>
+    <div class="page compare"><div class="mini"><span class="tag">FIGMA</span><div class="fakebar" style="width:70%;margin-top:30px"></div><div class="fakebar" style="width:48%"></div><div class="fakehero"></div><div class="bbox"></div></div><div class="mini"><span class="tag" style="background:#f4dcd8;color:#a83d35">WEB</span><div class="fakebar" style="width:62%;margin-top:30px"></div><div class="fakebar" style="width:55%"></div><div class="fakehero" style="transform:translateY(10px)"></div><div class="bbox" style="border-color:var(--red);top:70px"></div></div><div class="neq pulse">≠</div></div>
+   </div>
+  </div>
+ </div>
+ <div class="footer"><span class="brand">AI VISUAL QA / WOO AI SHOWCASE</span><span>01</span></div>
+</section>
+
+<section class="slide">
+ <div class="top"><span class="kicker">01 / THE PROBLEM</span><span class="count">02 / 11</span></div>
+ <div class="stage grid2">
+  <div><h2 class="reveal">Small differences are<br><span class="accent">easy to miss.</span></h2>
+   <div class="reveal d1" style="display:grid;grid-template-columns:1fr 1.6fr;gap:2rem;margin-top:3rem"><div><div class="label">1 PAGE</div><div class="metric" style="font-size:2rem">manageable</div></div><div><div class="label">20–50 PAGES × 3 BREAKPOINTS</div><div class="metric" style="font-size:2rem">repetitive + expensive</div></div></div>
+   <p class="reveal d2" style="font-size:1.4rem;font-weight:800;margin-top:3rem">Manual visual QA is effective — but repetitive, hard to scale, and easy to miss small inconsistencies.</p>
+  </div>
+  <div class="browser reveal d2"><div class="chrome"><i class="dot"></i><i class="dot"></i><i class="dot"></i><div class="url">Design QA surface</div></div><div class="page qa-list">
+   <div class="qa-row reveal d1"><div class="qa-left"><span class="icon">Aa</span><b>Typography</b></div><small>small visual drift</small></div>
+   <div class="qa-row reveal d2"><div class="qa-left"><span class="icon">↔</span><b>Spacing</b></div><small>small visual drift</small></div>
+   <div class="qa-row reveal d3"><div class="qa-left"><span class="icon">⌖</span><b>Alignment</b></div><small>small visual drift</small></div>
+   <div class="qa-row reveal d4"><div class="qa-left"><span class="icon">●</span><b>Colour</b></div><small>small visual drift</small></div>
+   <div class="qa-row reveal d5"><div class="qa-left"><span class="icon">▱</span><b>Responsive</b></div><small>small visual drift</small></div>
+  </div></div>
+ </div><div class="footer"><span class="brand">AI VISUAL QA / WOO AI SHOWCASE</span><span>02</span></div>
+</section>
+
+<section class="slide">
+ <div class="top"><span class="kicker">02 / THE GAP</span><span class="count">03 / 11</span></div>
+ <div class="stage">
+  <div style="width:100%"><h2 class="reveal">Technical QA is strong.<br><span class="accent">Design QA is still a gap.</span></h2>
+   <div class="grid2" style="margin-top:2.2rem;position:relative">
+    <div class="card reveal d1"><span class="tag">TECH QA · WELL COVERED</span><div class="panel-title">What existing tools do well</div><div class="checks"><span class="check">Performance</span><span class="check">Accessibility</span><span class="check">SEO</span><span class="check">Broken requests</span><span class="check">Console errors</span><span class="check">Tracking / metadata</span></div></div>
+    <div class="card gap-card reveal d2"><span class="tag">DESIGN FIDELITY · THE GAP</span><div class="panel-title">What still needs visual judgement</div><div class="checks"><span class="check">Typography</span><span class="check">Spacing consistency</span><span class="check">Alignment</span><span class="check">Colour fidelity</span><span class="check">Responsive intent</span><span class="check">Motion / animation</span></div></div>
+    <div class="bridge reveal d3">→</div>
+   </div>
+   <div class="reveal d4" style="margin-top:1.6rem;background:var(--avo2);color:var(--moss);padding:1rem;border-radius:16px;text-align:center;font-weight:850">The idea isn't to replace existing QA — it's to cover the missing visual layer between a trusted reference and the implemented UI.</div>
+  </div>
+ </div><div class="footer"><span class="brand">AI VISUAL QA / WOO AI SHOWCASE</span><span>03</span></div>
+</section>
+
+<section class="slide dark">
+ <div class="top"><span class="kicker">03 / FIRST ATTEMPT</span><span class="count">04 / 11</span></div>
+ <div class="stage"><div style="width:100%"><h2 class="reveal">Why not just give<br><span class="accent">reference + UI to AI?</span></h2>
+  <div class="ai-flow" style="margin-top:3rem"><div class="inputs reveal d1"><div class="inputbox">REFERENCE</div><div class="inputbox">IMPLEMENTED UI</div></div><div class="ai-orb reveal d2 pulse">AI</div><div class="quote reveal d3"><strong>“Here are the UI bugs.”</strong><p class="muted">Looks impressive.</p><div class="question">But can we trust every finding?</div></div></div>
+  <p class="reveal d4" style="font-size:1.55rem;font-weight:850;margin-top:2.5rem">Description ≠ measurement.</p>
+ </div></div><div class="footer"><span class="brand">AI VISUAL QA / WOO AI SHOWCASE</span><span>04</span></div>
+</section>
+
+<section class="slide">
+ <div class="top"><span class="kicker">04 / PROTOTYPE</span><span class="count">05 / 11</span></div>
+ <div class="stage"><div style="width:100%"><h2 class="reveal">From AI reviewer →<br><span class="accent">evidence-driven QA pipeline</span></h2>
+  <div class="pipeline" style="margin-top:3rem">
+   <div class="node darknode reveal d1"><strong>REFERENCE</strong><small>Figma / image / baseline</small></div>
+   <div class="flow-arrow reveal d1">→</div>
+   <div class="node reveal d1"><strong>STRUCTURE</strong><small>sections</small></div>
+   <div class="flow-arrow reveal d2">→</div>
+   <div class="node reveal d2"><strong>MATCH</strong><small>same meaning / role</small></div>
+   <div class="flow-arrow reveal d3">→</div>
+   <div class="node reveal d3"><strong>MEASURE</strong><small>geometry</small></div>
+   <div class="flow-arrow reveal d4">→</div>
+   <div class="node reveal d4"><strong>AI REVIEW</strong><small>judgement</small></div>
+   <div class="flow-arrow reveal d5">→</div>
+   <div class="node darknode reveal d5"><strong>EVIDENCE</strong><small>report</small></div>
+  </div><div class="viewport reveal d4"><span>390</span><span>768</span><span>1440</span></div>
+  <div class="reveal d5" style="margin:1.7rem auto 0;max-width:900px;background:var(--avo2);color:var(--moss);padding:1rem;border-radius:16px;text-align:center;font-weight:850">The model can judge. The evidence must come from the system.</div>
+ </div></div><div class="footer"><span class="brand">AI VISUAL QA / WOO AI SHOWCASE</span><span>05</span></div>
+</section>
+
+<section class="slide">
+ <div class="top"><span class="kicker">05 / REAL EVIDENCE</span><span class="count">06 / 11</span></div>
+ <div class="stage"><div style="width:100%"><h2 class="reveal">Some differences can be<br><span class="accent">proven.</span></h2>
+  <div class="grid3" style="margin-top:2.3rem">
+   <div class="card evidence reveal d1"><span class="tag">MEASURED · HIGH</span><h3>TYPOGRAPHY</h3><div class="vals"><div><div class="label">FIGMA</div><div class="bigval">48px</div></div><div><div class="label">WEB</div><div class="bigval">44px</div></div></div><div class="delta">Δ 4px</div></div>
+   <div class="card evidence reveal d2"><span class="tag">MEASURED · HIGH</span><h3>SPACING</h3><div class="vals"><div><div class="label">FIGMA</div><div class="bigval">64px</div></div><div><div class="label">WEB</div><div class="bigval">80px</div></div></div><div class="delta">Δ 16px</div></div>
+   <div class="card evidence reveal d3"><span class="tag">MEASURED · HIGH</span><h3>ALIGNMENT</h3><div class="vals"><div><div class="label">FIGMA</div><div class="bigval">x 120</div></div><div><div class="label">WEB</div><div class="bigval">x 136</div></div></div><div class="delta">Δ 16px</div></div>
+  </div><p class="reveal d4" style="font-size:1.3rem;font-weight:850;margin-top:1.5rem">Not “AI thinks it looks wrong.” → Measurable evidence.</p>
+ </div></div><div class="footer"><span class="brand">AI VISUAL QA / WOO AI SHOWCASE</span><span>06</span></div>
+</section>
+
+<section class="slide dark">
+ <div class="top"><span class="kicker">06 / DEMO</span><span class="count">07 / 11</span></div>
+ <div class="stage"><div style="width:100%"><h2 class="reveal">Show the evidence.<br><span class="muted" style="font-size:.62em">Not the magic trick.</span></h2>
+  <div class="demo-grid" style="margin-top:2rem"><div class="browser reveal d1"><div class="chrome"><i class="dot"></i><i class="dot"></i><i class="dot"></i><div class="url">[PASTE DEMO REPORT URL]</div></div><div style="padding:20px"><div class="report-row"><b>Typography Δ4px</b><span>HIGH CONFIDENCE</span></div><div class="report-row"><b>Spacing Δ16px</b><span>HIGH CONFIDENCE</span></div><div class="report-row"><b>Alignment Δ16px</b><span>HIGH CONFIDENCE</span></div></div></div>
+   <div class="demo-actions"><a class="demo-btn reveal d2" href="#" onclick="return false">▶ LIVE DEMO<div class="placeholder">[PASTE DEMO LINK]</div></a><a class="demo-btn secondary reveal d3" href="#" onclick="return false">▶ RECORDING<div class="placeholder">[PASTE VIDEO LINK]</div></a></div>
+  </div><p class="reveal d4 accent" style="font-weight:850">Backup path ready if live demo fails.</p>
+ </div></div><div class="footer"><span class="brand">AI VISUAL QA / WOO AI SHOWCASE</span><span>07</span></div>
+</section>
+
+<section class="slide warm">
+ <div class="top"><span class="kicker" style="background:#f4dcd8;color:var(--red)">07 / FAILURE</span><span class="count">08 / 11</span></div>
+ <div class="stage"><div style="width:100%"><h2 class="reveal">The measurement was correct.<br><span style="color:var(--red)">The comparison was wrong.</span></h2>
+  <div class="grid2" style="margin-top:2.2rem"><div class="pairing reveal d1"><div class="pair-col"><span class="label">FIGMA</span><div class="pair">Heading A</div><div class="pair">Image A</div><div class="pair">Card A</div></div><div class="pair-col"><span class="label">WEBSITE</span><div class="pair">Heading B</div><div class="pair">Wrapper</div><div class="pair">Card A</div></div><svg class="cross" viewBox="0 0 600 300" preserveAspectRatio="none"><line x1="260" y1="78" x2="340" y2="145" stroke="#ce4e43" stroke-width="4"/><line x1="260" y1="145" x2="340" y2="78" stroke="#ce4e43" stroke-width="4"/><line x1="260" y1="215" x2="340" y2="215" stroke="#4b804a" stroke-width="4"/></svg></div>
+   <div class="card false-card reveal d2"><span class="tag">FALSE POSITIVE</span><h3 style="font-size:1.5rem">Spacing mismatch</h3><p class="muted">Measured: +48px</p><p style="color:var(--red);font-weight:850">Root cause: wrong pair</p></div></div>
+  <p class="reveal d3" style="font-size:1.45rem;font-weight:850;margin-top:1.8rem">Perfect measurement of the wrong pair is still a wrong finding.</p>
+ </div></div><div class="footer"><span class="brand">AI VISUAL QA / WOO AI SHOWCASE</span><span>08</span></div>
+</section>
+
+<section class="slide dark">
+ <div class="top"><span class="kicker">08 / KEY LESSON</span><span class="count">09 / 11</span></div>
+ <div class="stage"><div class="poster"><div class="line1 reveal">The model is allowed to judge.</div><div class="line2 reveal d1">It is not allowed to invent evidence.</div>
+  <div class="duo">
+   <div class="card reveal d2"><span class="tag" style="align-self:flex-start">AI</span><p style="font-size:1.35rem;font-weight:800">“I think something is wrong.”</p></div>
+   <div class="arrow-center reveal d3">→</div>
+   <div class="card reveal d3"><span class="tag" style="align-self:flex-start">CODE</span><p style="font-size:1.35rem;font-weight:800">“Here is exactly where and by how much.”</p></div>
+  </div>
+  <p class="reveal d5" style="font-size:1.7rem;font-weight:900;margin-top:2rem">AI proposes. Code proves where.</p>
+ </div></div><div class="footer"><span class="brand">AI VISUAL QA / WOO AI SHOWCASE</span><span>09</span></div>
+</section>
+
+<section class="slide">
+ <div class="top"><span class="kicker">09 / V3 ARCHITECTURE</span><span class="count">10 / 11</span></div>
+ <div class="stage"><div style="width:100%"><h2 class="reveal">Compare meaning first.<br><span class="accent">Measure second.</span></h2>
+  <div class="arch" style="margin-top:2rem"><div class="steps">
+   <div class="step reveal d1"><span class="num">01</span><b>STRUCTURE</b><span>section / collection</span></div>
+   <div class="step reveal d2"><span class="num">02</span><b>SEMANTIC MATCH</b><span>same meaning / role?</span></div>
+   <div class="step reveal d3"><span class="num">03</span><b>PAIRING</b><span>heading ↔ heading</span></div>
+   <div class="step reveal d4"><span class="num">04</span><b>MEASUREMENT</b><span>type · geometry · spacing</span></div>
+   <div class="step reveal d5"><span class="num" style="background:var(--dark);color:white">05</span><b>CONFIDENCE</b><span>high / medium / low</span></div>
+  </div><div><div class="decision reveal d3"><div class="card" style="background:var(--avo2)"><b style="color:var(--moss)">MEASURED</b><p class="muted">strong evidence</p></div><div class="card"><b>AI REVIEW</b><p class="muted">weak evidence</p></div></div><div class="card later reveal d4"><b>NOT YET — benchmark core first</b><p>Palette · CLS · Blur · Advanced spacing · Animation fidelity</p></div></div></div>
+ </div></div><div class="footer"><span class="brand">AI VISUAL QA / WOO AI SHOWCASE</span><span>10</span></div>
+</section>
+
+<section class="slide dark">
+ <div class="top"><span class="kicker">10 / ANSWER</span><span class="count">11 / 11</span></div>
+ <div class="stage"><div style="width:100%;text-align:center"><h2 class="reveal">Can AI really QA a website?</h2><h1 class="accent reveal d1" style="margin-top:.5rem">Yes. But not alone.</h1>
+  <div class="roles"><div class="card role reveal d2"><h3>AI</h3><p>See patterns<br>Find anomalies<br>Reason about intent</p></div><div class="card role reveal d3"><h3>CODE</h3><p>Measure<br>Locate<br>Reproduce evidence</p></div><div class="card role reveal d4"><h3>HUMAN</h3><p>Design intent<br>UX judgement<br>Final decision</p></div></div>
+  <div class="ribbon reveal d5">AI proposes → Code proves → Human decides</div>
+  <p class="muted reveal d5" style="font-size:.72rem;margin-top:1rem">[DEMO URL] · [VIDEO RECORDING] · [REPO / QR]</p>
+ </div></div><div class="footer"><span class="brand">AI VISUAL QA / WOO AI SHOWCASE</span><span>11</span></div>
+</section>
+
+<div class="progress" id="progress"></div>
+<div class="navhint">← → / Space · F fullscreen · N notes</div>
+<div class="notes" id="notes"><b>Presenter notes</b><p id="noteText">Add your slide script here if needed. Press N to hide.</p></div>
+</div>
+<script>
+const slides=[...document.querySelectorAll('.slide')], progress=document.getElementById('progress'), notes=document.getElementById('notes');
+let i=0;
+const noteScripts=[
+`Hi everyone. Today, I'd like to share a small AI experiment I've been working on recently. When we build a UI from a visual reference, we normally need to compare the implemented result with that reference. And a lot of that visual checking is still done manually. So I started with a very simple question: Can AI really QA a website?`,
+`Large differences are easy to see. The difficult part is the small visual drift: typography, spacing, alignment, colour and responsive consistency. One page is manageable. Across many pages and breakpoints, it becomes repetitive.`,
+`We already have tools that are very good at technical QA: performance, accessibility, SEO, errors and tracking. I didn't want to rebuild that. The gap I wanted to explore was visual fidelity — what happens between a trusted visual reference and the implemented UI.`,
+`My first thought was simple: why not give the visual reference and the implemented UI to an AI model? It works surprisingly well, but then I asked a harder question: can I trust every finding? If it says something is sixteen pixels out, where did sixteen pixels come from?`,
+`So I started building a pipeline. Figma gives us design information. Playwright inspects the real website. The system pairs corresponding elements, measures differences, then AI can help with judgement. The report should contain evidence, not just opinions.`,
+`These are examples of the kind of findings I want to trust: typography, spacing and alignment differences that can be measured. The important distinction is between AI saying something looks wrong and the system proving a difference.`,
+`Here I would show the prepared report rather than run the entire pipeline from scratch. The goal is to show evidence. I also keep a recording ready as a fallback.`,
+`The hardest problem turned out not to be detecting differences. It was knowing what should be compared with what. Figma structure and a WordPress DOM can be very different. A perfectly accurate measurement of the wrong pair is still a wrong finding.`,
+`This changed the principle of the system. The model is allowed to judge, but it is not allowed to invent evidence. AI can propose a possible problem. Deterministic code should prove where it is and by how much whenever possible.`,
+`For V3, the goal is not to add more AI. It is to make the system stricter: understand structure, match semantics, create reliable pairs, measure, then assign confidence. Advanced colour, CLS, blur, spacing and animation fidelity can come after the deterministic core is benchmarked.`,
+`So can AI really QA a website? My answer today is yes — but not by itself. AI is good at seeing and reasoning. Code is good at measuring and reproducing evidence. Humans still understand design intent and make the final decision. AI proposes. Code proves. Human decides.`
+];
+function show(n){
+ if(n<0||n>=slides.length)return;
+ slides.forEach((s,idx)=>{s.classList.toggle('active',idx===n);s.classList.toggle('prev',idx<n)});
+ i=n; progress.style.width=((i+1)/slides.length*100)+'%';
+ document.getElementById('noteText').textContent=noteScripts[i]||'';
+}
+function fullscreen(){if(!document.fullscreenElement)document.documentElement.requestFullscreen?.();else document.exitFullscreen?.()}
+addEventListener('keydown',e=>{
+ if(['ArrowRight','PageDown',' '].includes(e.key)){e.preventDefault();show(i+1)}
+ if(['ArrowLeft','PageUp'].includes(e.key)){e.preventDefault();show(i-1)}
+ if(e.key==='Home')show(0); if(e.key==='End')show(slides.length-1);
+ if(e.key.toLowerCase()==='f')fullscreen();
+ if(e.key.toLowerCase()==='n')notes.classList.toggle('show');
+});
+let sx=0; addEventListener('touchstart',e=>sx=e.touches[0].clientX); addEventListener('touchend',e=>{let dx=e.changedTouches[0].clientX-sx;if(Math.abs(dx)>60)show(i+(dx<0?1:-1))});
+show(0);
+</script>
+</body></html>

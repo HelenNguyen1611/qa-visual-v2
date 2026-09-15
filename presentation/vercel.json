@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/",
+      "destination": "/AI_Visual_QA_Showcase_Interactive_v2.html"
+    }
+  ]
+}

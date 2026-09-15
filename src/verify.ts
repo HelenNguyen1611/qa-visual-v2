@@ -24,9 +24,8 @@ export interface Measured {
 /** Per viewport, so one pathological page cannot fill the report with crops. */
 const CAP = { overlap: 4, type: 2, gap: 1, aspect: 2, banner: 1, missing: 4, distort: 2, overlayGap: 3, overlayAlign: 3, overlayType: 3, overlayBase: 2 };
 
-/** Neighbour-gap vs Figma TEXT bounds. CSS line-height makes the DOM box taller, so a 20–30px
- * “closer” reading is box-model noise, not a spacing bug a designer would fix. */
-const NEIGHBOR_GAP_MIN = 28;
+/** Neighbour-gap after ink trim. A leftover of ~16px is still line-box noise. */
+const NEIGHBOR_GAP_MIN = 16;
 const ALIGN_DELTA = 16;
 const BASE_DELTA = 20;
 const SIZE_DELTA = 2.5;
@@ -524,15 +523,76 @@ function sameColumn(a: Rect, b: Rect): boolean {
   return o >= Math.min(a.w, b.w) * 0.35;
 }
 
-/** True when the px delta is Figma-bounds vs line-height, not a layout break. */
+type StackKey = Rect & { parentId?: string; instanceId?: string; host?: string };
+
+/**
+ * Same visual stack — a title and its lead, not a description in card 02 and a title in card 07.
+ *
+ * Tree wins when we have it. Without it, left edges have to nearly match: a 35% X-overlap is how
+ * a two-up service list leaked across columns.
+ */
+export function sameNeighborStack(a: StackKey, b: StackKey): boolean {
+  if (a.parentId && b.parentId) return a.parentId === b.parentId && sameColumn(a, b);
+  if (a.instanceId && b.instanceId) return a.instanceId === b.instanceId && sameColumn(a, b);
+  if (a.host && b.host) return a.host === b.host && sameColumn(a, b);
+  return sameColumn(a, b) && Math.abs(a.x - b.x) <= 48 && overlapX(a, b) >= Math.min(a.w, b.w) * 0.5;
+}
+
+/**
+ * Half-leading on one side of a line box, or 0 when the box is already tight (Figma TEXT).
+ *
+ * CSS `line-height` inflates the DOM rect; Figma `absoluteBoundingBox` usually does not. Subtracting
+ * the same pad from both sides would invent a gap that neither designer drew.
+ */
+export function halfLeading(t: { h: number; fontSize?: number; lineHeight?: number; lines?: unknown[] }): number {
+  const fs = t.fontSize;
+  const lh = t.lineHeight;
+  if (!fs || !lh || lh <= fs + 1) return 0;
+  const n = t.lines?.length || Math.max(1, Math.round(t.h / lh));
+  const loose = lh * n;
+  if (t.h < loose * 0.85) return 0;
+  return (lh - fs) / 2;
+}
+
+/** Gap between the ink of `a` (above) and the ink of `b` (below). */
+export function inkGap(
+  a: { y: number; h: number; fontSize?: number; lineHeight?: number; lines?: unknown[] },
+  b: { y: number; h: number; fontSize?: number; lineHeight?: number; lines?: unknown[] },
+): number {
+  return b.y + halfLeading(b) - (a.y + a.h - halfLeading(a));
+}
+
+/** True when the remaining delta is still box-model noise, not a layout break. */
 export function skipNeighborGap(gapD: number, gapF: number): boolean {
   const delta = Math.abs(gapD - gapF);
   if (delta < NEIGHBOR_GAP_MIN) return true;
   const lo = Math.min(gapD, gapF);
   const hi = Math.max(gapD, gapF);
-  // Both still look like paragraph spacing (this page: 27 live vs 53 Figma).
-  if (lo >= 16 && hi <= 72 && delta <= 32) return true;
+  if (lo >= 12 && hi <= 72 && delta <= 28) return true;
   return false;
+}
+
+/**
+ * Strings that live inside a fat INSTANCE (a reused block, not a one-label button).
+ *
+ * The Projects frame drawing the homepage service list is the case: those titles are not missing
+ * from /projects — they were never this page’s copy.
+ */
+export function reusedInstanceTexts(overlay: { texts: Array<{ text: string; instanceId?: string }> }): Set<string> {
+  const byInst = new Map<string, Set<string>>();
+  for (const t of overlay.texts) {
+    if (!t.instanceId) continue;
+    const n = normText(t.text);
+    if (!n) continue;
+    const set = byInst.get(t.instanceId) ?? new Set();
+    set.add(n);
+    byInst.set(t.instanceId, set);
+  }
+  const skip = new Set<string>();
+  for (const set of byInst.values()) {
+    if (set.size >= 3) for (const n of set) skip.add(n);
+  }
+  return skip;
 }
 
 function scaledBox(f: FigmaOverlayBox, scale: number): Box {
@@ -677,6 +737,7 @@ export function missingUniqueFigmaText(
   const hay = normText(
     present.map((t) => t.text).join(' ') + ' ' + siteHay,
   );
+  const reused = reusedInstanceTexts(overlay);
   const norms = overlay.texts.map((t) => normText(t.text));
   const scale = overlayScale(overlay, viewportWidth);
   const out: Measured[] = [];
@@ -687,6 +748,7 @@ export function missingUniqueFigmaText(
     if (n.length < 6 || n.length > 48) continue;
     if (n.split(' ').filter(Boolean).length > 8) continue;
     if (isNonContentChrome(f.text)) continue;
+    if (reused.has(n)) continue;
     if (norms.some((other, j) => j !== i && textScore(n, other) >= 0.85)) continue;
     if (bestDomScore(n, present) >= 0.85) continue;
     if (n.length >= 12 && hay.includes(n)) continue;
@@ -739,6 +801,25 @@ function sameFigmaRow(a: Rect, b: Rect): boolean {
   return minH >= 8 && overlapY(a, b) / minH >= 0.5;
 }
 
+const rightEdge = (r: Rect) => r.x + r.w;
+
+type AlignAxis = 'left' | 'right';
+
+/**
+ * Which edge a designer lined up — left-aligned headings vs right-aligned CTAs / roles.
+ *
+ * TEXT boxes hug the glyphs, so two right-rail labels of different length share a right edge and
+ * naturally differ on the left. Calling that "same column" and then comparing live left edges is
+ * how “Learn more” vs “About us” and job titles became findings.
+ */
+function sharedAlignAxis(a: Rect, b: Rect): AlignAxis | undefined {
+  const dL = Math.abs(a.x - b.x);
+  const dR = Math.abs(rightEdge(a) - rightEdge(b));
+  const tight = Math.min(dL, dR);
+  if (tight > ALIGN_DELTA) return undefined;
+  return dR < dL ? 'right' : 'left';
+}
+
 /**
  * Two unique strings stacked in the same Figma column whose gap grew or shrank vs the live pair.
  *
@@ -764,8 +845,8 @@ export function overlayNeighborGap(items: TextItem[], overlay: FigmaOverlay, vie
     let bestGap = Infinity;
     for (let j = 0; j < overlay.texts.length; j++) {
       if (i === j) continue;
-      if (!sameColumn(aF, overlay.texts[j])) continue;
-      const gapF = overlay.texts[j].y - (aF.y + aF.h);
+      if (!sameNeighborStack(aF, overlay.texts[j])) continue;
+      const gapF = inkGap(aF, overlay.texts[j]);
       if (gapF < 4 || gapF > 72) continue;
       if (gapF < bestGap) {
         bestGap = gapF;
@@ -789,7 +870,7 @@ export function overlayNeighborGap(items: TextItem[], overlay: FigmaOverlay, vie
             !usedDom.has(t) &&
             t.y >= a.d.y + a.d.h - 2 &&
             t.y <= a.d.y + a.d.h + bestGap + 48 &&
-            sameColumn(a.d, t) &&
+            sameNeighborStack(a.d, t) &&
             (want < 8 || t.fontSize == null || Math.abs((t.fontSize ?? 0) - want) <= 8),
         )
         .sort((x, y) => x.y - y.y)[0];
@@ -805,7 +886,10 @@ export function overlayNeighborGap(items: TextItem[], overlay: FigmaOverlay, vie
     const aLines = linesOf(aDom);
     const bLines = linesOf(bDom);
     const aLast = aLines[aLines.length - 1];
-    const gapD = bLines[0].y - (aLast.y + aLast.h);
+    const gapD = inkGap(
+      { ...aLast, fontSize: aDom.fontSize, lineHeight: aDom.lineHeight },
+      { ...bLines[0], fontSize: bDom.fontSize, lineHeight: bDom.lineHeight },
+    );
     if (gapD < 0) continue;
     if (gapD > 96 || gapD > bestGap + 48) continue;
     if (skipNeighborGap(gapD, bestGap)) continue;
@@ -830,7 +914,13 @@ export function overlayNeighborGap(items: TextItem[], overlay: FigmaOverlay, vie
   return out;
 }
 
-/** Two unique strings that share a Figma row, but not the same relative alignment on the page. */
+/**
+ * Two unique strings stacked in the same Figma column whose live shared edge drifted.
+ *
+ * A two-column row (pitch 620px in a 1280 frame vs 596px on a 1440 shot) is not a misalignment —
+ * every row sharing that pitch is a grid. This check never compares that pitch to Figma. It only
+ * asks whether items that share a Figma edge still share that same edge on the page.
+ */
 export function overlayRowAlign(items: TextItem[], overlay: FigmaOverlay, viewportWidth: number): Measured[] {
   if (!overlay.pageWidth || viewportWidth < 1200) return [];
   const pairs = overlayPairs(items, overlay, viewportWidth);
@@ -839,27 +929,28 @@ export function overlayRowAlign(items: TextItem[], overlay: FigmaOverlay, viewpo
     for (let j = i + 1; j < pairs.length && out.length < CAP.overlayAlign; j++) {
       const a = pairs[i];
       const b = pairs[j];
-      if (!sameFigmaRow(a.f, b.f)) continue;
+      if (sameFigmaRow(a.f, b.f)) continue;
+      const axis = sharedAlignAxis(a.f, b.f);
+      if (!axis) continue;
       if (Math.min(a.f.y, b.f.y) < 120) continue;
-      if ((a.f.fontSize ?? 0) >= 32 || (b.f.fontSize ?? 0) >= 32) continue;
       if (isNonContentChrome(a.f.text) || isNonContentChrome(b.f.text)) continue;
       if (isNonContentChrome(a.d.text) || isNonContentChrome(b.d.text)) continue;
-      const dxF = b.f.x - a.f.x;
-      const dxD = b.d.x - a.d.x;
-      const miss = Math.abs(dxD - dxF);
-      if (miss < ALIGN_DELTA || miss > 80) continue;
-      if (Math.abs(dxF) > 720) continue;
-      if (Math.abs(dxD) < 48 && Math.abs(dxF) >= 180) continue;
+      const dxD =
+        axis === 'right'
+          ? Math.abs(rightEdge(b.d) - rightEdge(a.d))
+          : Math.abs(b.d.x - a.d.x);
+      if (dxD < ALIGN_DELTA || dxD > 80) continue;
       const qa = a.d.text.slice(0, 40);
       const qb = b.d.text.slice(0, 40);
+      const edge = axis === 'right' ? 'right' : 'left';
       out.push({
         finding: {
           title: `“${qa}” and “${qb}” do not line up`,
           severity: 'minor',
-          detail: `Live: their left edges are ${Math.round(Math.abs(dxD))}px apart.\nDesign: their left edges are ${Math.round(Math.abs(dxF))}px apart.`,
+          detail: `Live: their ${edge} edges are ${Math.round(dxD)}px apart.\nDesign: they share a ${edge} edge.`,
           anchors: [a.d.text.slice(0, 60), b.d.text.slice(0, 60)],
           y: Math.min(a.d.y, b.d.y),
-          locatedHow: `measured on DOM: x delta ${Math.round(miss)}px vs Figma`,
+          locatedHow: `measured on DOM: same-column ${edge} ${Math.round(dxD)}px apart vs Figma`,
           measured: true,
         },
         box: union(a.d, b.d),
@@ -948,6 +1039,8 @@ export function overlayTypeCompare(items: TextItem[], overlay: FigmaOverlay, vie
     const gotRatio = p.d.fontSize && p.d.lineHeight ? p.d.lineHeight / p.d.fontSize : undefined;
     const quote = p.d.text.slice(0, 60);
 
+    // CSS px vs Figma px. The 1280 artboard is the size spec — a 1440 screenshot must not
+    // grow or shrink the type. Do not scale the threshold by viewport / artboard.
     if (wantSize != null && gotSize != null && Math.abs(gotSize - wantSize) >= SIZE_DELTA) {
       out.push({
         finding: {
@@ -1202,14 +1295,21 @@ export function detectAll(
     ...peerImageAspect(media, viewportWidth),
     ...stretchedImages(media),
     ...(overlay
-      ? [
-          ...missingUniqueFigmaText(items, overlay, viewportWidth, siteItems, siteHay),
-          ...overlayNeighborGap(items, overlay, viewportWidth),
-          ...overlayRowAlign(items, overlay, viewportWidth),
-          ...overlayTextImageBaseline(items, media, overlay, viewportWidth),
-          ...overlayTypeCompare(items, overlay, viewportWidth),
-          ...overlayBannerPad(items, media, overlay, viewportWidth),
-        ]
+      ? (() => {
+          const typeHits = overlayTypeCompare(items, overlay, viewportWidth);
+          const typeKeys = new Set(typeHits.flatMap((m) => (m.finding.anchors ?? []).map((a) => normText(a))));
+          const gaps = overlayNeighborGap(items, overlay, viewportWidth).filter(
+            (g) => !(g.finding.anchors ?? []).some((a) => typeKeys.has(normText(a))),
+          );
+          return [
+            ...missingUniqueFigmaText(items, overlay, viewportWidth, siteItems, siteHay),
+            ...gaps,
+            ...overlayRowAlign(items, overlay, viewportWidth),
+            ...overlayTextImageBaseline(items, media, overlay, viewportWidth),
+            ...typeHits,
+            ...overlayBannerPad(items, media, overlay, viewportWidth),
+          ];
+        })()
       : []),
   ];
 }

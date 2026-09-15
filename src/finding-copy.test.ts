@@ -73,7 +73,7 @@ describe('findingBasis', () => {
       'design',
     );
     assert.equal(
-      findingBasis({ measured: true, locatedHow: 'measured on DOM: x delta 16px vs Figma' }),
+      findingBasis({ measured: true, locatedHow: 'measured on DOM: same-column left 24px apart vs Figma' }),
       'design',
     );
   });

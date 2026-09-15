@@ -9,6 +9,7 @@ import { launch } from './capture.js';
 import { findPages, runQa } from './core.js';
 import { prepareAuth } from './auth.js';
 import { readPagesJson, writePagesJson, type PageTarget } from './pages.js';
+import { formatPrecision, latestReportStamp, loadReportFindings, precisionFromReport } from './harness.js';
 
 /**
  * The terminal front end. All of the work lives in core.ts; this decides where the pairing comes
@@ -60,6 +61,24 @@ function acceptCommand(argv: string[]): number {
   return 0;
 }
 
+function harnessCommand(argv: string[]): number {
+  const runFlag = argv.indexOf('--run');
+  const want = runFlag > 0 ? argv[runFlag + 1] : undefined;
+  const stamp = want ?? latestReportStamp();
+  if (!stamp) {
+    console.error('No runs in reports/ to score.');
+    return 1;
+  }
+  const findings = loadReportFindings(stamp);
+  if (!findings.length) {
+    console.error(`Run ${stamp} has no findings.`);
+    return 1;
+  }
+  console.log(`Precision for run ${stamp} (${findings.length} findings)`);
+  console.log(formatPrecision(precisionFromReport(findings)));
+  return 0;
+}
+
 async function main() {
   const argv = process.argv.slice(2);
   if (!argv.length || argv.includes('-h') || argv.includes('--help')) {
@@ -67,6 +86,7 @@ async function main() {
     process.exit(argv.length ? 0 : 1);
   }
   if (argv[0] === 'accept') process.exit(acceptCommand(argv));
+  if (argv[0] === 'harness') process.exit(harnessCommand(argv));
   const cfg = loadConfig(argv);
 
   let frames: FigmaFrame[] = [];

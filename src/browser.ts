@@ -283,6 +283,11 @@ export interface TextItem {
   fontFamily?: string;
   color?: string;
   lineHeight?: number;
+  /**
+   * Closest card / section / list-item ancestor, so a gap check can refuse to compare
+   * a description in one card with a title in another.
+   */
+  host?: string;
 }
 
 /**
@@ -336,6 +341,23 @@ export function collectTextIndex(max = 800): TextItem[] {
     for (let d = 0; cur && d < 4; d++) {
       const t = cur.tagName.toLowerCase();
       if (/^h[1-6]$/.test(t)) return t;
+      cur = cur.parentElement;
+    }
+    return undefined;
+  };
+  const hostOf = (el: Element): string | undefined => {
+    let cur: Element | null = el;
+    for (let d = 0; cur && d < 10; d++) {
+      const tag = cur.tagName.toLowerCase();
+      const cls = typeof (cur as HTMLElement).className === 'string' ? (cur as HTMLElement).className : '';
+      if (tag === 'article' || tag === 'li' || tag === 'section' || tag === 'figure' || tag === 'form') {
+        const slug = (cls.split(/\s+/).find((c) => c && !/^(is-|wp-|has-)/.test(c)) || '').slice(0, 40);
+        return slug ? `${tag}.${slug}` : tag;
+      }
+      if (/\b(card|service|item|post|quote|banner|hero)\b/i.test(cls)) {
+        const slug = cls.split(/\s+/).find((c) => /card|service|item|post|quote|banner|hero/i.test(c)) || '';
+        return `${tag}.${slug.slice(0, 40)}`;
+      }
       cur = cur.parentElement;
     }
     return undefined;
@@ -456,6 +478,7 @@ export function collectTextIndex(max = 800): TextItem[] {
       h: Math.round(maxY - minY),
       tag: parent.tagName.toLowerCase(),
       heading: headingOf(parent),
+      host: hostOf(parent),
       ariaHidden: parent.closest('[aria-hidden="true"],[inert]') ? true : undefined,
       lines:
         lines.length > 1

@@ -4,6 +4,29 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>QA Visual</title>
+    <link
+      rel="icon"
+      href="http://new-wooagency:8888/wp-content/themes/woo-agency/assets/img/favicon.svg"
+      type="image/svg+xml"
+      sizes="any"
+    />
+    <link
+      rel="icon"
+      href="http://new-wooagency:8888/wp-content/themes/woo-agency/assets/img/favicon-32.png"
+      type="image/png"
+      sizes="32x32"
+    />
+    <link
+      rel="icon"
+      href="http://new-wooagency:8888/wp-content/themes/woo-agency/assets/img/favicon-192.png"
+      type="image/png"
+      sizes="192x192"
+    />
+    <link
+      rel="apple-touch-icon"
+      href="http://new-wooagency:8888/wp-content/themes/woo-agency/assets/img/apple-touch-icon.png"
+      sizes="180x180"
+    />
     <style>
       /* Status-first: green / orange / red are the language of a bug report. */
       :root {
@@ -863,9 +886,9 @@
         <section class="card" id="s1">
           <h2>Site and design</h2>
           <p class="sub">
-            Enter the homepage URL and Figma links. Desktop and mobile are
-            often different pages in the same file — paste each. The tool
-            guesses matching frames; you can fix the pairing next.
+            Enter the homepage URL and Figma links. Desktop and mobile are often
+            different pages in the same file — paste each. The tool guesses
+            matching frames; you can fix the pairing next.
           </p>
           <div class="field">
             <label for="site">Homepage URL</label>
@@ -1373,7 +1396,11 @@
        * cannot tell a stale table from a fresh one.
        */
       function offerSaved() {
-        const d = loadSession($('site').value, $('figma').value, $('figmaMobile').value);
+        const d = loadSession(
+          $('site').value,
+          $('figma').value,
+          $('figmaMobile').value,
+        );
         const has = Boolean(d);
         $('saved').hidden = !has;
         $('redo').hidden = !has;
@@ -1427,7 +1454,9 @@
       /* ------------------------------ 1. discover ------------------------------ */
       $('redo').onclick = () => {
         try {
-          localStorage.removeItem(keyFor($('site').value, $('figma').value, $('figmaMobile').value));
+          localStorage.removeItem(
+            keyFor($('site').value, $('figma').value, $('figmaMobile').value),
+          );
         } catch {}
         offerSaved();
         $('go1').click();
@@ -1524,7 +1553,8 @@
           else if (figmaMobile) bits.push('no mobile frames found');
           if (d.authHow) bits.push('signed in via ' + d.authHow);
           if (
-            (/figma\.com\//.test(figmaLink) || /figma\.com\//.test(figmaMobile)) &&
+            (/figma\.com\//.test(figmaLink) ||
+              /figma\.com\//.test(figmaMobile)) &&
             !d.hasFigmaToken
           )
             bits.push('⚠ FIGMA_TOKEN is missing from .env');
@@ -1689,20 +1719,20 @@
           $('go2').disabled = true;
           if ($('go2top')) $('go2top').disabled = true;
         } else {
-        $('count').textContent =
-          n +
-          '/' +
-          ROWS.length +
-          ' pages will run' +
-          (seen ? ' · ' + seen + ' already QA’d' : '');
-        const off = !ROWS.length || n === 0;
-        const label = n ? 'Run QA (' + n + ' pages)' : 'Run QA';
-        $('go2').disabled = off;
-        $('go2').textContent = label;
-        if ($('go2top')) {
-          $('go2top').disabled = off;
-          $('go2top').textContent = label;
-        }
+          $('count').textContent =
+            n +
+            '/' +
+            ROWS.length +
+            ' pages will run' +
+            (seen ? ' · ' + seen + ' already QA’d' : '');
+          const off = !ROWS.length || n === 0;
+          const label = n ? 'Run QA (' + n + ' pages)' : 'Run QA';
+          $('go2').disabled = off;
+          $('go2').textContent = label;
+          if ($('go2top')) {
+            $('go2top').disabled = off;
+            $('go2top').textContent = label;
+          }
         }
         if ($('pickall')) {
           const allOn = ROWS.length > 0 && n === ROWS.length;
@@ -1715,14 +1745,22 @@
         $('rows').innerHTML = ROWS.map((r, i) => {
           const f =
             FRAMES.find((x) => x.id === r.figmaNodeId) ||
-            (r.frameName ? FRAMES.find((x) => x.name === r.frameName && x.role !== 'mobile') : null) ||
+            (r.frameName
+              ? FRAMES.find(
+                  (x) => x.name === r.frameName && x.role !== 'mobile',
+                )
+              : null) ||
             (r.frameName ? FRAMES.find((x) => x.name === r.frameName) : null);
           const fm =
             FRAMES.find((x) => x.id === r.figmaMobileNodeId) ||
             (r.frameMobileName
-              ? FRAMES.find((x) => x.name === r.frameMobileName && x.role === 'mobile')
+              ? FRAMES.find(
+                  (x) => x.name === r.frameMobileName && x.role === 'mobile',
+                )
               : null) ||
-            (r.frameMobileName ? FRAMES.find((x) => x.name === r.frameMobileName) : null);
+            (r.frameMobileName
+              ? FRAMES.find((x) => x.name === r.frameMobileName)
+              : null);
           const thumb = thumbHtml(f, 'D') + thumbHtml(fm, 'M');
           const fl = flags[i]
             .map(
@@ -1762,7 +1800,10 @@
             '">' +
             '<button class="getframe" data-role="desktop" style="margin-top:6px">Fetch frame</button></div></td>' +
             '<td><select class="frame-m">' +
-            frameOptions(r.pendingMobileLink ? '__paste' : fm ? fm.id : '', 'mobile') +
+            frameOptions(
+              r.pendingMobileLink ? '__paste' : fm ? fm.id : '',
+              'mobile',
+            ) +
             '</select>' +
             '<div class="paste' +
             (r.pendingMobileLink !== undefined ? ' on' : '') +
@@ -1901,16 +1942,26 @@
 
       async function getFrame(i, role) {
         const mobile = role === 'mobile';
-        const link = ((mobile ? ROWS[i].pendingMobileLink : ROWS[i].pendingLink) || '').trim();
+        const link = (
+          (mobile ? ROWS[i].pendingMobileLink : ROWS[i].pendingLink) || ''
+        ).trim();
         const btn = document.querySelector(
-          'tr[data-i="' + i + '"] .getframe[data-role="' + (mobile ? 'mobile' : 'desktop') + '"]',
+          'tr[data-i="' +
+            i +
+            '"] .getframe[data-role="' +
+            (mobile ? 'mobile' : 'desktop') +
+            '"]',
         );
         showErr('e2', '');
         if (!link) return showErr('e2', 'row ' + (i + 1) + ': no link pasted');
         if (btn) busy(btn, true, 'Fetching…');
         try {
-          const f = await post('/api/frame', { link, role: mobile ? 'mobile' : 'desktop' });
-          if (!FRAMES.some((x) => x.id === f.id && x.role === f.role)) FRAMES.push(f);
+          const f = await post('/api/frame', {
+            link,
+            role: mobile ? 'mobile' : 'desktop',
+          });
+          if (!FRAMES.some((x) => x.id === f.id && x.role === f.role))
+            FRAMES.push(f);
           if (mobile) {
             delete ROWS[i].pendingMobileLink;
             ROWS[i].figmaMobileNodeId = f.id;

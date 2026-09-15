@@ -447,6 +447,77 @@
       ],
       "why": "design intend",
       "at": "2026-09-14"
+    },
+    {
+      "id": "1ar2otg",
+      "title": "“Influencer & ambassador content, produce” and “WOO acknowledges the First Peoples of Au” do not line up",
+      "anchors": [
+        "Influencer & ambassador content, produced and scaled with AI",
+        "WOO acknowledges the First Peoples of Australia, their Elder",
+        "Management, monitoring & reporting"
+      ],
+      "detail": "Live: their right edges are 56px apart.\nDesign: they share a right edge.",
+      "pages": [
+        "http://new-wooagency:8888/services/"
+      ],
+      "why": "alignment : wrong compare",
+      "at": "2026-09-15"
+    },
+    {
+      "id": "0vkxc4h",
+      "title": "“Marketing strategy” and “The latest insights on modern marketing,” do not line up",
+      "anchors": [
+        "Marketing strategy",
+        "The latest insights on modern marketing, AI transformation a"
+      ],
+      "detail": "Live: their right edges are 59px apart.\nDesign: they share a right edge.",
+      "pages": [
+        "http://new-wooagency:8888/"
+      ],
+      "why": "alignment : wrong compare",
+      "at": "2026-09-15"
+    },
+    {
+      "id": "1oshd7f",
+      "title": "“We’re a modern marketing agency who has ” and “Hume Proud” do not line up",
+      "anchors": [
+        "We’re a modern marketing agency who has rebuilt the way we w",
+        "Hume Proud"
+      ],
+      "detail": "Live: their right edges are 45px apart.\nDesign: they share a right edge.",
+      "pages": [
+        "http://new-wooagency:8888/"
+      ],
+      "why": "alignment : wrong compare",
+      "at": "2026-09-15"
+    },
+    {
+      "id": "0duzzye",
+      "title": "“We are an agency that believes in creati” and “Find us” do not line up",
+      "anchors": [
+        "We are an agency that believes in creativity driven by trust",
+        "Find us"
+      ],
+      "detail": "Live: their right edges are 18px apart.\nDesign: they share a right edge.",
+      "pages": [
+        "http://new-wooagency:8888/about/"
+      ],
+      "why": "alignment : wrong compare",
+      "at": "2026-09-15"
+    },
+    {
+      "id": "1c4oep0",
+      "title": "“Contact” and “Tell us where you’re at. We’ll show you ” do not line up",
+      "anchors": [
+        "Contact",
+        "Tell us where you’re at. We’ll show you what we’d build."
+      ],
+      "detail": "Live: their right edges are 17px apart.\nDesign: they share a right edge.",
+      "pages": [
+        "http://new-wooagency:8888/services/"
+      ],
+      "why": "Compare not correct",
+      "at": "2026-09-15"
     }
   ]
 }

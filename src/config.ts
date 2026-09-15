@@ -70,6 +70,8 @@ function arg(flags: string[], argv: string[]): string | undefined {
 export const USAGE = `qa-visual <url|--site url> [options]
 qa-visual accept <finding#> "reason"  Sign off a finding on the latest run as INTENDED.
                                       Writes accepted.json; later runs still show it, but do not count it.
+qa-visual harness [--run <stamp>]     Score the latest (or given) report: how many findings
+                                      a reviewer already rejected, by page / design / AI.
 
   --site <url>       Scan the whole site: page list from sitemap.xml
   --pages <n>        Max pages (default 8)

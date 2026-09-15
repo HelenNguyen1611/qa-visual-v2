@@ -2,48 +2,52 @@
   "_": "Pairs each URL with a Figma frame (desktop) and optionally a mobile frame. The tool writes this file the first time; edit a wrong row and later runs keep your edit. Drop figmaNodeId / figmaMobileNodeId to skip that compare.",
   "pages": [
     {
-      "url": "http://new-wooagency:8888/?qa-showcase=1",
+      "url": "http://new-wooagency:8888/",
       "figmaNodeId": "2366:8900",
       "frameName": "01 / Homepage",
       "how": "name match \"01 / Homepage\" (score 1.00, next 0.00)"
     },
     {
-      "url": "http://new-wooagency:8888/about/?qa-showcase=1",
+      "url": "http://new-wooagency:8888/about/",
       "figmaNodeId": "2430:13484",
       "frameName": "07 / About us",
       "how": "name match \"07 / About us\" (score 0.85, next 0.00)"
     },
     {
-      "url": "http://new-wooagency:8888/contact/?qa-showcase=1",
+      "url": "http://new-wooagency:8888/contact/",
       "figmaNodeId": "2468:13996",
       "frameName": "08 / Contact",
       "how": "name match \"08 / Contact\" (score 1.00, next 0.00)"
     },
     {
-      "url": "http://new-wooagency:8888/giant-lygon-street-turns-35/?qa-showcase=1",
-      "how": "no frame similar enough (best 0.00 < 0.5) — skip design compare"
-    },
-    {
-      "url": "http://new-wooagency:8888/journal/?qa-showcase=1",
+      "url": "http://new-wooagency:8888/giant-lygon-street-turns-35/",
       "figmaNodeId": "2430:12945",
       "frameName": "06 / Journal / Inside Page",
-      "how": "name match \"06 / Journal / Inside Page\" (score 0.85, next 0.00) — template-style frame, shared across pages"
+      "how": "picked by hand: \"06 / Journal / Inside Page\""
     },
     {
-      "url": "http://new-wooagency:8888/projects/?qa-showcase=1",
+      "url": "http://new-wooagency:8888/journal/",
+      "figmaNodeId": "2430:11986",
+      "frameName": "05 / Insights",
+      "how": "picked by hand: \"05 / Insights\""
+    },
+    {
+      "url": "http://new-wooagency:8888/projects/",
       "figmaNodeId": "2430:9420",
       "frameName": "03 / Projects",
       "how": "name match \"03 / Projects\" (score 1.00, next 0.85)"
     },
     {
-      "url": "http://new-wooagency:8888/services/?qa-showcase=1",
+      "url": "http://new-wooagency:8888/services/",
       "figmaNodeId": "2417:2710",
       "frameName": "02 / Services",
       "how": "name match \"02 / Services\" (score 1.00, next 0.00)"
     },
     {
-      "url": "http://new-wooagency:8888/uppingham-vietnam/?qa-showcase=1",
-      "how": "no frame similar enough (best 0.00 < 0.5) — skip design compare"
+      "url": "http://new-wooagency:8888/projects/hume-proud-2/",
+      "figmaNodeId": "2430:11056",
+      "frameName": "04 / Projects / Inside Page",
+      "how": "picked by hand: \"04 / Projects / Inside Page\""
     }
   ]
 }
